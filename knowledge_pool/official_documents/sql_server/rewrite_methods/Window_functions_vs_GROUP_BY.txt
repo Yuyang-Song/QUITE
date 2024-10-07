@@ -1,0 +1,106 @@
+I want to write a query that figures out who is the first person awarded each badge. In cases where there is a tie for the first person to receive that badge, I want to return the user with the lowest UserId.
+Window functions make this type of question easy to write a query for:
+<sql>
+SELECT DISTINCT
+    Name,
+    FIRST_VALUE(UserId) OVER (PARTITION BY Name ORDER BY Date,UserId) AS UserId
+FROM
+    dbo.Badges b
+ORDER BY
+    Name,UserId
+<sql>
+If you've used FIRST_VALUE before, this query should be easy to interpret: for each badge Name, return the first UserId sorted by Date (earliest date to receive the badge) and UserId (pick the lowest UserId when there are ties on Date).
+This query was easy to write and is simple to understand. However, the performance is not great: it takes 46 seconds to finish returning results on my machine.
+<execution plan>
+1. Index Scan (NonClustered)
+   Object: [Badges].[IX_Badges__Name_Date_User]
+   Estimated Cost: 35%
+
+2. Segment
+   Estimated Cost: 0%
+
+3. Segment
+   Estimated Cost: 0%
+
+4. Window Spool
+   Estimated Cost: 16%
+
+5. Stream Aggregate (Aggregate)
+   Estimated Cost: 4%
+
+6. Compute Scalar
+   Estimated Cost: 1%
+
+7. Hash Match (Aggregate)
+   Estimated Cost: 43%
+
+8. Sort
+   Estimated Cost: 1%
+
+9. SELECT
+   Estimated Cost: 0%
+<execution plan>
+Note: I assumed this table started off with the following index:
+CREATE NONCLUSTERED INDEX IX_Badges__Name_Date_UserId ON [dbo].[Badges] (Name,Date,UserId);
+Why so slow?
+If we SET STATISTICS IO ON we'll notice that SQL Server reads 46767 pages from a nonclustered index. Since we aren't filtering our data, there's not much we can do to make that faster.
+Reading right to left, next up we see two Segment operators. These don't add much overhead since our data is sorted on our segments/groups, so making SQL Server identify when our sorted rows change values is trivial.
+Next up is the Window Spool operator which "Expands each row into the set of rows that represent the window associated with it." While it looks innocent by having a low relative cost, this operator is writing 8 million rows/reading 16 million rows (because of how Window Spool works) from tempdb. Ouch.
+After that the Stream Aggregate operator and Compute Scalar operators check to see if the first value in each window being returned from the Window Spool is null and then return the first non-null value. These operations are also relatively painless since the data flowing through is already sorted.
+The Hash Match operator then dedupes the data for our DISTINCT and then we sort the remaining ~2k rows for our output.
+So while our query looks simple, the fact that our whole table of data is getting written to and read from tempdb before being deduped and sorted is a real performance killer.
+Removing tempdb usage the old-fashioned way
+When I say "the old fashioned way", I mean rewriting our window function to use more traditional aggregate functions and a GROUP BY:
+<sql>
+SELECT
+    b.Name,
+    MIN(b.UserId) AS UserId
+FROM
+    dbo.Badges b
+    INNER JOIN
+    (
+    SELECT
+        Name,
+        MIN(Date) AS Date
+    FROM
+        dbo.Badges
+    GROUP BY
+        Name
+    ) m
+        ON b.Name = m.Name
+        AND b.Date = m.Date
+GROUP BY
+    b.Name
+ORDER BY
+    Name,UserId
+<sql>
+I think by most people's standards, this query is not as easy to read. While not overly complex, it does take up a lot more screen space and is complicated by multiple GROUP BYs and a derived table.
+And while the query may look ugly on the outside, it's what lies below the surface that really matters:
+<execution plan>
+1. Index Scan (NonClustered)
+   Object: [Badges].[IX_Badges__Name_Date_User]
+   Estimated Cost: 98%
+
+2. Segment
+   Estimated Cost: 1%
+
+3. Top
+   Estimated Cost: 0%
+
+4. Stream Aggregate (Aggregate)
+   Estimated Cost: 0%
+
+5. SELECT
+   Estimated Cost: 0%
+<execution plan>
+What a beautifully simple execution plan. And it finishes executing almost instantly.
+Let's break down what's going on. First, we start with similar Index Scan and Segment operators as the previous query so no real difference there.
+At this point you may have noticed that while the written query uses two GROUP BYs and two MIN functions that are then joined together, there are not two Index Scans, two sets of aggregations, and no join happening in the execution plan.
+SQL Server can use an optimization with the Top operator that allows it to take the sorted data and return only the Name and UserId rows for the top Name and Date values within a group (essentially matching the MIN logic). This is a great example of how the optimizer can take a declarative SQL query and decide how to efficiently return the data needs.
+At this point, the Top operator filters our 8 million rows down to around 30k rows. 30k rows get deduped a lot faster with our Stream Aggregate operator, and since the data is already sorted we don't need an extra Sort operator.
+Overall, this second query runs so much better than the original because SQL Server doesn't have to go to tempdb for any operations - all the data is pre-sorted in the index and can flow through.
+So I shouldn't use Window Functions?
+Not necessarily - it comes down to a trade offs.
+I almost always start with a window function because of how easy they are to write and read. Plus I think they are fun to write as well.
+However, if the window function is having to read/write a lot of data to tempdb and it's affecting the overall performance of your query, a rewrite may be necessary.
+In that case, I much rather take more verbose syntax to get a 2000x performance boost.
