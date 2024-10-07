@@ -1,1 +1,1 @@
-LLM-based SQL Rewriter
+LLM-based SQL Rewriter with Heterogeneous knowledge
