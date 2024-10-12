@@ -1,0 +1,173 @@
+[
+    {
+        "case source": "discourse",
+        "rewrite rule": "Predicate Elimination",
+        "link": "https://github.com/discourse/discourse/commit/f364317625ee273d1e8983faa271831db912953b",
+        "original_query": "SELECT * FROM posts LEFT JOIN topic_allowed_groups AS tg ON posts.topic_id = tg.topic_id WHERE tg.id IS NULL AND posts.topic_id IN (SELECT tau.topic_id FROM topic_allowed_users AS tau INNER JOIN topic_allowed_users AS tau2 ON tau2.topic_id = tau.topic_id AND tau2.id <> tau.id WHERE tau.user_id = 1086 AND tau.topic_id = posts.topic_id GROUP BY tau.topic_id HAVING COUNT(*) = 1)",
+        "rewritten_query": "SELECT * FROM posts LEFT JOIN topic_allowed_groups tg ON posts.topic_id = tg.topic_id WHERE tg.id IS NULL AND posts.topic_id IN (SELECT tau.topic_id FROM topic_allowed_users tau JOIN topic_allowed_users tau2 ON tau2.topic_id = tau.topic_id AND tau2.id != tau.id WHERE tau.user_id = 1086 GROUP BY tau.topic_id HAVING COUNT(*) = 1)",
+        "schema": "CREATE TABLE `posts`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `topic_id` int(11) NOT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `topic_allowed_groups`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `topic_id` int(11) NOT NULL,     PRIMARY KEY (`id`),     FOREIGN KEY (`topic_id`) REFERENCES posts(`topic_id`) );  CREATE TABLE `topic_allowed_users`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `topic_id` int(11) NOT NULL,     `user_id` int(11) NOT NULL,     PRIMARY KEY (`id`),     FOREIGN KEY (`topic_id`) REFERENCES posts(`topic_id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "discourse",
+        "rewrite rule": "OR to union",
+        "link": "https://github.com/discourse/discourse/commit/ac80360bea2ce4c9e93a38395d16e2ecc2cee2ed",
+        "original_query": "SELECT * FROM posts WHERE topic_id = 6020 AND post_number = 1 OR id IN (SELECT p1.id FROM posts AS p1 WHERE p1.\"percent_rank\" <= 88.0 AND p1.topic_id = 7290)",
+        "rewritten_query": "SELECT * FROM posts WHERE id IN ((SELECT posts.id FROM posts WHERE posts.topic_id = 6020 AND post_number = 1) UNION (SELECT p1.id FROM posts p1 WHERE p1.\"percent_rank\" <= 88.0 AND p1.topic_id = 7290))",
+        "schema": "CREATE TABLE posts (     id int NOT NULL,     topic_id int NOT NULL,     post_number int NOT NULL,     \"percent_rank\" float DEFAULT NULL,     PRIMARY KEY (id) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "discourse",
+        "rewrite rule": "Subquery to join",
+        "link": "https://github.com/discourse/discourse/commit/03f63d970bb683e0e33097d39d8ae78d786b0309",
+        "original_query": "SELECT * FROM posts INNER JOIN topics ON topics.id = posts.topic_id WHERE NOT posts.id IN (SELECT post_id FROM post_search_data WHERE locale = '0')",
+        "rewritten_query": "SELECT * FROM posts INNER JOIN topics ON topics.id = posts.topic_id WHERE posts.id IN (SELECT p2.id FROM posts p2 LEFT JOIN post_search_data pd ON locale = '0' AND p2.id = pd.post_id WHERE pd.post_id IS NULL)",
+        "schema": "CREATE TABLE `topics`(     `id` int(11) NOT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `posts`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `topic_id` int(11) NOT NULL,     FOREIGN KEY (`topic_id`) REFERENCES topics(`id`) );  CREATE TABLE `post_search_data`(     `post_id` int(11) NOT NULL,     `locale` varchar(255) NOT NULL,     FOREIGN KEY (`post_id`) REFERENCES posts(`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "discourse",
+        "rewrite rule": "Subquery to join",
+        "link": "https://github.com/discourse/discourse/commit/1f062ae2fde43a44f407f4af91a190c8c02fb1e0",
+        "original_query": "SELECT * FROM category_users WHERE NOT user_id IN (SELECT id FROM users)",
+        "rewritten_query": "SELECT * FROM category_users WHERE user_id IN (SELECT cu.user_id FROM category_users cu LEFT JOIN users u ON u.id = cu.user_id WHERE u.id IS NULL)",
+        "schema": "CREATE TABLE `users`(     `id` int(11) NOT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `category_users`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `user_id` int(11) NOT NULL,     PRIMARY KEY (`id`),     FOREIGN KEY (`user_id`) REFERENCES `users`(`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "discourse",
+        "rewrite rule": "Subquery to join",
+        "link": "https://github.com/discourse/discourse/commit/5a77f6218101b85b360d2ec564928d863bc91964",
+        "original_query": "SELECT * FROM notifications WHERE notifications.topic_id IS NULL OR notifications.topic_id IN (SELECT id FROM topics WHERE deleted_at IS NULL)",
+        "rewritten_query": "SELECT notifications.* FROM notifications LEFT JOIN topics ON notifications.topic_id = topics.id AND topics.deleted_at IS NULL",
+        "schema": "CREATE TABLE `topics`(     `id` int(11) NOT NULL,     `deleted_at` datetime DEFAULT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `notifications`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `topic_id` int(11) DEFAULT NULL,     PRIMARY KEY (`id`),     FOREIGN KEY (`topic_id`) REFERENCES topics(`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "discourse",
+        "rewrite rule": "OR to union",
+        "link": "https://github.com/discourse/discourse/commit/fcfce3e426a64ffa567c572eeeaeb2ef700b15dc",
+        "original_query": "SELECT * FROM categories AS categories INNER JOIN topics ON categories.topic_id = topics.id WHERE categories.id = 1 OR (categories.parent_category_id = 1 AND categories.topic_id <> topics.id)",
+        "rewritten_query": "SELECT * FROM categories INNER JOIN topics ON categories.topic_id = topics.id WHERE categories.id IN (SELECT c2.id FROM categories c2 WHERE c2.parent_category_id = 1 UNION ALL SELECT 1) AND topics.id NOT IN (SELECT c3.topic_id FROM categories c3 WHERE c3.parent_category_id = 1)",
+        "schema": "CREATE TABLE `topics`(     `id` int(11) NOT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `categories`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `topic_id` int(11) NOT NULL,     `parent_category_id` int(11) DEFAULT NULL,     PRIMARY KEY (`id`),     FOREIGN KEY (`topic_id`) REFERENCES `topics`(`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "gitlab",
+        "rewrite rule": "OrderBy Elimination",
+        "link": "https://gitlab.com/gitlab-org/gitlab-foss/-/commit/aada01030cd23719a54a4e499b72c12f95ce0d24",
+        "original_query": "SELECT issues.* FROM issues WHERE issues.project_id = 13083 AND issues.iid = 1 ORDER BY issues.id DESC LIMIT 1",
+        "rewritten_query": "SELECT issues.* FROM issues WHERE issues.project_id = 13083 AND issues.iid = 1 LIMIT 1",
+        "schema": "CREATE TABLE `issues`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `project_id` int(11) NOT NULL,     `iid` int(11) NOT NULL,     PRIMARY KEY (`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "gitlab",
+        "rewrite rule": "Predicate pushup",
+        "link": "https://gitlab.com/gitlab-org/gitlab/-/commit/3205efc1a4652fdf06132fefc0e59999dedac5b4",
+        "original_query": "SELECT ci_pipelines.* FROM ci_pipelines WHERE ci_pipelines.id IN (SELECT MAX(id) FROM ci_pipelines WHERE ci_pipelines.project_id = 14074169 AND ci_pipelines.\"ref\" IN ('actually', 'existing', 'refs', 'here') GROUP BY ci_pipelines.\"ref\") ORDER BY ci_pipelines.id DESC LIMIT 20 OFFSET 0",
+        "rewritten_query": "SELECT ci_pipelines.* FROM ci_pipelines WHERE project_id = 14074169 AND ci_pipelines.id IN (SELECT max(id) FROM ci_pipelines WHERE ci_pipelines.project_id = 14074169 AND ci_pipelines.\"ref\" IN ('actually', 'existing', 'refs', 'here') GROUP BY ci_pipelines.\"ref\") ORDER BY ci_pipelines.id DESC LIMIT 20 OFFSET 0",
+        "schema": "CREATE TABLE ci_pipelines (     id int NOT NULL,     project_id int NOT NULL,     \"ref\" varchar(255) NOT NULL,     PRIMARY KEY (id) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "gitlab",
+        "rewrite rule": "OR to union",
+        "link": "https://gitlab.com/gitlab-org/gitlab/-/commit/aed26bfc724be55275a7e90ba06bdae091915ae1?merge_request_iid=2196",
+        "original_query": "SELECT COUNT(*) FROM users WHERE users.state IN ('active') AND (users.ghost = 0 OR users.ghost IS NULL) AND (users.bot_type = 0 OR users.bot_type IS NULL) AND (id IN (SELECT project_authorizations.user_id FROM project_authorizations WHERE project_authorizations.project_id = 13083 AND access_level > 20) OR id IN (443319)) AND NOT id IN (SELECT approvals.user_id FROM approvals WHERE approvals.merge_request_id = 2294769) AND users.id <> 840794",
+        "rewritten_query": "SELECT COUNT(*) FROM (SELECT users.id FROM users WHERE users.state IN ('active') AND (users.ghost = 0 OR users.ghost IS NULL) AND (users.bot_type = 0 OR users.bot_type IS NULL) AND users.id NOT IN (SELECT approvals.user_id FROM approvals WHERE approvals.merge_request_id = 2294769) AND users.id != 840794 AND users.id IN (SELECT project_authorizations.user_id FROM project_authorizations WHERE project_authorizations.project_id = 13083 AND (access_level > 20)) UNION SELECT users.id FROM users WHERE users.state IN ('active') AND (users.ghost = 0 OR users.ghost IS NULL) AND (users.bot_type = 0 OR users.bot_type IS NULL) AND users.id NOT IN (SELECT approvals.user_id FROM approvals WHERE approvals.merge_request_id = 2294769) AND (users.id != 840794) AND users.id = 443319) subquery",
+        "schema": "CREATE TABLE `users`(     `id` int(11) NOT NULL,     `state` varchar(255) DEFAULT NULL,     `ghost` int(11) DEFAULT NULL,     `bot_type` int(11) DEFAULT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `project_authorizations`(     `user_id` int(11) NOT NULL,     `project_id` int(11) NOT NULL,     `access_level` int(11) DEFAULT NULL,     FOREIGN KEY (`user_id`) REFERENCES users(`id`) );  CREATE TABLE `approvals`(     `user_id` int(11) NOT NULL,     `merge_request_id` int(11) NOT NULL,     FOREIGN KEY (`user_id`) REFERENCES users(`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "gitlab",
+        "rewrite rule": "OR to union",
+        "link": "https://gitlab.com/gitlab-org/gitlab-foss/-/commit/c16b99a49c58161971d1a86613930be439385f02",
+        "original_query": "SELECT COUNT(*) FROM notes WHERE project_id = 13083 AND noteable_type = 'MergeRequest' AND noteable_id = 3985770 OR notes.project_id IN (13083, 13083) AND noteable_type = 'Commit' AND commit_id IN ('xxx')",
+        "rewritten_query": "SELECT COUNT(*) FROM (SELECT notes.id FROM notes WHERE notes.project_id = 13083 AND notes.noteable_id = 3985770 AND notes.noteable_type = 'MergeRequest' UNION SELECT notes.id FROM notes WHERE notes.project_id IN (13083, 13083) AND notes.noteable_type = 'Commit' AND notes.commit_id IN ('xxx')) subquery",
+        "schema": "CREATE TABLE `notes`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `project_id` int(11) NOT NULL,     `noteable_type` varchar(255) NOT NULL,     `noteable_id` int(11) DEFAULT NULL,     `commit_id` varchar(255) DEFAULT NULL,     PRIMARY KEY (`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "gitlab",
+        "rewrite rule": "Replace column used in predicate",
+        "link": "https://gitlab.com/gitlab-org/gitlab/-/commit/11e93a9a4c2ac1b5bd4d32a93a949fc8afbcc449?merge_request_iid=5348",
+        "original_query": "SELECT projects.id FROM projects LEFT JOIN project_repository_states ON projects.id = project_repository_states.project_id WHERE project_repository_states.id IS NULL AND projects.repository_storage = 'default' ORDER BY projects.last_repository_updated_at ASC LIMIT 1000",
+        "rewritten_query": "SELECT projects.id FROM projects LEFT JOIN project_repository_states ON projects.id = project_repository_states.project_id WHERE project_repository_states.project_id IS NULL AND projects.repository_storage = 'default' ORDER BY projects.last_repository_updated_at ASC LIMIT 1000",
+        "schema": "CREATE TABLE `projects`(     `id` int(11) NOT NULL,     `repository_storage` varchar(255) DEFAULT NULL,     `last_repository_updated_at` datetime DEFAULT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `project_repository_states`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `project_id` int(11) NOT NULL,     PRIMARY KEY (`id`),     FOREIGN KEY (`project_id`) REFERENCES projects(`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "gitlab",
+        "rewrite rule": "Replace column used in predicate",
+        "link": "https://gitlab.com/gitlab-org/gitlab/-/commit/4626bed943fbb84f4b3948c07ae496e7559948a4",
+        "original_query": "SELECT ci_job_artifacts.* FROM ci_job_artifacts LEFT JOIN geo_job_artifact_deleted_events ON geo_job_artifact_deleted_events.job_artifact_id = ci_job_artifacts.id WHERE(ci_job_artifacts.file_store = 1 OR ci_job_artifacts.file_store IS NULL) AND geo_job_artifact_deleted_events.id IS NULL LIMIT 1000",
+        "rewritten_query": "SELECT ci_job_artifacts.* FROM ci_job_artifacts LEFT JOIN geo_job_artifact_deleted_events ON geo_job_artifact_deleted_events.job_artifact_id = ci_job_artifacts.id WHERE(ci_job_artifacts.file_store = 1 OR ci_job_artifacts.file_store IS NULL) AND geo_job_artifact_deleted_events.job_artifact_id IS NULL LIMIT 1000",
+        "schema": "CREATE TABLE `ci_job_artifacts`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `file_store` int(11) DEFAULT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `geo_job_artifact_deleted_events`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `job_artifact_id` int(11) NOT NULL,     PRIMARY KEY (`id`),     FOREIGN KEY (`job_artifact_id`) REFERENCES ci_job_artifacts(`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "gitlab",
+        "rewrite rule": "Subquery to join",
+        "link": "https://gitlab.com/gitlab-org/gitlab-foss/-/commit/9127ae5ca80aa06b0a83d275e2a2d9b7ccfbfc3d",
+        "original_query": "SELECT * FROM issues WHERE NOT issues.id IN (SELECT target_id FROM label_links WHERE target_type = 'default')",
+        "rewritten_query": "SELECT issues.* FROM issues LEFT OUTER JOIN label_links ON label_links.target_type = 'default' AND label_links.target_id = issues.id WHERE label_links.target_id IS NULL",
+        "schema": "CREATE TABLE `issues`(     `id` int(11) NOT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `label_links`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `target_id` int(11) NOT NULL,     `target_type` varchar(255) NOT NULL,     PRIMARY KEY (`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "gitlab",
+        "rewrite rule": "Group by elimination",
+        "link": "https://gitlab.com/gitlab-org/gitlab-foss/-/commit/0f1452c2d1a59f8460b01eee7ae4a1ef51f41514?merge_request_iid=10573",
+        "original_query": "SELECT COUNT(*) FROM ci_builds WHERE ci_builds.type IN ('Ci::Build') AND ci_builds.id IN (SELECT MAX(ci_builds.id) FROM ci_builds WHERE ci_builds.type IN ('Ci::Build') GROUP BY ci_builds.name, ci_builds.commit_id) AND ci_builds.status IN ('failed', 'canceled') AND ci_builds.commit_id IN (8088)",
+        "rewritten_query": "SELECT COUNT(*) FROM ci_builds WHERE ci_builds.type IN ('Ci::Build') AND ci_builds.id = (SELECT max(other_builds.id) FROM ci_builds other_builds WHERE other_builds.type IN ('Ci::Build') AND other_builds.commit_id = ci_builds.commit_id AND other_builds.name = ci_builds.name) AND ci_builds.status IN ('failed', 'canceled') AND ci_builds.commit_id IN (8088)",
+        "schema": "CREATE TABLE `ci_builds`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `type` varchar(255) NOT NULL,     `name` varchar(255) NOT NULL,     `commit_id` int(11) NOT NULL,     `status` varchar(255) NOT NULL,     PRIMARY KEY (`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "gitlab",
+        "rewrite rule": "OR to union",
+        "link": "https://gitlab.com/gitlab-org/gitlab/-/commit/271e7a325340551475ae937aaf2ed7a6344be9e8",
+        "original_query": "SELECT ci_builds.* FROM ci_builds WHERE ci_builds.type IN ('Ci::Build') AND (artifacts_file <> '' OR EXISTS (SELECT 1 FROM ci_job_artifacts WHERE ci_builds.id = ci_job_artifacts.job_id))",
+        "rewritten_query": "SELECT ci_builds.* FROM ci_builds WHERE ci_builds.type IN ('Ci::Build') AND ci_builds.id IN (SELECT ci_builds.id FROM ci_builds WHERE artifacts_file <> '' UNION ALL SELECT ci_builds.id FROM ci_builds WHERE EXISTS (SELECT 1 FROM ci_job_artifacts WHERE ci_builds.id = ci_job_artifacts.job_id))",
+        "schema": "CREATE TABLE `ci_builds`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `type` varchar(255) DEFAULT NULL,     `artifacts_file` varchar(255) DEFAULT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `ci_job_artifacts`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `job_id` int(11) NOT NULL,     PRIMARY KEY (`id`),     FOREIGN KEY (`job_id`) REFERENCES ci_builds(`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "gitlab",
+        "rewrite rule": "OR to union",
+        "link": "https://gitlab.com/gitlab-org/gitlab-foss/-/commit/d13aebabc36b6f5fcf41ba32a9c6ee45b91daf3f?merge_request_iid=17088",
+        "original_query": "SELECT * FROM projects WHERE EXISTS (SELECT 1 FROM project_authorizations WHERE user_id = 7683 AND project_authorizations.project_id = projects.id) OR projects.visibility_level IN (1473811210)",
+        "rewritten_query": "SELECT * FROM projects WHERE projects.id IN (select id FROM projects WHERE EXISTS (SELECT 1 FROM project_authorizations WHERE user_id = 7683 AND project_authorizations.project_id = projects.id) UNION select id FROM projects WHERE projects.visibility_level IN (1473811210))",
+        "schema": "CREATE TABLE `projects`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `visibility_level` int(11) DEFAULT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `project_authorizations`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `user_id` int(11) NOT NULL,     `project_id` int(11) NOT NULL,     PRIMARY KEY (`id`),     FOREIGN KEY (`project_id`) REFERENCES projects(`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "gitlab",
+        "rewrite rule": "Subquery to join",
+        "link": "https://gitlab.com/gitlab-org/gitlab/-/commit/cd063eec32a8b32d9b118f6cbdb0e96de0d0ec51",
+        "original_query": "SELECT * FROM tags INNER JOIN (SELECT DISTINCT * FROM taggings WHERE taggable_type = 'default') AS t ON tags.id = t.tag_id",
+        "rewritten_query": "SELECT DISTINCT * FROM tags INNER JOIN taggings ON tags.id = taggings.tag_id WHERE taggable_type = 'default'",
+        "schema": "CREATE TABLE `tags`(     `id` int(11) NOT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `taggings`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `tag_id` int(11) NOT NULL,     `taggable_type` varchar(255) DEFAULT NULL,     FOREIGN KEY (`tag_id`) REFERENCES `tags`(`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "spree",
+        "rewrite rule": "Group by elimination",
+        "link": "https://github.com/spree/spree/commit/53edfb882b7867995ae0ab4df4ae9adad8fb3bec",
+        "original_query": "SELECT spree_products.* FROM spree_products WHERE spree_products.deleted_at IS NULL AND spree_products.id IN (SELECT product_id FROM spree_variants GROUP BY product_id HAVING SUM(count_on_hand) > 0) LIMIT 100",
+        "rewritten_query": "SELECT spree_products.* FROM spree_products WHERE spree_products.deleted_at IS NULL AND (spree_products.id in (select product_id from spree_variants where product_id = spree_products.id and spree_variants.deleted_at IS NULL group by product_id having sum(count_on_hand) > 0)) LIMIT 100",
+        "schema": "CREATE TABLE `spree_products`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `deleted_at` datetime DEFAULT NULL,     PRIMARY KEY (`id`) );  CREATE TABLE `spree_variants`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `product_id` int(11) NOT NULL,     `count_on_hand` int(11) NOT NULL DEFAULT 0,     PRIMARY KEY (`id`),     FOREIGN KEY (`product_id`) REFERENCES spree_products(`id`) ); ",
+        "wetune_result": "None"
+    },
+    {
+        "case source": "lobsters",
+        "rewrite rule": "Predicate pushdown",
+        "link": "https://github.com/lobsters/lobsters/commit/22bb4cb069bf012ef5eb9719de621a91eca4219a",
+        "original_query": "SELECT comments.* FROM comments WHERE comments.is_deleted = 0 AND comments.is_moderated = 0 AND (story_id NOT IN (SELECT story_id FROM hidden_stories WHERE user_id = 1)) ORDER BY id DESC LIMIT 20 OFFSET 0",
+        "rewritten_query": "SELECT comments.* FROM comments WHERE comments.is_deleted = 0 AND comments.is_moderated = 0 AND (NOT EXISTS (SELECT 1 FROM hidden_stories WHERE user_id = 1 AND hidden_stories.story_id = comments.story_id)) ORDER BY id DESC LIMIT 20 OFFSET 0",
+        "schema": "CREATE TABLE `comments`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `story_id` int(11) NOT NULL,     `is_deleted` tinyint(1) NOT NULL DEFAULT 0,     `is_moderated` tinyint(1) NOT NULL DEFAULT 0,     PRIMARY KEY (`id`) );  CREATE TABLE `hidden_stories`(     `id` int(11) NOT NULL AUTO_INCREMENT,     `story_id` int(11) NOT NULL,     `user_id` int(11) NOT NULL,     PRIMARY KEY (`id`),     FOREIGN KEY (`story_id`) REFERENCES comments(`story_id`) ); ",
+        "wetune_result": "None"
+    }
+]

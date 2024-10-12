@@ -9,7 +9,7 @@ import json
 class GPT:
     # init function to initialize the GPT class using gpt-4o, ignoring the token and money cost termerarily
     def __init__(self):
-        load_dotenv(dotenv_path='../config_file/.env')  # Load environment variables from .env file
+        # load_dotenv(dotenv_path='../config_file/.env')  # Load environment variables from .env file
         self.api_key = os.getenv("OPENAI_API_KEY")  # Get the API key from the environment variable
         self.model = os.getenv("OPENAI_MODEL")
         self.money = 0
