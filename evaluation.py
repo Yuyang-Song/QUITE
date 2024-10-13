@@ -5,8 +5,8 @@ import json
 import os
 from dotenv import load_dotenv
 
-queries_path = "./data/multiagent.json"
-storage_path = "./data/mac/llmr2_execution_s1.json"
+queries_path = "./data/result_lr_excusion_s1.json"
+storage_path = "./data/mac/lr_execution_s1.json"
 
 class Evaluation():
     def __init__(self,evaluation_queries_path,result_storage_path):
@@ -127,7 +127,7 @@ class Evaluation():
             cursor.execute("SELECT pg_stat_reset()")
             total_original_time += original_time
             
-        total_original_time = total_original_time / iteration if iteration > 0 else -1
+        total_original_time = total_original_time / iteration 
 
         if total_original_time == -1:
             print("Original Query Execution Failed")
@@ -164,7 +164,7 @@ class Evaluation():
             print(f"Rewritten Query Execution Time: {total_rewrite_time:.6f} seconds")
         else:
             print("Rewritten Query Execution Failed")
-        total_rewrite_time = total_rewrite_time / iteration if iteration > 0 else -1
+        # total_rewrite_time = total_rewrite_time / iteration if iteration > 0 else -1
 
         if total_rewrite_time == -1:
             print("Rewritten Query Execution Failed")

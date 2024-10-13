@@ -199,23 +199,22 @@ class MultiAgentSQLRewriter:
         return result
 
 # 示例调用：
-input_sql = "select nation, o_year, sum(amount) as sum_profit from ( select n_name as nation, extract(year from o_orderdate) as o_year, l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount from part,supplier,lineitem,partsupp,orders,nation where s_suppkey = l_suppkey and ps_suppkey = l_suppkey and ps_partkey = l_partkey and p_partkey = l_partkey and o_orderkey = l_orderkey and s_nationkey = n_nationkey and p_name like '%green%' ) as profit group by nation, o_year order by nation, o_year desc;"
-multi_agent = MultiAgentSQLRewriter(input_sql)
-iteration = 2
-result_data = multi_agent.pipeline(iteration)
-print(json.dumps(result_data, indent=4))
+# input_sql = "select nation, o_year, sum(amount) as sum_profit from ( select n_name as nation, extract(year from o_orderdate) as o_year, l_extendedprice * (1 - l_discount) - ps_supplycost * l_quantity as amount from part,supplier,lineitem,partsupp,orders,nation where s_suppkey = l_suppkey and ps_suppkey = l_suppkey and ps_partkey = l_partkey and p_partkey = l_partkey and o_orderkey = l_orderkey and s_nationkey = n_nationkey and p_name like '%green%' ) as profit group by nation, o_year order by nation, o_year desc;"
+# multi_agent = MultiAgentSQLRewriter(input_sql)
+# iteration = 2
+# result_data = multi_agent.pipeline(iteration)
+# print(json.dumps(result_data, indent=4))
 
 
-input_sql_file = "./query_template/tpch/tpch_queries.json"
-output_sql_file = "./data/multiagent.json"
+input_sql_file = "./data/source/wetune_unable.json"
+output_sql_file = "./data/wetune_unable.json"
 # print(json.dumps(result, indent=4))
 
 with open (input_sql_file, 'r') as file:
     data = json.load(file)
     result = []
     for query_data in data:
-        query_id = query_data["id"]
-        input_sql = query_data["query"]
+        input_sql = query_data["original_query"]
         multi_agent = MultiAgentSQLRewriter(input_sql)
         iteration = 2
         result_data = multi_agent.pipeline(iteration)
