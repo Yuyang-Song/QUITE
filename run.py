@@ -177,7 +177,8 @@ class SQLRewritePipeline:
 
 # Example usage:
 rewriter = SQLRewritePipeline()
-input_json_file = './query_template/tpch/tpch_queries.json'  # Replace with the actual path of your input JSON file
-output_json_file = './result/rewritten_queries.json'  # Path to save the rewritten SQLs
+
+input_json_file = './format/test_input.json'  # Replace with the actual path of your input JSON file
+output_json_file = './format/result.json'  # Path to save the rewritten SQLs
 
 rewriter.pipeline(input_json_file, output_json_file)
