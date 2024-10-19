@@ -26,7 +26,7 @@ def process_sql_files(directory):
         if filename.endswith('.sql'):
             with open(os.path.join(directory, filename), 'r') as file:
                 sql_content = file.read()
-                query_name = os.path.splitext(filename)[0].replace('d', '', 1)  # 去除前缀 'query'
+                query_name = os.path.splitext(filename)[0].replace('query', '', 1)  # 去除前缀 'query'
                 result = {
                     "id": query_name, 
                     "query": clean_sql(sql_content)
