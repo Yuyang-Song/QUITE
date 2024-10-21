@@ -76,7 +76,7 @@ class Evaluation():
             else:
                 # 捕获其他数据库错误，回滚事务
                 conn.rollback()
-                print(f"Error executing query: {e}")
+                print(f"Error exe cuting query: {e}")
                 # self.restart_postgresql()
                 return None
         finally:

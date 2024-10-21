@@ -5,6 +5,7 @@ import os
 import re
 import tiktoken
 import json
+import asyncio
 
 class GPT:
     # init function to initialize the GPT class using gpt-4o, ignoring the token and money cost termerarily
@@ -45,6 +46,12 @@ class GPT:
             )
             answer = completion.choices[0].message.content
         return answer
+    
+    async def get_GPT_response_async(self, prompt, json_format=False):
+        loop = asyncio.get_running_loop()
+        
+        # 将同步请求封装成异步调用，使用 run_in_executor 来运行同步代码
+        return await loop.run_in_executor(None, self.get_GPT_response, prompt, json_format)
 
     def calc_token(self, in_text, out_text=""):
         enc = tiktoken.encoding_for_model(self.model)
