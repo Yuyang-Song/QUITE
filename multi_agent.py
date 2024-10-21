@@ -15,7 +15,7 @@ import json
 class MultiAgentSQLRewriter:
     def __init__(self, input_sql):
         self.input_sql = input_sql
-        self.gpt = GPT()  # GPT实例
+        self.gpt = GPT()  
         self.chat_history = []
         self.iteration_history = []
 
@@ -152,30 +152,30 @@ class MultiAgentSQLRewriter:
         self.chat_history.clear()  # 清除当前的聊天记录，准备下一轮迭代
         return response
 
-    def pipeline(self,iteration):
-        # 执行一次迭代过程，依次调用 Agent A, B 和 C
-        result = {}
-        for i in range(iteration):
-            agent_a_response = self.agent_a_analysis()
-            # if agent_a_response["is_optimized"] == "False":
-            #     return {
-            #         "Original SQL": self.input_sql,
-            #         "Rewritten SQL": self.input_sql,
-            #         "agent_analysis": agent_a_response["agent_analysis"],
-            #     }
-            agent_b_response = self.agent_b_rewrite(agent_a_response)
-            summary = self.agent_c_summary(agent_a_response, agent_b_response)
+    # def pipeline(self,iteration):
+    #     # 执行一次迭代过程，依次调用 Agent A, B 和 C
+    #     result = {}
+    #     for i in range(iteration):
+    #         agent_a_response = self.agent_a_analysis()
+    #         # if agent_a_response["is_optimized"] == "False":
+    #         #     return {
+    #         #         "Original SQL": self.input_sql,
+    #         #         "Rewritten SQL": self.input_sql,
+    #         #         "agent_analysis": agent_a_response["agent_analysis"],
+    #         #     }
+    #         agent_b_response = self.agent_b_rewrite(agent_a_response)
+    #         summary = self.agent_c_summary(agent_a_response, agent_b_response)
 
-            result = {
-                "original_query": summary["agent_candidate_sql"],
-                "rewritten_query": summary["agent_rewritten_sql"],
-                "agent_analysis": summary["agent_analysis"],
-            }
-        print(f"Iteration {iteration} completed.")
-        # print(f"result: {result}\n")
-        return result
+    #         result = {
+    #             "original_query": summary["agent_candidate_sql"],
+    #             "rewritten_query": summary["agent_rewritten_sql"],
+    #             "agent_analysis": summary["agent_analysis"],
+    #         }
+    #     print(f"Iteration {iteration} completed.")
+    #     # print(f"result: {result}\n")
+    #     return result
     
-    def pipeline(self,iteration):
+    def pipeline(self,iteration,input_sql):
         # 执行一次迭代过程，依次调用 Agent A, B 和 C
         result = {}
         for i in range(iteration):
@@ -190,7 +190,7 @@ class MultiAgentSQLRewriter:
             summary = self.agent_c_summary(agent_a_response, agent_b_response)
 
             result = {
-                "original_query": summary["agent_candidate_sql"],
+                "original_query": input_sql,
                 "rewritten_query": summary["agent_rewritten_sql"],
                 "agent_analysis": summary["agent_analysis"],
             }
@@ -206,8 +206,8 @@ class MultiAgentSQLRewriter:
 # print(json.dumps(result_data, indent=4))
 
 
-input_sql_file = "./data/source/wetune_unable.json"
-output_sql_file = "./data/wetune_unable.json"
+input_sql_file = "./data/source/case_2.json"
+output_sql_file = "./data/source/case_2_result.json"
 # print(json.dumps(result, indent=4))
 
 with open (input_sql_file, 'r') as file:
@@ -217,7 +217,7 @@ with open (input_sql_file, 'r') as file:
         input_sql = query_data["original_query"]
         multi_agent = MultiAgentSQLRewriter(input_sql)
         iteration = 2
-        result_data = multi_agent.pipeline(iteration)
+        result_data = multi_agent.pipeline(iteration,input_sql)
         result.append(result_data)
     with open(output_sql_file, 'w') as output_file:
         json.dump(result, output_file, indent=4)

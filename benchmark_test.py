@@ -5,10 +5,10 @@ import os
 import subprocess
 from dotenv import load_dotenv
 
-# queries_path ="/home/orderheart/syy/sql_rewriter/query_template/tpchds/test"
+# queries_path ="/home/orderheart/syy/sql_rewriter/query_template/imdb/"
 queries_path = "./query_template/tpcds/queries.json"
-storage_path = "./data/result_tpcds_1.json"
-time_out = 100
+storage_path = "./data/result_tpcds_1_long_queries.json"
+time_out = 999
 
 class Evaluation():
     def __init__(self,evaluation_queries_path,result_storage_path,timeout):
@@ -121,6 +121,18 @@ class Evaluation():
             }
 
             existing_results.append(result_data)
+            # # query11.sql ,query4.sql ,query74.sql,query95.sql,query1.sql
+            # if(id_number in ["11","4","74","95","1"]):
+            #     print(f"this is the {iteration} times execution: execution {id_number} queries")
+            #     iteration += 1
+            #     time = self.execute_query(conn, cursor,query,self.timeout)    
+            #     print(f"time costs: {time}\n")    
+            #     result_data = {
+            #         "query": query,
+            #         "execution time" :time
+            #     }
+
+            #     existing_results.append(result_data)
 
         cursor.close()
         conn.close()
@@ -130,8 +142,10 @@ class Evaluation():
 
         print(f"Experiment results appended to {self.result_storage_path}")
 
+
     def restart_postgresql(self):
         # 使用 subprocess.run 来执行命令并等待其完成
+        # result = subprocess.run(["brew", "services", "restart", "postgresql@14"], capture_output=True, text=True)
         result = subprocess.run(["docker", "exec", "syy_db", "/bin/bash", "service", "postgresql", "restart"], capture_output=True, text=True)
         # 检查命令是否成功执行
         if result.returncode == 0:

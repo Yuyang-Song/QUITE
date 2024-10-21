@@ -5,8 +5,9 @@ import json
 import os
 from dotenv import load_dotenv
 
-queries_path = "./data/result_lr_excusion_s1.json"
-storage_path = "./data/mac/lr_execution_s1.json"
+# queries_path = "./data/result_lr_excusion_s1.json"
+queries_path = "/home/orderheart/syy/sql_rewriter/query_template/case/case_2.json"
+storage_path = "./data/mac/case_2_study.json"
 
 class Evaluation():
     def __init__(self,evaluation_queries_path,result_storage_path):
@@ -71,8 +72,8 @@ class Evaluation():
     
     def restart_postgresql(self):
         # 使用 subprocess.run 来执行命令并等待其完成
-        result = subprocess.run(["brew", "services", "restart", "postgresql@14"], capture_output=True, text=True)
-        
+        # result = subprocess.run(["brew", "services", "restart", "postgresql@14"], capture_output=True, text=True)
+        result = subprocess.run(["docker", "exec", "syy_db", "/bin/bash", "service", "postgresql", "restart"], capture_output=True, text=True)
         # 检查命令是否成功执行
         if result.returncode == 0:
             print("PostgreSQL service restarted successfully.")

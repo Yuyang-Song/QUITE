@@ -88,6 +88,9 @@ model.process()
 # Total cost: 0.8967549999999997 model :4o😁
 # Total cost:0.031185599999999997 :4o-mini
 print(f"Total cost: {model.money}")
-# Number of equivalent queries: 177 model :4o
-# Number of equivalent queries: 90 model :4o-mini
+# Number of equivalent queries: 177/232 model :4o
+# Number of equivalent queries: 90/232 model :4o-mini
+
+# Number of equivalent queries: 73/232 model :Wetune
+# Number of equivalent queries: 95/232 model :SPES
 print(f"Number of equivalent queries: {model.cal_num()}")
