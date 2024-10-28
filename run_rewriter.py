@@ -10,7 +10,7 @@ sys.path.append(parent_dir)
 from utils.gpt import GPT
 from sql_advicer import sql_advicer
 from multi_agent import MultiAgentSQLRewriter
-from evaluation import Evaluation
+# from evaluation import Evaluation
 
 class SQLRewritePipeline:
     def __init__(self):
@@ -47,18 +47,18 @@ class SQLRewritePipeline:
         return rewrite_suggestion,rewrite_analyse
 
     # Step 3: GPT-agent Analysis & DBA Context
-    def gpt_agent_analysis(self, input_sql):
+    def gpt_agent_analysis(self, input_sql,knowledge):
         # Mock GPT-agent analysis result
         multi_agent = MultiAgentSQLRewriter(input_sql)
         iteration = 2
-        result_data = multi_agent.iterate_process(iteration)
-        """            result = {
-                "original_query": summary["agent_candidate_sql"],
+        result_data = multi_agent.pipeline_with_knowledge(iteration,input_sql,knowledge)
+        """                      result = {
+                "original_query": input_sql,
                 "rewritten_query": summary["agent_rewritten_sql"],
                 "agent_analysis": summary["agent_analysis"],
             }
         """
-        agent_rewrite_sql = result_data["agent_candidate_sql"]
+        agent_rewrite_sql = result_data["rewritten_query"]
         agent_analysis = result_data["agent_analysis"]
         
         return agent_rewrite_sql, agent_analysis
@@ -78,35 +78,36 @@ class SQLRewritePipeline:
     def query_execution_feedback(self):
         # Mock feedback based on execution results
         
+
         self.feedback = "Execution time reduced by 20%"
         return self.feedback
 
-    # Step 7: Inject Feedback and Iterate if Necessary
-    def inject_feedback_and_iterate(self,queries_path,storage_path):
-        evaluation = Evaluation(queries_path, storage_path)
-        total_original_time, total_rewrite_time, speed_up, times_up, original_explain, rewritten_explain = evaluation.compare_rewritten(self.original_sql, self.rewritten_sql)
+    # # Step 7: Inject Feedback and Iterate if Necessary
+    # def inject_feedback_and_iterate(self,queries_path,storage_path):
+    #     evaluation = Evaluation(queries_path, storage_path)
+    #     total_original_time, total_rewrite_time, speed_up, times_up, original_explain, rewritten_explain = evaluation.compare_rewritten(self.original_sql, self.rewritten_sql)
         
-        # 根据EXPLAIN ANALYZE的反馈注入到逻辑中
-        if original_explain and rewritten_explain:
-            print("Original Query Plan:", original_explain)
-            print("Rewritten Query Plan:", rewritten_explain)
+    #     # 根据EXPLAIN ANALYZE的反馈注入到逻辑中
+    #     if original_explain and rewritten_explain:
+    #         print("Original Query Plan:", original_explain)
+    #         print("Rewritten Query Plan:", rewritten_explain)
             
-            # 这里可以根据EXPLAIN结果进一步分析
-            if speed_up > 0:
-                print(f"Rewritten SQL is faster by {speed_up*100:.2f}%")
-                self.feedback = f"Rewritten query is faster by {speed_up*100:.2f}%"
-            else:
-                print("No significant improvement.")
-                self.feedback = "No improvement"
-        else:
-            print("Failed to get EXPLAIN ANALYZE output.")
-            self.feedback = "Failed to analyze queries."
+    #         # 这里可以根据EXPLAIN结果进一步分析
+    #         if speed_up > 0:
+    #             print(f"Rewritten SQL is faster by {speed_up*100:.2f}%")
+    #             self.feedback = f"Rewritten query is faster by {speed_up*100:.2f}%"
+    #         else:
+    #             print("No significant improvement.")
+    #             self.feedback = "No improvement"
+    #     else:
+    #         print("Failed to get EXPLAIN ANALYZE output.")
+    #         self.feedback = "Failed to analyze queries."
 
-        # 决定使用哪个SQL，基于feedback
-        if "faster" in self.feedback:
-            return self.rewritten_sql
-        else:
-            return self.original_sql
+    #     # 决定使用哪个SQL，基于feedback
+    #     if "faster" in self.feedback:
+    #         return self.rewritten_sql
+    #     else:
+    #         return self.original_sql
 
     # Save the rewritten SQL back to JSON format
     def save_rewritten_sql(self, rewritten_queries, output_file):
@@ -139,12 +140,19 @@ class SQLRewritePipeline:
             rewrite_suggestion,rewrite_analyse = self.suggestion_model(self.original_sql)
             print("Rewrite Suggestion:", rewrite_suggestion,rewrite_analyse)
             print("Rewrite Suggestion:", rewrite_suggestion)
-            
+
+            knowledge = {
+                "potentional_used_rewrite_suggestion": selected_rule,
+                "potentional_used_rewrite_analyse": selected_analyse,
+                "potentional_used_reversed_rewrite_suggestion": rewrite_suggestion,
+                "potentional_used_reversed_rewrite_analyse": rewrite_analyse
+            }    
             # Step 3: GPT-agent Analysis & DBA Context
-            
+        
             # input : original_sql
             # output : agent_rewrite_sql, agent_analysis
-            rewritten_sql,rewritten_analyse = self.gpt_agent_analysis(selected_rule)
+            # rewritten_sql,rewritten_analyse = self.gpt_agent_analysis(selected_rule)
+            rewritten_sql,rewritten_analyse = self.gpt_agent_analysis(selected_rule,knowledge)
             print("Agent Rewrite SQL:", rewritten_sql)
             print("Agent Analysis:", rewritten_analyse)
             
@@ -153,22 +161,23 @@ class SQLRewritePipeline:
             # print("Rewritten SQL:", rewritten_sql)
             
             # Step 5: Equivalence Checker
-            is_equivalent = self.equivalence_checker()
-            print("Equivalence Check:", "Equivalent" if is_equivalent else "Not Equivalent")
+            # is_equivalent = self.equivalence_checker()
+            # print("Equivalence Check:", "Equivalent" if is_equivalent else "Not Equivalent")
             
             # Step 6: Query Plan & Execution Feedback
-            self.query_execution_feedback()
-            print("Feedback:", self.feedback)
+            # self.query_execution_feedback()
+            # print("Feedback:", self.feedback)
             
-            # Step 7: Inject Feedback and Iterate
-            final_sql = self.inject_feedback_and_iterate()
-            print("Final SQL:", final_sql)
+            # # Step 7: Inject Feedback and Iterate
+            # final_sql = self.inject_feedback_and_iterate()
+            # print("Final SQL:", final_sql)
             
             # Add the result to the rewritten_queries list
             rewritten_queries.append({
                 "id": query_id,
                 "original_query": self.original_sql,
-                "rewritten_query": final_sql
+                "rewritten_query": rewritten_sql,
+                "agent_analysis": rewritten_analyse
             })
         
         # Save the rewritten queries to the output JSON file
@@ -178,7 +187,7 @@ class SQLRewritePipeline:
 # Example usage:
 rewriter = SQLRewritePipeline()
 
-input_json_file = './format/test_input.json'  # Replace with the actual path of your input JSON file
-output_json_file = './format/result.json'  # Path to save the rewritten SQLs
+input_json_file = '/home/orderheart/syy/sql_rewriter/query_template/tpch/queries.json'  # Replace with the actual path of your input JSON file
+output_json_file = '/home/orderheart/syy/sql_rewriter/data/result_tpch_multi_agent_with_knowledge.json'  # Path to save the rewritten SQLs
 
 rewriter.pipeline(input_json_file, output_json_file)

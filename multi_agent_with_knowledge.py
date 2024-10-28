@@ -8,18 +8,21 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 load_dotenv(dotenv_path='./config_file/.env')
 from utils.gpt import GPT
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import asyncio
+import time
 import textwrap
 import json
 
 class MultiAgentSQLRewriter:
-    def __init__(self, input_sql):
+    def __init__(self, input_sql = None):
         self.input_sql = input_sql
-        self.gpt = GPT()  
+        self.gpt = GPT()
+        self.money = 0.0
         self.chat_history = []
         self.iteration_history = []
 
-    def agent_a_analysis(self):
+    async def agent_a_analysis(self):
         # 使用大模型分析 SQL（Agent A 的职责）
         prompt = textwrap.dedent(f"""
             <mission>
@@ -46,13 +49,14 @@ class MultiAgentSQLRewriter:
                 "agent_suggestions": {{suggestions}}  // Fill this 'suggestions'with the optimization suggestions. If <is_optimized> is "True", you can provide some suggestions to optimize the SQL query. If <is_optimized> is "False", Fill this field with "None".
             }}
         """)
-        response = self.gpt.get_GPT_response(prompt, json_format=True)
+        response = await self.gpt.get_GPT_response_async(prompt, json_format=True)
         self.chat_history.append({"Agent A": response})
         self.chat_history.append("###############################################################################")
+        self.money += self.gpt.calc_money(prompt,response)
         # print(self.chat_history)
         return response
 
-    def agent_a_analysis_with_knowledge(self,knowledge):
+    async def agent_a_analysis_with_knowledge(self,knowledge):
         # 使用大模型分析 SQL（Agent A 的职责）
         prompt = textwrap.dedent(f"""
             <mission>
@@ -81,13 +85,14 @@ class MultiAgentSQLRewriter:
                 "agent_suggestions": {{suggestions}}  // Fill this 'suggestions'with the optimization suggestions. If <is_optimized> is "True", you can provide some suggestions to optimize the SQL query. If <is_optimized> is "False", Fill this field with "None".
             }}
         """)
-        response = self.gpt.get_GPT_response(prompt, json_format=True)
+        response = await self.gpt.get_GPT_response_async(prompt, json_format=True)
+        self.money += self.gpt.calc_money(prompt,response)
         self.chat_history.append({"Agent A": response})
         self.chat_history.append("###############################################################################")
         # print(self.chat_history)
         return response
 
-    def agent_b_rewrite(self, analysis_response):
+    async def agent_b_rewrite(self, analysis_response):
         # 使用大模型重写 SQL（Agent B 的职责）
         print("-----------------------------------------------------------------------------")
         print(f"{analysis_response}")
@@ -116,13 +121,14 @@ class MultiAgentSQLRewriter:
                 "agent_explanation": {{explanation}}  // Fill this 'explanation' with the explanation of the rewrite process.
             }}
         """)
-        response = self.gpt.get_GPT_response(prompt, json_format=True)
+        response = await self.gpt.get_GPT_response_async(prompt, json_format=True)
+        self.money += self.gpt.calc_money(prompt,response)
         self.chat_history.append({"Agent B": response})
         self.chat_history.append("###############################################################################")
         print(self.chat_history)
         return response
 
-    def agent_c_summary(self,agent_a_response, agent_b_response):
+    async def agent_c_summary(self,agent_a_response, agent_b_response):
         # 使用大模型总结 Agent A 和 Agent B 的对话（Agent C 的职责）
         prompt = textwrap.dedent(f"""
             <mission>
@@ -146,7 +152,8 @@ class MultiAgentSQLRewriter:
                 "agent_rewritten_sql": {{rewritten_sql}},  // Fill this 'rewritten_sql' with the rewritten SQL query.
             }}
         """)
-        response = self.gpt.get_GPT_response(prompt, json_format=True)
+        response = await self.gpt.get_GPT_response_async(prompt, json_format=True)
+        self.money += self.gpt.calc_money(prompt,response)
         self.iteration_history.append(response)  # 将总结存入历史记录
         print(self.iteration_history)
         self.chat_history.clear()  # 清除当前的聊天记录，准备下一轮迭代
@@ -175,40 +182,26 @@ class MultiAgentSQLRewriter:
     #     # print(f"result: {result}\n")
     #     return result
     
-    def pipeline(self,iteration,input_sql):
+    async def pipeline_with_knowledge(self,iteration,input_sql,knowledge):
         # 执行一次迭代过程，依次调用 Agent A, B 和 C
         result = {}
         for i in range(iteration):
-            agent_a_response = self.agent_a_analysis()
+            # agent_a_response = self.agent_a_analysis()
             # if agent_a_response["is_optimized"] == "False":
             #     return {
             #         "Original SQL": self.input_sql,
             #         "Rewritten SQL": self.input_sql,
             #         "agent_analysis": agent_a_response["agent_analysis"],
             #     }
-            agent_b_response = self.agent_b_rewrite(agent_a_response)
-            summary = self.agent_c_summary(agent_a_response, agent_b_response)
-
-            result = {
-                "original_query": input_sql,
-                "rewritten_query": summary["agent_rewritten_sql"],
-                "agent_analysis": summary["agent_analysis"],
-            }
-        print(f"Iteration {iteration} completed.")
-        # print(f"result: {result}\n")
-        return result
-    
-    def pipeline_with_knowledge(self,iteration,input_sql,knowledge):
-        # 执行一次迭代过程，依次调用 Agent A, B 和 C
-        result = {}
-        for i in range(iteration):
+            # agent_b_response = self.agent_b_rewrite(agent_a_response)
+            # summary = self.agent_c_summary(agent_a_response, agent_b_response)
+            # 确保调用异步函数时使用 await
             if i == 0:
-                agent_a_response = self.agent_a_analysis_with_knowledge(knowledge)
+                agent_a_response = await self.agent_a_analysis_with_knowledge(knowledge)
             else:
-                agent_a_response = self.agent_a_analysis()
-
-            agent_b_response = self.agent_b_rewrite(agent_a_response)
-            summary = self.agent_c_summary(agent_a_response, agent_b_response)
+                agent_a_response = await self.agent_a_analysis()
+            agent_b_response = await self.agent_b_rewrite(agent_a_response)
+            summary = await self.agent_c_summary(agent_a_response, agent_b_response)
 
             result = {
                 "original_query": input_sql,
@@ -225,13 +218,48 @@ class MultiAgentSQLRewriter:
 # iteration = 2
 # result_data = multi_agent.pipeline(iteration)
 # print(json.dumps(result_data, indent=4))
+    async def process_query(self, query_data):
+        input_sql = query_data["query"]
+        self.input_sql = input_sql
+        iteration = 2
+        result_data = await self.pipeline(iteration, input_sql)  # 使用 await 执行异步 pipeline
+        return result_data
+
+    async def process_queries_in_parallel(self, input_sql_file, output_sql_file, max_workers=5):
+        with open(input_sql_file, 'r') as file:
+            data = json.load(file)
+        
+        results = []
+        # 使用 asyncio 的线程池并行执行任务
+        tasks = [self.process_query(query_data) for query_data in data]
+        # 使用 asyncio.gather 来并行处理所有任务
+        results = await asyncio.gather(*tasks)
+
+        # 异步保存结果
+        await self.save_results(output_sql_file, results)
+
+    async def save_results(self, output_sql_file, results):
+        # 使用异步方式保存结果到文件
+        loop = asyncio.get_running_loop()
+        await loop.run_in_executor(None, self._write_to_file, output_sql_file, results)
+
+    def _write_to_file(self, output_sql_file, results):
+        with open(output_sql_file, 'w') as output_file:
+            json.dump(results, output_file, indent=4)
+        print(f"Experiment results appended to {output_sql_file}")
 
 
-
-
-# input_sql_file = "./data/source/case_2.json"
-# output_sql_file = "./data/source/case_2_result.json"
-# # print(json.dumps(result, indent=4))
+if __name__ == "__main__":
+    input_sql_file = "./query_template/case/parallel_test.json"
+    output_sql_file = "./query_template/case/result_parallel_test.json"
+    multi_agent = MultiAgentSQLRewriter()
+    # 使用 asyncio 运行异步任务
+    start_time = time.time()
+    asyncio.run(multi_agent.process_queries_in_parallel(input_sql_file, output_sql_file, max_workers=10))
+    end_time = time.time()
+    print(f"Money cost: {multi_agent.money}")
+    print(f"Time cost: {end_time - start_time} seconds")
+# print(json.dumps(result, indent=4))
 
 # with open (input_sql_file, 'r') as file:
 #     data = json.load(file)

@@ -6,8 +6,8 @@ import subprocess
 from dotenv import load_dotenv
 
 # queries_path ="/home/orderheart/syy/sql_rewriter/query_template/imdb/"
-queries_path = "./query_template/tpcds/queries.json"
-storage_path = "./data/result_tpcds_1_long_queries.json"
+queries_path = "./query_template/imdb/queries.json"
+storage_path = "/home/orderheart/syy/sql_rewriter/data/benchmark_test/Formal_imdb_s1.json"
 time_out = 999
 
 class Evaluation():
@@ -54,17 +54,34 @@ class Evaluation():
 
     #         return None
     def execute_query(self, conn, cursor, query, timeout):
+        # try:
+        #     # 设置 PostgreSQL 的 statement 超时
+        #     # timeout 以毫秒为单位，所以将秒数乘以 1000
+        #     cursor.execute(f"SET statement_timeout = {timeout * 1000};")
+        #     # print(f"query:{query}")
+        #     start_time = time.time()
+        #     cursor.execute(query)
+        #     cursor.fetchall()  # 获取所有结果
+        #     conn.commit()  # 提交事务
+        #     end_time = time.time()
+        #     return end_time - start_time
+        
         try:
-            # 设置 PostgreSQL 的 statement 超时
-            # timeout 以毫秒为单位，所以将秒数乘以 1000
+            # Set PostgreSQL statement timeout
             cursor.execute(f"SET statement_timeout = {timeout * 1000};")
-            # print(f"query:{query}")
             start_time = time.time()
+            
+            # Execute the query
             cursor.execute(query)
-            cursor.fetchall()  # 获取所有结果
-            conn.commit()  # 提交事务
+            
+            # Only fetch results if the query is a SELECT statement
+            if query.strip().lower().startswith("select"):
+                results = cursor.fetchall()  # Fetch all results
+                conn.commit()  # Commit transaction
+            else:
+                results = None  # No results to fetch for non-SELECT queries
+            
             end_time = time.time()
-
             return end_time - start_time
         except psycopg2.OperationalError as e:
             # 如果超时错误被捕获，回滚事务并返回 -2
@@ -79,6 +96,14 @@ class Evaluation():
                 print(f"Error exe cuting query: {e}")
                 # self.restart_postgresql()
                 return None
+            
+        # Exception 是所有异常的基类
+        except Exception as e:
+            conn.rollback()  # Rollback transaction in case of error
+            raise e
+
+
+
         finally:
             # 确保在任何情况下都取消超时设置（可选）
             cursor.execute("SET statement_timeout = 0;")
@@ -105,6 +130,7 @@ class Evaluation():
 
         # 遍历 JSON 数据中的所有 SQL 对
         iteration = 1
+        iterate_range = 4
         conn = self.connect_to_database()
         cursor = conn.cursor()
         for query_pair in data:
@@ -113,9 +139,19 @@ class Evaluation():
             id_number = query_pair.get('id','')
             print(f"this is the {iteration} times execution: execution {id_number} queries")
             iteration += 1
-            time = self.execute_query(conn, cursor,query,self.timeout)    
+            time = 0
+            for i in range(iterate_range):
+                if i == 0:
+                    iterate_time = self.execute_query(conn, cursor,query,self.timeout)
+                    print(f"this is the init execution time:{iterate_time}")
+                    continue
+                iteration_time = self.execute_query(conn, cursor,query,self.timeout)
+                print(f"the {i}-th iteration_time:",iteration_time)
+                time += iteration_time    
+            time = time/(iterate_range-1)
             print(f"time costs: {time}\n")    
             result_data = {
+                "id": id_number,
                 "query": query,
                 "execution time" :time
             }
@@ -136,6 +172,8 @@ class Evaluation():
 
         cursor.close()
         conn.close()
+        #  将结果按照 id 升序排序
+        existing_results = sorted(existing_results, key=lambda x: x["id"])
         # 将结果写回到 result.json 文件
         with open(self.result_storage_path, 'w') as result_file:
             json.dump(existing_results, result_file, indent=4)

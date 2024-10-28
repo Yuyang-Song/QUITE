@@ -6,8 +6,8 @@ import os
 from dotenv import load_dotenv
 
 # queries_path = "./data/result_lr_excusion_s1.json"
-queries_path = "/home/orderheart/syy/sql_rewriter/query_template/case/case_2.json"
-storage_path = "./data/mac/case_2_study.json"
+queries_path = "/home/orderheart/syy/sql_rewriter/query_template/case/case_3.json"
+storage_path = "/home/orderheart/syy/sql_rewriter/data/source/case-3_result.json"
 
 class Evaluation():
     def __init__(self,evaluation_queries_path,result_storage_path):
@@ -120,7 +120,7 @@ class Evaluation():
             
             if i == 0:
                 original_time = self.execute_query(conn, cursor, original_query)
-                cursor.execute("SELECT pg_stat_reset()")
+                cursor.execute("SELECT pg_stat_reset()") # 用于重置数据库的统计数据。这包括表和索引的访问计数、缓存命中率等。
                 print(f"this is the init: original query excute time: {original_time}")
                 continue
             original_time = self.execute_query(conn, cursor, original_query)
@@ -226,6 +226,7 @@ class Evaluation():
 
                 existing_results.append(result_data)
 
+        existing_results = sorted(existing_results, key=lambda x: int(x.get("id", 0)))  # 按照 id 排序
         # 将结果写回到 result.json 文件
         with open(self.result_storage_path, 'w') as result_file:
             json.dump(existing_results, result_file, indent=4)
@@ -240,12 +241,15 @@ model = Evaluation(queries_path,storage_path)
 with open(queries_path, 'r') as file:
     json_content = file.read()
 data = json.loads(json_content)
-
-print(data)
+print("data load sucessfully!")
+# print(data)
 result = []
 # 遍历 JSON 中的每个项目
+iteration = 1
 for i, query_info in enumerate(data, start=0):
     # 获取 original_query 和 rewritten_query
+    print("this is the {}-th iteration".format(iteration))
+    iteration += 1
     original_query = query_info.get("original_query", "No original query found")
     rewritten_query = query_info.get("rewritten_query", "No rewritten query found")
     # 输出结果
