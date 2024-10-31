@@ -4,10 +4,12 @@ import subprocess
 import json
 import os
 from dotenv import load_dotenv
+from decimal import Decimal
+from datetime import date
 
 # queries_path = "./data/result_lr_excusion_s1.json"
-queries_path = "/home/orderheart/syy/sql_rewriter/query_template/case/case_3.json"
-storage_path = "/home/orderheart/syy/sql_rewriter/data/source/case-3_result.json"
+queries_path = "/home/orderheart/syy/sql_rewriter/data/result_agent_4o_parrell.json"
+storage_path = "/home/orderheart/syy/sql_rewriter/data/result_agent_4o_parrell_result.json"
 
 class Evaluation():
     def __init__(self,evaluation_queries_path,result_storage_path):
@@ -28,7 +30,7 @@ class Evaluation():
             'host': db_host,
             'port': db_port
         }
-        
+
         # 尝试多次连接数据库
         for attempt in range(retries):
             try:
@@ -69,70 +71,68 @@ class Evaluation():
     #     # os.system("sudo service postgresql restart")
     #     os.system("brew services restart postgresql@14")
     #     print("PostgreSQL service restarted.")
-    
-    def restart_postgresql(self):
-        # 使用 subprocess.run 来执行命令并等待其完成
-        # result = subprocess.run(["brew", "services", "restart", "postgresql@14"], capture_output=True, text=True)
-        result = subprocess.run(["docker", "exec", "syy_db", "/bin/bash", "service", "postgresql", "restart"], capture_output=True, text=True)
-        # 检查命令是否成功执行
-        if result.returncode == 0:
-            print("PostgreSQL service restarted successfully.")
-            # 等待几秒，确保PostgreSQL服务完全启动
-            time.sleep(3)  # 等待5秒
-        else:
-            print(f"Failed to restart PostgreSQL service. Error: {result.stderr}")
+    def convert_to_serializable(self,obj):
+        """将数据结构中不可序列化的 Decimal 和 date 转换为可序列化的类型。"""
+        if isinstance(obj, Decimal):
+            return float(obj)  # 或者使用 str(obj) 转换为字符串
+        elif isinstance(obj, date):
+            return obj.isoformat()  # 将 date 对象转换为 YYYY-MM-DD 格式的字符串
+        elif isinstance(obj, list):
+            return [self.convert_to_serializable(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(self.convert_to_serializable(item) for item in obj)
+        elif isinstance(obj, set):
+            return [self.convert_to_serializable(item) for item in obj]  # 转为列表以序列化
+        elif isinstance(obj, dict):
+            return {key: self.convert_to_serializable(value) for key, value in obj.items()}
+        return obj
 
-    def execute_query(self, conn, cursor, query):
-        db_name = os.getenv("DB_NAME")
-        clr_q = "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE pid <> pg_backend_pid() AND datname = '" + db_name + "';"
+    def execute_query(self, conn, cursor, query, return_flag = False):
         try:
-            cursor.execute(clr_q)
-            cursor.execute("SET enable_seqscan = off;")
-            cursor.execute("SET enable_indexscan = off;")
             
             start_time = time.time()
             cursor.execute(query)
-            cursor.fetchall()  # 获取所有结果
+            execution_result = cursor.fetchall()  # 获取所有结果
             conn.commit()  # 提交事务
             end_time = time.time()
-            return end_time - start_time
+            if return_flag == False:
+                return end_time - start_time
+            else:
+                return end_time - start_time, execution_result
         except psycopg2.Error as e:
             conn.rollback()  # 回滚事务
             print(f"Error executing query: {e}")
-            return -1  # 如果执行失败，返回 -1
+            if return_flag == False:
+                return -1  # 如果执行失败，返回 -1
+            else:
+                return -1, None
 
-    def compare_rewritten(self,original_query,rewritten_query,iteration  = 2):
+    def compare_rewritten(self,original_query,rewritten_query,iteration  = 3):
         conn = self.connect_to_database()
         cursor = conn.cursor()
         total_original_time = 0.0
         total_rewrite_time = 0.0
+        original_result = None
+        rewritten_result = None
         # 执行原始查询并记录时间
-        cursor.execute("SELECT pg_stat_reset()")
         for i in range(iteration + 1):
-            # 重启PostgreSQL服务
-            self.restart_postgresql()
-            
-            # 重新连接数据库
-            conn = self.connect_to_database()
             if conn is None:
-                return -1, -1, -1, -1  # 无法连接时返回 -1
-            cursor = conn.cursor()
+                return -1, -1, -1, -1, -1, -1  # 无法连接时返回 -1
             
             if i == 0:
-                original_time = self.execute_query(conn, cursor, original_query)
-                cursor.execute("SELECT pg_stat_reset()") # 用于重置数据库的统计数据。这包括表和索引的访问计数、缓存命中率等。
+                original_time,original_result = self.execute_query(conn, cursor, original_query,return_flag = True)
                 print(f"this is the init: original query excute time: {original_time}")
                 continue
-            original_time = self.execute_query(conn, cursor, original_query)
-            print(f"the {i}-th{iteration} iteration original query excute time: {original_time}")
-            cursor.execute("SELECT pg_stat_reset()")
+            # original_time = self.execute_query(conn, cursor, original_query)
+            original_time= self.execute_query(conn, cursor, original_query)
+            print(f"the {i}-th/{iteration} iteration original query excute time: {original_time}")
             total_original_time += original_time
             
         total_original_time = total_original_time / iteration 
 
         if total_original_time == -1:
             print("Original Query Execution Failed")
-            return -1, -1, -1, -1  # 如果原始查询失败，返回 -1
+            return -1, -1, -1, -1, -1, -1  # 如果原始查询失败，返回 -1
         
         if total_original_time is not None:
             print(f"Original Query Execution Time: {total_original_time:.6f} seconds")
@@ -140,24 +140,17 @@ class Evaluation():
             print("Original Query Execution Failed")
 
         for i in range(iteration + 1):
-             # 重启PostgreSQL服务
-            self.restart_postgresql()
             if conn is None:
-                return -1, -1, -1, -1  # 无法连接时返回 -1
-            # 重新连接数据库
-            conn = self.connect_to_database()
-            cursor = conn.cursor()
+                return -1, -1, -1, -1, -1, -1  # 无法连接时返回 -1
             
             if i == 0:
-                rewritten_time = self.execute_query(conn, cursor, rewritten_query)
+                rewritten_time,rewritten_result = self.execute_query(conn, cursor, rewritten_query,return_flag = True)
                 if rewritten_time == -1:  # 如果执行失败，返回 -1
-                    return -1, -1, -1, -1
-                cursor.execute("SELECT pg_stat_reset()")
+                    return -1, -1, -1, -1, -1, -1
                 print(f"this is the init: rewrite query excute time: {rewritten_time}")
                 continue
             rewritten_time = self.execute_query(conn, cursor, rewritten_query)
-            cursor.execute("SELECT pg_stat_reset()")
-            print(f"the {i}th{iteration} iteration rewrite query excute time: {rewritten_time}")
+            print(f"the {i}-th/{iteration} iteration rewrite query excute time: {rewritten_time}")
             total_rewrite_time += rewritten_time
             
         total_rewrite_time = total_rewrite_time / iteration
@@ -169,7 +162,7 @@ class Evaluation():
 
         if total_rewrite_time == -1:
             print("Rewritten Query Execution Failed")
-            return -1, -1, -1, -1  # 如果重写查询失败，返回 -1
+            return -1, -1, -1, -1, -1, -1  # 如果重写查询失败，返回 -1
         
         if total_original_time is not None and total_rewrite_time is not None:
             speed_up = (total_original_time - total_rewrite_time) / total_original_time
@@ -179,8 +172,9 @@ class Evaluation():
         
         # cursor.close()
         # conn.close()
-
-        return total_original_time,total_rewrite_time,speed_up,times_up
+        equivalance = (original_result == rewritten_result)
+        print(f"Equivalence: {equivalance}")
+        return total_original_time,total_rewrite_time,speed_up,times_up,original_result,rewritten_result
             
 
     def evaluate(self):
@@ -211,20 +205,24 @@ class Evaluation():
             if original_query and rewritten_query:
                 print(f"Running queries for pair: {original_query[:30]}... and rewritten query.")
                 
-                original_execution_time, rewrite_execution_time, speed_up, times_up = self.compare_rewritten(
+                original_execution_time, rewrite_execution_time, speed_up, times_up,original_result,rewritten_result = self.compare_rewritten(
                     original_query, rewritten_query, iteration=3
                 )
-
+                equivalance = (original_result == rewritten_result)
                 result_data = {
+                    "equivalence": equivalance,
                     "original_query": original_query,
                     "rewritten_query": rewritten_query,
                     "original_execution_time": original_execution_time,
                     "rewrite_execution_time": rewrite_execution_time,
                     "speed_up": speed_up,
-                    "times_up": times_up
+                    "times_up": times_up,
+                    "original_result": model.convert_to_serializable(original_result),
+                    "rewritten_result": model.convert_to_serializable(rewritten_result)                   
                 }
 
                 existing_results.append(result_data)
+
 
         existing_results = sorted(existing_results, key=lambda x: int(x.get("id", 0)))  # 按照 id 排序
         # 将结果写回到 result.json 文件
@@ -245,30 +243,47 @@ print("data load sucessfully!")
 # print(data)
 result = []
 # 遍历 JSON 中的每个项目
-iteration = 1
+iteration = 0
+equiv_number = 0
+sucess_run_number = 0
 for i, query_info in enumerate(data, start=0):
     # 获取 original_query 和 rewritten_query
-    print("this is the {}-th iteration".format(iteration))
     iteration += 1
+    print("this is the {}-th iteration".format(iteration))
     original_query = query_info.get("original_query", "No original query found")
     rewritten_query = query_info.get("rewritten_query", "No rewritten query found")
     # 输出结果
     print(f"Original Query: {original_query}")
     print(f"Rewritten Query: {rewritten_query}")
-    total_original_time,total_rewrite_time,speed_up,times_up = model.compare_rewritten(original_query,rewritten_query)
+    total_original_time,total_rewrite_time,speed_up,times_up,original_result,rewritten_result = model.compare_rewritten(original_query,rewritten_query)
+    
+    equivalance = False
+    if total_original_time != -1 and total_rewrite_time != -1:
+        equivalance = (original_result == rewritten_result)
+        sucess_run_number += 1
+
+    if equivalance:
+        equiv_number += 1
     result_data = {
+        "equivalence": equivalance,
         "original_query": original_query,
         "rewritten_query": rewritten_query,
         "original_execution_time": total_original_time,
         "rewrite_execution_time": total_rewrite_time,
         "speed_up": speed_up,
-        "times_up": times_up
+        "times_up": times_up,
+        "original_result": model.convert_to_serializable(original_result),
+        "rewritten_result": model.convert_to_serializable(rewritten_result)                  
     }
     result.append(result_data)
     
 # 将结果写回到 result.json 文件
 with open(storage_path, 'w') as result_file:
-    json.dump(result, result_file, indent=4)
+    # json.dump(result, result_file, indent=4)\
+    json.dump([model.convert_to_serializable(item) for item in result], result_file, indent=4)
+    print(f"Experiment results appended to {storage_path}")
+    print(f"the number of equivalent query is {equiv_number}")
+    print(f"the number of sucess run query is {sucess_run_number}/ {iteration}")
 # 提取 original_query 和 rewritten_query
 # original_query = data["original_query"]
 # rewritten_query = data["rewritten_query"]

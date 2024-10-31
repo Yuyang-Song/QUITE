@@ -14,8 +14,8 @@ for item in data:
     rewritten_sql = info.get('rewritten_sql', '')
     data = {
         "id": id,
-        "original_sql": origin_sql,
-        "rewritten_sql": rewritten_sql
+        "original_query": origin_sql,
+        "rewritten_query": rewritten_sql
     }
     result.append(data)
 

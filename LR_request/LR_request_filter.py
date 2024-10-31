@@ -68,6 +68,7 @@ def request_lr(url, sql_path,schema,saved_path):
             if 'response' in locals():
                 print("Response text:", response.text)  # Only print response if available
 
+    result = sorted(result, key=lambda x: int(x.get("id", 0)))  # 按照 id 排序
     # Save parsed data to a JSON file
     with open(saved_path, "w", encoding="utf-8") as file:
         json.dump(result, file, indent=4, ensure_ascii=False)

@@ -4,10 +4,11 @@ import json
 import os
 import subprocess
 from dotenv import load_dotenv
+from decimal import Decimal
 
 # queries_path ="/home/orderheart/syy/sql_rewriter/query_template/imdb/"
-queries_path = "./query_template/imdb/queries.json"
-storage_path = "/home/orderheart/syy/sql_rewriter/data/benchmark_test/Formal_imdb_s1.json"
+queries_path = "./query_template/tpch/test_queries.json"
+storage_path = "/home/orderheart/syy/sql_rewriter/data/benchmark_test/result_test.json"
 time_out = 999
 
 class Evaluation():
@@ -53,7 +54,21 @@ class Evaluation():
     #         print(f"Error executing query: {e}")
 
     #         return None
-    def execute_query(self, conn, cursor, query, timeout):
+    def convert_to_serializable(self,obj):
+        """将数据结构中不可序列化的 Decimal 转换为浮点数或字符串。"""
+        if isinstance(obj, Decimal):
+            return float(obj)  # 或者使用 str(obj) 转换为字符串
+        elif isinstance(obj, list):
+            return [self.convert_to_serializable(item) for item in obj]
+        elif isinstance(obj, tuple):
+            return tuple(self.convert_to_serializable(item) for item in obj)
+        elif isinstance(obj, set):
+            return [self.convert_to_serializable(item) for item in obj]  # 转为列表以序列化
+        elif isinstance(obj, dict):
+            return {key: self.convert_to_serializable(value) for key, value in obj.items()}
+        return obj
+
+    def execute_query(self, conn, cursor, query, timeout,return_flag=False):
         # try:
         #     # 设置 PostgreSQL 的 statement 超时
         #     # timeout 以毫秒为单位，所以将秒数乘以 1000
@@ -76,13 +91,18 @@ class Evaluation():
             
             # Only fetch results if the query is a SELECT statement
             if query.strip().lower().startswith("select"):
-                results = cursor.fetchall()  # Fetch all results
+                execution_result = cursor.fetchall()  # Fetch all results
                 conn.commit()  # Commit transaction
             else:
-                results = None  # No results to fetch for non-SELECT queries
+                execution_result = None  # No results to fetch for non-SELECT queries
             
             end_time = time.time()
-            return end_time - start_time
+
+            if return_flag == False:
+                return end_time - start_time
+            else:
+                return end_time - start_time, execution_result
+        
         except psycopg2.OperationalError as e:
             # 如果超时错误被捕获，回滚事务并返回 -2
             if "canceling statement due to statement timeout" in str(e):
@@ -145,15 +165,18 @@ class Evaluation():
                     iterate_time = self.execute_query(conn, cursor,query,self.timeout)
                     print(f"this is the init execution time:{iterate_time}")
                     continue
-                iteration_time = self.execute_query(conn, cursor,query,self.timeout)
+                # iteration_time = self.execute_query(conn, cursor,query,self.timeout)
+                iteration_time, result = self.execute_query(conn, cursor, query, self.timeout, return_flag=True)
                 print(f"the {i}-th iteration_time:",iteration_time)
+                print(f"the {i}-th result:",result)
                 time += iteration_time    
             time = time/(iterate_range-1)
             print(f"time costs: {time}\n")    
             result_data = {
                 "id": id_number,
                 "query": query,
-                "execution time" :time
+                "execution time" :time,
+                "result": self.convert_to_serializable(result)
             }
 
             existing_results.append(result_data)

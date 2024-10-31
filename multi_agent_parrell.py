@@ -25,6 +25,9 @@ class MultiAgentSQLRewriter:
     async def agent_a_analysis(self):
         # 使用大模型分析 SQL（Agent A 的职责）
         prompt = textwrap.dedent(f"""
+            <Backgroud>
+            The system is designed to optimize SQL queries. The agents, modeled as virtual assistants, work collaboratively to analyze, rewrite, and validate SQL queries. The objective is to enhance query performance by applying relevant optimization rules while ensuring the query equivalance.
+
             <mission>
             You are Agent A, suppose you are an experenced DBA, and your role is a SQL Analyzer. Your task is to analyze the SQL query and identify potential performance bottlenecks to make the execution time of the sql faster and less costy. Provide suggestions on how to optimize the query.
             
@@ -59,6 +62,9 @@ class MultiAgentSQLRewriter:
     async def agent_a_analysis_with_knowledge(self,knowledge):
         # 使用大模型分析 SQL（Agent A 的职责）
         prompt = textwrap.dedent(f"""
+            <Backgroud>
+            The system is designed to optimize SQL queries. The agents, modeled as virtual assistants, work collaboratively to analyze, rewrite, and validate SQL queries. The objective is to enhance query performance by applying relevant optimization rules while ensuring the query equivalance.
+
             <mission>
             You are Agent A, suppose you are an experenced DBA, and your role is a SQL Analyzer. Your task is to analyze the SQL query and identify potential performance bottlenecks to make the execution time of the sql faster and less costy. Provide suggestions on how to optimize the query. You have been provided with the following knowledge that may can help you to analyze the SQL query.
             
@@ -98,6 +104,9 @@ class MultiAgentSQLRewriter:
         print(f"{analysis_response}")
         print("-----------------------------------------------------------------------------")
         prompt = textwrap.dedent(f"""
+            <Backgroud>
+            The system is designed to optimize SQL queries. The agents, modeled as virtual assistants, work collaboratively to analyze, rewrite, and validate SQL queries. The objective is to enhance query performance by applying relevant optimization rules while ensuring the query equivalance.
+
             <mission>
             You are Agent B, a SQL Rewriter. Based on the analysis and suggestions provided by Agent A, your task is to rewrite the SQL query to optimize its performance.
             You MUST strictly follow Agent A's suggestions to rewrite the query. Ensure all suggested optimizations are applied.
@@ -131,6 +140,9 @@ class MultiAgentSQLRewriter:
     async def agent_c_summary(self,agent_a_response, agent_b_response):
         # 使用大模型总结 Agent A 和 Agent B 的对话（Agent C 的职责）
         prompt = textwrap.dedent(f"""
+            <Backgroud>
+            The system is designed to optimize SQL queries. The agents, modeled as virtual assistants, work collaboratively to analyze, rewrite, and validate SQL queries. The objective is to enhance query performance by applying relevant optimization rules while ensuring the query equivalance.
+
             <mission>
             You are Agent C, responsible for summarizing the conversation between Agent A and Agent B, and providing a concise history summary to compress the chat history.
             Let's think about this questions step by step.
@@ -248,7 +260,7 @@ class MultiAgentSQLRewriter:
 
 if __name__ == "__main__":
     input_sql_file = "./query_template/tpch/queries.json"
-    output_sql_file = "./data/result_parallel_tpch.json"
+    output_sql_file = "./data/result_agent_4o_parrell.json"
     multi_agent = MultiAgentSQLRewriter()
     # 使用 asyncio 运行异步任务
     start_time = time.time()
