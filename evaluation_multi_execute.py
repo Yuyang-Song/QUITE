@@ -8,8 +8,8 @@ from decimal import Decimal
 from datetime import date
 
 # queries_path = "./data/result_lr_excusion_s1.json"
-queries_path = "/home/orderheart/syy/sql_rewriter/data/result_agent_4o_parrell.json"
-storage_path = "/home/orderheart/syy/sql_rewriter/data/result_agent_4o_parrell_result.json"
+queries_path = "/home/orderheart/syy/sql_rewriter/data/result_execution/multi_agent/vote_evalue_result.json"
+storage_path = "/home/orderheart/syy/sql_rewriter/data/result_execution/multi_agent/vote_evalue_evaluate.json"
 
 class Evaluation():
     def __init__(self,evaluation_queries_path,result_storage_path):
@@ -30,7 +30,7 @@ class Evaluation():
             'host': db_host,
             'port': db_port
         }
-
+        print("Connecting to database... DB_NAME: {}, DB_USER: {}, DB_HOST: {}, DB_PORT: {}".format(db_name, db_user, db_host, db_port))
         # 尝试多次连接数据库
         for attempt in range(retries):
             try:

@@ -8,8 +8,8 @@ from decimal import Decimal
 from datetime import date
 
 # queries_path = "./data/result_lr_excusion_s1.json"
-queries_path = "/home/orderheart/syy/sql_rewriter/data/result_execution/multi_agent/result_tpch_multi_test.json"
-storage_path = "/home/orderheart/syy/sql_rewriter/data/result_execution/multi_agent/result_test.json"
+queries_path = "/home/orderheart/syy/sql_rewriter/data/result_execution/learned_rewrite/tpch/lr_rewrite_quries.json"
+storage_path = "/home/orderheart/syy/sql_rewriter/data/result_execution/learned_rewrite/tpch/result_ls.json"
 
 class Evaluation():
     def __init__(self,evaluation_queries_path,result_storage_path):
