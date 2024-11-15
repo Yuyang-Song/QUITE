@@ -22,7 +22,7 @@ for item in data:
     print(data)
     result.append(data)
 
-with open(input_path, "w") as file:
+with open(output_path, "w") as file:
     json.dump(result, file, indent=4)
     print("Done!")  # Debug line to check if the script has finished running
 

@@ -1,8 +1,8 @@
 import json
 import os
 
-input_path = "/home/orderheart/syy/sql_rewriter/data/result_execution/multi_agent/vote_evalue_evaluate.json"
-output_path = "/home/orderheart/syy/sql_rewriter/data/result_execution/multi_agent/vote_evalue_transform.json"
+input_path = "/home/orderheart/syy/sql_rewriter/data/result_execution/multi_agent/schema_vote_evalue_evaluate.json"
+output_path = "/home/orderheart/syy/sql_rewriter/data/result_execution/multi_agent/schema_vote_evalue_result.json"
 
 with open(input_path, "r") as file:
     data = json.load(file)

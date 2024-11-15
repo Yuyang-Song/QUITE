@@ -8,7 +8,7 @@ parent_dir = os.path.dirname(current_dir)
 sys.path.append(parent_dir)
 
 from utils.gpt import GPT
-from sql_advicer import sql_advicer
+from sql_rewriter.trash_file.sql_advicer import sql_advicer
 from multi_agent import MultiAgentSQLRewriter
 # from evaluation import Evaluation
 
