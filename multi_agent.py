@@ -11,15 +11,13 @@ from utils.gpt import GPT
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import asyncio
 import time
-import textwrap
-import json
 import argparse
 from collections import Counter
 
 
 class MultiAgentSQLRewriter:
-    def __init__(self, input_sql = None, schema = None):
-        self.input_sql = input_sql
+    def __init__(self, schema = None):
+        self.input_sql = []
         self.schema = schema
         self.gpt = GPT()
         self.money = 0.0
