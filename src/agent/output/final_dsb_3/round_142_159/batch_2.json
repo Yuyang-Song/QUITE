@@ -1,0 +1,22 @@
+[
+  {
+    "id": "143",
+    "original_query": "select     substring(w_warehouse_name,1,20)   ,sm_type   ,cc_name   ,sum(case when (cs_ship_date_sk - cs_sold_date_sk <= 30 ) then 1 else 0 end)  as \"30 days\"   ,sum(case when (cs_ship_date_sk - cs_sold_date_sk > 30) and                  (cs_ship_date_sk - cs_sold_date_sk <= 60) then 1 else 0 end )  as \"31-60 days\"   ,sum(case when (cs_ship_date_sk - cs_sold_date_sk > 60) and                  (cs_ship_date_sk - cs_sold_date_sk <= 90) then 1 else 0 end)  as \"61-90 days\"   ,sum(case when (cs_ship_date_sk - cs_sold_date_sk > 90) and                  (cs_ship_date_sk - cs_sold_date_sk <= 120) then 1 else 0 end)  as \"91-120 days\"   ,sum(case when (cs_ship_date_sk - cs_sold_date_sk  > 120) then 1 else 0 end)  as \">120 days\" from    catalog_sales   ,warehouse   ,ship_mode   ,call_center   ,date_dim where d_month_seq between 1207 and 1207 + 23 and cs_ship_date_sk   = d_date_sk and cs_warehouse_sk   = w_warehouse_sk and cs_ship_mode_sk   = sm_ship_mode_sk and cs_call_center_sk = cc_call_center_sk and cs_list_price between 114 and 143 and sm_type = 'OVERNIGHT' and cc_class = 'small' and w_gmt_offset = -5 group by    substring(w_warehouse_name,1,20)   ,sm_type   ,cc_name order by substring(w_warehouse_name,1,20)         ,sm_type         ,cc_name limit 100;",
+    "rewritten_query": "WITH filtered_dates AS (\n    SELECT d_date_sk\n    FROM date_dim\n    WHERE d_month_seq BETWEEN 1207 AND 1230\n),\nfiltered_sales AS (\n    SELECT \n        cs_warehouse_sk,\n        cs_ship_mode_sk,\n        cs_call_center_sk,\n        cs_ship_date_sk - cs_sold_date_sk AS days_diff\n    FROM catalog_sales cs\n    JOIN filtered_dates fd ON cs.cs_ship_date_sk = fd.d_date_sk\n    WHERE cs_list_price BETWEEN 114 AND 143\n)\nSELECT \n    SUBSTRING(w_warehouse_name, 1, 20) AS warehouse_short,\n    sm_type,\n    cc_name,\n    SUM(CASE WHEN days_diff <= 30 THEN 1 ELSE 0 END) AS \"30 days\",\n    SUM(CASE WHEN days_diff > 30 AND days_diff <= 60 THEN 1 ELSE 0 END) AS \"31-60 days\",\n    SUM(CASE WHEN days_diff > 60 AND days_diff <= 90 THEN 1 ELSE 0 END) AS \"61-90 days\",\n    SUM(CASE WHEN days_diff > 90 AND days_diff <= 120 THEN 1 ELSE 0 END) AS \"91-120 days\",\n    SUM(CASE WHEN days_diff > 120 THEN 1 ELSE 0 END) AS \">120 days\"\nFROM filtered_sales fs\nJOIN warehouse w ON fs.cs_warehouse_sk = w.w_warehouse_sk AND w.w_gmt_offset = -5\nJOIN ship_mode sm ON fs.cs_ship_mode_sk = sm.sm_ship_mode_sk AND sm.sm_type = 'OVERNIGHT'\nJOIN call_center cc ON fs.cs_call_center_sk = cc.cc_call_center_sk AND cc.cc_class = 'small'\nGROUP BY \n    warehouse_short,\n    sm_type,\n    cc_name\nORDER BY \n    warehouse_short,\n    sm_type,\n    cc_name\nLIMIT 100;",
+    "time_cost": 170.19986057281494,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Created a CTE to filter date_dim early based on d_month_seq, reducing the join size with catalog_sales"
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Precomputed the date difference (cs_ship_date_sk - cs_sold_date_sk) in a CTE to avoid repeated calculations in multiple CASE statements"
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Restructured joins to filter catalog_sales early by applying the cs_list_price filter in the CTE"
+      }
+    ]
+  }
+]

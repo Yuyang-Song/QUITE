@@ -1,0 +1,1163 @@
+
+=== 进入推理状态 ===
+DBMS_EXPLAIN_Tool starts...
+DBMS_EXPLAIN_Tool ends...
+['Limit  (cost=9259851.35..9259851.35 rows=1 width=34)', '  ->  Sort  (cost=9259851.35..9259851.35 rows=1 width=34)', '        Sort Key: (count(*)) DESC, supplier.s_name', '        ->  GroupAggregate  (cost=9259851.32..9259851.34 rows=1 width=34)', '              Group Key: supplier.s_name', '              ->  Sort  (cost=9259851.32..9259851.32 rows=1 width=26)', '                    Sort Key: supplier.s_name', '                    ->  Nested Loop  (cost=4731290.25..9259851.31 rows=1 width=26)', '                          ->  Nested Loop Semi Join  (cost=4731289.68..9259843.10 rows=1 width=34)', '                                ->  Gather  (cost=4731289.11..9259087.36 rows=1 width=34)', '                                      Workers Planned: 2', '                                      ->  Parallel Hash Anti Join  (cost=4730289.11..9258087.26 rows=1 width=34)', '                                            Hash Cond: (l1.l_orderkey = l3.l_orderkey)', '                                            Join Filter: (l3.l_suppkey <> l1.l_suppkey)', '                                            ->  Parallel Hash Join  (cost=8347.56..4418035.07 rows=991928 width=34)', '                                                  Hash Cond: (l1.l_suppkey = supplier.s_suppkey)', '                                                  ->  Parallel Seq Scan on lineitem l1  (cost=0.00..4311810.42 rows=24998411 width=8)', '                                                        Filter: (l_receiptdate > l_commitdate)', '                                                  ->  Parallel Hash  (cost=8285.06..8285.06 rows=5000 width=30)', '                                                        ->  Hash Join  (cost=1.31..8285.06 rows=5000 width=30)', '                                                              Hash Cond: (supplier.s_nationkey = nation.n_nationkey)', '                                                              ->  Parallel Seq Scan on supplier  (cost=0.00..7900.00 rows=125000 width=34)', '                                                              ->  Hash  (cost=1.30..1.30 rows=1 width=4)', '                                                                    ->  Seq Scan on nation  (cost=0.00..1.30 rows=1 width=4)', "                                                                          Filter: (n_name = 'MOZAMBIQUE'::bpchar)", '                                            ->  Parallel Hash  (cost=4311810.42..4311810.42 rows=24998411 width=8)', '                                                  ->  Parallel Seq Scan on lineitem l3  (cost=0.00..4311810.42 rows=24998411 width=8)', '                                                        Filter: (l_receiptdate > l_commitdate)', '                                ->  Index Scan using lineitem_pkey on lineitem l2  (cost=0.57..755.72 rows=431 width=8)', '                                      Index Cond: (l_orderkey = l1.l_orderkey)', '                                      Filter: (l_suppkey <> l1.l_suppkey)', '                          ->  Index Scan using orders_pkey on orders  (cost=0.56..8.21 rows=1 width=4)', '                                Index Cond: (o_orderkey = l1.l_orderkey)', "                                Filter: (o_orderstatus = 'F'::bpchar)", 'JIT:', '  Functions: 50', '  Options: Inlining true, Optimization true, Expressions true, Deforming true']
+Okay, I need to analyze the given SQL query and determine how to optimize it. Let me start by understanding what the query is doing.
+
+The query is selecting the supplier name and the count of waits from the supplier, lineitem, orders, and nation tables. The conditions are that the order status is 'F', the receipt date is after the commit date, there exists another lineitem for the same order with a different supplier, and there doesn't exist another lineitem for the same order with a different supplier that also has a receipt date after commit date. Additionally, the supplier's nation is Mozambique. Then it groups by supplier name, orders by the count descending and name, and limits to 100.
+
+Looking at the data statistics, the lineitem table is huge (over 179 million rows), so any scans on it could be expensive. The orders table is also large (45 million rows). The nation table is small, only 24 rows, and the supplier table has 299,999 rows.
+
+The explain plan shows a lot of nested loops and hash joins. There's a parallel hash anti join which might be expensive. The plan also mentions a Sort and GroupAggregate. The cost estimates are very high, which suggests that there's room for optimization.
+
+First, let's check the existing query structure. The joins are using implicit joins in the FROM clause. Maybe switching to explicit JOIN syntax could help with readability and possibly allow the optimizer to better understand the joins.
+
+Looking at the WHERE clause conditions: o_orderstatus = 'F', s_nationkey = n_nationkey, n_name = 'MOZAMBIQUE', l1.l_receiptdate > l1.l_commitdate, and the EXISTS/NOT EXISTS subqueries.
+
+The EXISTS subquery checks for another lineitem (l2) with the same order key but different supplier key. The NOT EXISTS subquery checks that there's no lineitem (l3) with the same order key, different supplier, and receipt date after commit date.
+
+Potential bottlenecks:
+
+1. The EXISTS and NOT EXISTS subqueries might be causing repeated scans of the lineitem table. Since lineitem is huge, these correlated subqueries could be very slow. Maybe rewriting these as joins could be more efficient.
+
+2. The conditions in the WHERE clause could benefit from proper indexing. For example, indexes on lineitem's l_orderkey, l_suppkey, l_receiptdate, and l_commitdate might help the subqueries. Also, an index on nation's n_name and supplier's s_nationkey.
+
+3. The current query uses a semi join and an anti join, which might be necessary, but perhaps the way they're structured could be optimized.
+
+Let me think about the EXISTS subquery. It's looking for any l2 where l_orderkey matches l1's and l_suppkey is different. This is essentially checking that the order has more than one supplier in line items. Instead of a correlated subquery, maybe joining lineitem l1 with another lineitem l2 on l_orderkey and l_suppkey <> l1.l_suppkey, then using a semi join (like INNER JOIN) to ensure at least one exists.
+
+Similarly, the NOT EXISTS could be converted into an anti join. But how?
+
+Another idea: Since both EXISTS and NOT EXISTS subqueries are on lineitem, perhaps pre-aggregating or pre-filtering lineitem data could help. For example, creating a CTE that identifies orders with multiple suppliers and no other delayed receipts. But CTEs might not always be better, especially if the optimizer can handle it as is.
+
+Wait, the current plan uses a Nested Loop Semi Join and a Hash Anti Join. Maybe the problem is the size of the lineitem scans. Let's see if the lineitem table can be filtered early.
+
+The nation filter is on Mozambique, which is a small country. So the supplier table is filtered by nation first, which reduces the number of suppliers involved. Then joining with lineitem on s_suppkey. So that part is okay.
+
+The lineitem l1 has a filter on l_receiptdate > l_commitdate. Then, for each such l1, check if there's another l2 in the same order (same l_orderkey) but different suppkey. Also, there must be no l3 in the same order with different suppkey and l_receiptdate > l_commitdate.
+
+Wait, the NOT EXISTS is checking that there are no other lineitems in the same order (different supplier) that also have receipt date after commit. So the query is counting suppliers where their lineitem in an order is delayed, there exists another lineitem in the same order (different supplier), but there are no other lineitems in the same order (different supplier) that are also delayed.
+
+So for each l1 (delayed lineitem), the order must have at least one other lineitem from a different supplier (exists), but no other lineitems from different suppliers that are also delayed (not exists). So the result is suppliers who are the only delayed supplier in orders that have multiple suppliers.
+
+Hmm. So the query is looking for orders that have exactly one delayed supplier, and that supplier is from Mozambique. Then counting how many times each supplier has such occurrences.
+
+Alternative approach: Instead of using correlated subqueries, can we precompute the orders that meet the criteria (have at least two suppliers, exactly one of which is delayed), then join with supplier and nation?
+
+Let me try to restructure the query. Let's first find all orders where:
+
+- The order has a lineitem l1 where l_receiptdate > l_commitdate (delayed)
+- There exists another lineitem l2 in the same order with different supplier (so order has multiple suppliers)
+- There are no other lineitems l3 in the same order with different supplier and also delayed.
+
+So, the orders we're interested in are those that have at least one delayed lineitem (l1), at least one other supplier (exists l2), and no other delayed lineitems from other suppliers (not exists l3).
+
+Then, for those orders, get the supplier from l1 (since it's the only delayed one), join with supplier and nation, group by supplier name, count, order, limit.
+
+So perhaps rewriting the query to first find such orders and their l1.suppkey, then join with supplier and nation.
+
+This might avoid multiple scans of lineitem for the subqueries.
+
+Another optimization is to use EXISTS and NOT EXISTS with joins instead of subqueries. For example, using a LEFT JOIN and checking for NULLs for the NOT EXISTS.
+
+Alternatively, for EXISTS (SELECT * FROM lineitem l2 WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey), this can be rewritten as a semi join. Similarly, the NOT EXISTS can be an anti join.
+
+But the current query plan already uses a semi join and an anti join. So maybe the structure is okay. The problem might be the efficiency of these joins.
+
+Looking at the explain plan: The anti join is using a Parallel Hash Anti Join with a Hash Cond: (l1.l_orderkey = l3.l_orderkey) and a Join Filter: (l3.l_suppkey <> l1.l_suppkey). Then, the filter is applied.
+
+But the lineitem l3 is being scanned in parallel with a filter on l_receiptdate > l_commitdate. This might be expensive. Maybe if we can pre-filter l3 or use an index on l_orderkey, l_suppkey, and the date columns.
+
+Wait, if there's an index on lineitem(l_orderkey, l_suppkey, l_receiptdate, l_commitdate), that could help the subqueries. But the user hasn't mentioned indexes, so perhaps assuming they don't exist. But since the user is asking for query rewriting, maybe the answer is to rewrite the subqueries.
+
+Another idea: The EXISTS subquery for l2 could be optimized by checking if there's at least one row, so maybe using a JOIN to lineitem l2 on l_orderkey and l_suppkey <> l1.l_suppkey, then using a DISTINCT or something. But that might not be better.
+
+Alternatively, for the EXISTS, since we only need to check existence, a semi join (INNER JOIN with DISTINCT) might be more efficient. But the query planner might already be doing that.
+
+Wait, the explain plan shows "Nested Loop Semi Join", which suggests that the EXISTS is being handled as a semi join. The anti join is handled via a hash anti join. So the structure is already optimized in that way.
+
+So maybe the problem is the order of joins. For example, filtering the nation first (Mozambique) could reduce the number of suppliers early, which then reduces the lineitem rows processed.
+
+In the current query, the joins are supplier -> nation first, but the explain plan shows that the supplier is being scanned in parallel, and the nation is filtered early (seq scan on nation with filter n_name). Then, joining with lineitem l1.
+
+Wait, the explain plan's hash join is between lineitem l1 and supplier, with the nation filter applied early. So the nation is filtered first, then joined with supplier, which is correct.
+
+So the main tables being processed are lineitem l1 with the receiptdate > commitdate filter, joined with supplier (filtered by nation), then orders.
+
+The semi join for l2 is using an index scan on lineitem_pkey. Wait, lineitem_pkey is on (l_orderkey, l_linenumber). So for l2, the index is on l_orderkey, which is good because the condition is l2.l_orderkey = l1.l_orderkey. That's an index scan, which is efficient.
+
+The anti join for l3 is using a parallel seq scan on lineitem l3 with the same receiptdate > commitdate filter. So that's a big scan. If we could precompute the orders that have multiple suppliers with delayed receipts, but that's what the NOT EXISTS is checking against.
+
+Hmm. Maybe the anti join can be optimized by rewriting the NOT EXISTS condition.
+
+The NOT EXISTS is checking that there is no lineitem l3 in the same order (l3.l_orderkey = l1.l_orderkey), different supplier (l3.l_suppkey <> l1.l_suppkey), and l3.l_receiptdate > l3.l_commitdate. So, for the order in l1, there should be no other lineitems from different suppliers that are delayed.
+
+So, for each l1, after ensuring that there exists at least one l2 (another supplier), we need to ensure that there are no l3 (another supplier with delay). So the order must have exactly one delayed lineitem (the l1), and at least one other lineitem from a different supplier (but not delayed).
+
+Wait, but the EXISTS is for any l2 (different supplier), regardless of delay. The NOT EXISTS is for l3 (different supplier) that are delayed.
+
+So the combination is: orders where l1 is delayed, has another supplier (l2), but no other suppliers (l3) that are delayed. So the count is for suppliers who are the only ones delayed in orders with multiple suppliers.
+
+Alternative approach: For each order, count the number of delayed suppliers. We want orders where the count is exactly 1, and the supplier in question is part of that count. Then, also ensure that the order has more than one supplier (from EXISTS).
+
+But how to express that in SQL.
+
+Perhaps, using a window function to count the number of delayed suppliers per order. Then filter orders where the count is 1 and the current lineitem is the delayed one. But this might be more efficient.
+
+Let me try writing this as a CTE:
+
+WITH delayed_orders AS (
+    SELECT l_orderkey, l_suppkey
+    FROM lineitem
+    WHERE l_receiptdate > l_commitdate
+),
+order_delayed_suppliers AS (
+    SELECT l_orderkey, COUNT(DISTINCT l_suppkey) AS num_delayed
+    FROM delayed_orders
+    GROUP BY l_orderkey
+)
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON s_nationkey = n_nationkey AND n_name = 'MOZAMBIQUE'
+JOIN delayed_orders l1 ON s_suppkey = l1.l_suppkey
+JOIN orders ON o_orderkey = l1.l_orderkey AND o_orderstatus = 'F'
+JOIN lineitem l2 ON l1.l_orderkey = l2.l_orderkey AND l1.l_suppkey <> l2.l_suppkey
+JOIN order_delayed_suppliers ods ON l1.l_orderkey = ods.l_orderkey AND ods.num_delayed = 1
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+
+But this approach might be more efficient because it pre-aggregates the number of delayed suppliers per order. However, the EXISTS and NOT EXISTS conditions are converted into joins, which might not capture the same logic. Also, the EXISTS (l2) is converted into a join with l2, which might increase the row count if there are multiple l2 per l1, but we need to ensure that at least one exists. But using a JOIN would require DISTINCT or something to avoid duplicates, which might not be better.
+
+Alternatively, the original query uses semi joins, which avoid multiplying rows. The problem with the CTE approach is that it may scan the lineitem table multiple times. Also, the original query's plan already processes lineitem in parallel, so maybe the CTE isn't better.
+
+Another angle: The lineitem table is being scanned multiple times (for l1, l2, l3). If we can reduce the number of scans, that would help. For example, precompute all the necessary information in a single pass over lineitem.
+
+But that's complicated. Let's consider indexes. For lineitem, if there's an index on (l_orderkey, l_suppkey, l_receiptdate, l_commitdate), that could speed up the subqueries. But since the user hasn't mentioned indexes, perhaps we can't assume they exist. However, the query plan shows an index scan on lineitem_pkey for l2, which is on (l_orderkey, l_linenumber). The l3 is a parallel seq scan, which is expensive.
+
+If adding an index on lineitem(l_orderkey, l_suppkey, l_receiptdate, l_commitdate) isn't possible, then rewriting the query to minimize the number of scans might help.
+
+Alternatively, perhaps the anti join can be rewritten. For the NOT EXISTS, the condition is that there's no l3 with same order key, different suppkey, and delayed. This can be represented as a LEFT JOIN to l3 and checking for NULL.
+
+So, rewriting the NOT EXISTS as a LEFT JOIN:
+
+LEFT JOIN lineitem l3 ON l1.l_orderkey = l3.l_orderkey AND l3.l_suppkey <> l1.l_suppkey AND l3.l_receiptdate > l3.l_commitdate
+WHERE l3.l_orderkey IS NULL
+
+This converts the NOT EXISTS into a LEFT JOIN with a null check. However, in some cases, this approach can be more efficient, but it depends on the optimizer. The original query uses a Hash Anti Join, which might be similar in performance.
+
+Another point: The orders table is joined with l1.l_orderkey = o_orderkey and o_orderstatus = 'F'. If there's an index on orders(o_orderkey, o_orderstatus), that could help, but again, assuming indexes aren't available.
+
+Looking back at the original query, one possible inefficiency is the order of joins. The nation filter is applied early, which is good. The lineitem l1 is filtered by receiptdate > commitdate early in the plan. But the anti join on l3 is a big scan.
+
+Wait, in the original query's explain plan, the anti join is part of the Parallel Hash Anti Join. The lineitem l3 is being scanned in parallel with the same filter (l_receiptdate > l_commitdate) as l1. So, l1 and l3 are both scanned with the same filter. Maybe there's a way to reuse this filtered data.
+
+Alternatively, perhaps pre-filtering lineitem to get all delayed lineitems first, then working with that subset. For example:
+
+WITH delayed_lineitems AS (
+    SELECT * FROM lineitem WHERE l_receiptdate > l_commitdate
+)
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON s_nationkey = n_nationkey AND n_name = 'MOZAMBIQUE'
+JOIN delayed_lineitems l1 ON s_suppkey = l1.l_suppkey
+JOIN orders ON o_orderkey = l1.l_orderkey AND o_orderstatus = 'F'
+WHERE EXISTS (
+    SELECT 1 FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+)
+AND NOT EXISTS (
+    SELECT 1 FROM delayed_lineitems l3
+    WHERE l3.l_orderkey = l1.l_orderkey AND l3.l_suppkey <> l1.l_suppkey
+)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+
+But this uses a CTE for delayed_lineitems, which might be materialized. However, in the original plan, the lineitem is already scanned with the filter, so this may not help. Also, the EXISTS subquery for l2 is on the entire lineitem, not the delayed ones. So the CTE approach might not capture the correct data for l2.
+
+Alternatively, using the delayed_lineitems CTE for l3, since l3 needs to have the receiptdate condition. But l2 doesn't need that condition. So the CTE might help for l3 but not for l2.
+
+This approach could reduce the scan for l3 by using the pre-filtered CTE. However, the original plan already does a parallel seq scan on lineitem l3 with the filter, so maybe it's equivalent. But if the CTE is materialized, it might save some computation. However, CTEs can sometimes be inlined or materialized depending on the database's optimizer.
+
+Another idea: The EXISTS for l2 could be optimized by using a COUNT(*) > 0 in a subquery. But the current approach using EXISTS is likely already optimized.
+
+Looking at the original query's execution plan, the cost is very high, especially the Nested Loop Semi Join and the Hash Anti Join. The Hash Anti Join on l3 is expensive because it has to process many rows.
+
+Maybe the key is to reduce the number of rows early. For example, the orders with status 'F' can be joined early to filter out irrelevant orders. In the original query, the orders are joined after the anti join. Let me check the explain plan:
+
+The Nested Loop joins orders after the anti join. The orders filter is o_orderstatus = 'F'. If this filter is applied early, it could reduce the number of rows processed in the anti join.
+
+In the current plan, the orders are joined with l1 after the anti join. So perhaps moving the orders join earlier could help. Let's see: the orders have o_orderkey = l1.l_orderkey and o_orderstatus = 'F'. If we join orders earlier, we can filter out non-'F' orders before processing the anti join.
+
+Rewriting the query to join orders before the anti join might reduce the number of l_orderkeys that need to be checked in the anti join.
+
+Original query joins orders after the anti join. Let's adjust the join order to filter orders first.
+
+Let me rewrite the query:
+
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON s_nationkey = n_nationkey AND n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON s_suppkey = l1.l_suppkey
+JOIN orders ON o_orderkey = l1.l_orderkey AND o_orderstatus = 'F'
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (... l2 ...)
+AND NOT EXISTS (... l3 ...)
+GROUP BY s_name
+...
+
+But I think the original query already has these conditions. The difference is the order of joins. The optimizer might choose to reorder joins based on statistics, but sometimes explicit join ordering can help.
+
+Alternatively, using a subquery to filter orders first:
+
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON s_nationkey = n_nationkey AND n_name = 'MOZAMBIQUE'
+JOIN (
+    SELECT l1.l_suppkey, l1.l_orderkey
+    FROM lineitem l1
+    JOIN orders ON l1.l_orderkey = orders.o_orderkey AND orders.o_orderstatus = 'F'
+    WHERE l1.l_receiptdate > l1.l_commitdate
+) AS l1 ON supplier.s_suppkey = l1.l_suppkey
+WHERE EXISTS (
+    SELECT 1 FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+)
+AND NOT EXISTS (
+    SELECT 1 FROM lineitem l3
+    WHERE l3.l_orderkey = l1.l_orderkey AND l3.l_suppkey <> l1.l_suppkey AND l3.l_receiptdate > l3.l_commitdate
+)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+
+But this might not change much as the optimizer could reorder the joins. However, by explicitly joining orders early, we ensure that only 'F' orders are considered, reducing the l1 rows early.
+
+Another angle: The NOT EXISTS can be rewritten using a LEFT JOIN. For example:
+
+LEFT JOIN lineitem l3 ON l1.l_orderkey = l3.l_orderkey AND l3.l_suppkey <> l1.l_suppkey AND l3.l_receiptdate > l3.l_commitdate
+WHERE l3.l_orderkey IS NULL
+
+But combining this with the EXISTS might complicate things. Let's try rewriting the query:
+
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON s_nationkey = n_nationkey AND n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON s_suppkey = l1.l_suppkey
+JOIN orders ON o_orderkey = l1.l_orderkey AND o_orderstatus = 'F'
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (
+    SELECT 1 FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+)
+AND NOT EXISTS (
+    SELECT 1 FROM lineitem l3
+    WHERE l3.l_orderkey = l1.l_orderkey AND l3.l_suppkey <> l1.l_suppkey AND l3.l_receiptdate > l3.l_commitdate
+)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+
+But this is the same as the original query. The problem is that the explain plan shows a high cost for the anti join. So, perhaps the anti join can be optimized by pre-aggregating.
+
+Wait, the anti join is checking that there are no other lineitems in the same order (different supplier) that are also delayed. So, for each l1, if the order has any l3 (different supplier) that's delayed, exclude it.
+
+Alternatively, for each order, if the count of delayed lineitems from other suppliers is zero, then include it. So, perhaps using a LEFT JOIN and checking counts:
+
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON s_nationkey = n_nationkey AND n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON s_suppkey = l1.l_suppkey
+JOIN orders ON o_orderkey = l1.l_orderkey AND o_orderstatus = 'F'
+LEFT JOIN (
+    SELECT l_orderkey, l_suppkey
+    FROM lineitem
+    WHERE l_receiptdate > l_commitdate
+) l3 ON l1.l_orderkey = l3.l_orderkey AND l3.l_suppkey <> l1.l_suppkey
+WHERE l1.l_receiptdate > l1.l_commitdate
+GROUP BY s_name, l1.l_orderkey
+HAVING COUNT(l3.l_orderkey) = 0
+...
+
+But this seems more complicated. The HAVING clause would require grouping by l_orderkey and s_name, which might not be efficient. Also, the EXISTS for l2 must still be checked.
+
+Hmm. This might not be better than the original approach.
+
+Another observation: The query groups by s_name, but s_name is from the supplier table, which is filtered by nation. Since nation is 'MOZAMBIQUE', the number of s_name values is limited. Grouping by s_name after filtering might be efficient.
+
+Wait, the explain plan shows a GroupAggregate, which implies that the data is sorted by s_name. If there's an index on supplier(s_nationkey, s_suppkey, s_name), it could help in joining and grouping. But again, without knowing indexes, this is speculative.
+
+Another point: The use of COUNT(*) might be replaced with COUNT(s_name) or another non-nullable column, but that's unlikely to make a difference.
+
+Now, considering all the above, perhaps the main issue is the anti join on lineitem l3. If we can find a way to reduce the number of l3 rows processed, that would help. For example, the l3 join is on l_orderkey, so if we can find a way to precompute the orders that have more than one delayed supplier.
+
+Alternatively, using a NOT IN clause for orders that have such l3:
+
+AND l1.l_orderkey NOT IN (
+    SELECT l_orderkey
+    FROM lineitem
+    WHERE l_suppkey <> l1.l_suppkey
+    AND l_receiptdate > l_commitdate
+)
+
+But this is a correlated subquery and might perform worse.
+
+Alternatively, precompute all orders that have multiple delayed suppliers and exclude them:
+
+WITH problematic_orders AS (
+    SELECT l_orderkey
+    FROM lineitem
+    WHERE l_receiptdate > l_commitdate
+    GROUP BY l_orderkey
+    HAVING COUNT(DISTINCT l_suppkey) > 1
+)
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON s_nationkey = n_nationkey AND n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON s_suppkey = l1.l_suppkey
+JOIN orders ON o_orderkey = l1.l_orderkey AND o_orderstatus = 'F'
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (
+    SELECT 1 FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+)
+AND l1.l_orderkey NOT IN (SELECT l_orderkey FROM problematic_orders)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+
+This approach precomputes the orders with more than one delayed supplier, then excludes them. However, this changes the logic slightly. The original query allows orders that have other suppliers, but none of them delayed. The problematic_orders CTE finds orders where there are multiple delayed suppliers. By excluding these, we ensure that the remaining orders have at most one delayed supplier, which is l1.
+
+But the original query's NOT EXISTS ensures that for the specific l1's order, there are no other suppliers with delayed lineitems. The CTE approach checks if the order has any other delayed suppliers. This would include cases where l1 is not the only delayed supplier. So it's a different condition. Wait, no. The CTE counts all delayed suppliers in the order. If the count is greater than 1, then the order has multiple delayed suppliers. So, by excluding such orders, we ensure that the order has exactly one delayed supplier (l1) because l1's lineitem is delayed. But this depends on l1 being part of the CTE's lineitem.
+
+Wait, l1 is part of the delayed lineitems, so the problematic_orders CTE includes orders where there are multiple delayed suppliers, including possibly l1. So, if l1 is in an order with other delayed suppliers, that order is excluded. The remaining orders have exactly one delayed supplier (l1), and possibly other non-delayed suppliers.
+
+This seems to align with the original query's logic. Because the original query requires that there exists another supplier (l2), but not any other supplier with a delayed lineitem (l3). So the order must have at least one other supplier (non-delayed), and l1 is the only delayed one.
+
+So, by using the problematic_orders CTE, we exclude orders where there are multiple delayed suppliers, and the EXISTS ensures there's at least one other supplier. Thus, the remaining orders are those with exactly one delayed supplier (l1) and at least one other supplier (delayed or not? Wait, no: the EXISTS is for any other supplier, but the NOT EXISTS is about delayed ones. Hmm, no.
+
+The original query's EXISTS is about any other supplier (regardless of delay), and the NOT EXISTS is about delayed other suppliers. So the order must have at least one other supplier (from EXISTS), and no other delayed suppliers (from NOT EXISTS). Therefore, the order has exactly one delayed supplier (l1) and at least one other non-delayed supplier.
+
+The CTE approach excludes orders with multiple delayed suppliers. The remaining orders have either one or zero delayed suppliers. But l1 is delayed, so those orders have exactly one delayed supplier. Then, the EXISTS clause ensures there's at least one other supplier (which might be delayed or not). Wait, no: the EXISTS is on lineitem l2 which is any other supplier, regardless of delay. But if the order has only one supplier (l1), then there is no l2. So the EXISTS ensures that there is at least one other supplier in the order. So, the combination of the CTE and the EXISTS ensures that the order has exactly one delayed supplier (l1) and at least one other supplier (which must be non-delayed because the CTE excludes orders with multiple delayed suppliers).
+
+But wait, the CTE excludes orders with multiple delayed suppliers, including l1. So if the order has l1 (delayed) and another supplier (non-delayed), the CTE does not include it. So the NOT IN (problematic_orders) would allow such orders. Then the EXISTS ensures there's another supplier. So this should work.
+
+This approach could potentially reduce the anti join cost by replacing it with a NOT IN against a precomputed list of problematic orders. However, the CTE's GROUP BY might be expensive as it requires scanning all lineitems with delayed receipt dates. But if it's a small subset, it could be better.
+
+Alternatively, the original query's NOT EXISTS checks for each l1's order, which might be more efficient if the number of such orders is small. But if the CTE can precompute the problematic orders once and reuse it, it might be better.
+
+Overall, the rewritten query using the CTE might be more efficient if the problematic_orders are a small subset. But given that lineitem is huge, the CTE's GROUP BY could be expensive. However, the original query's anti join is also expensive, so it's a trade-off.
+
+Another idea: Use a derived table instead of CTE to inline the problematic_orders subquery.
+
+Putting it all together, considering all the possibilities, the most promising optimizations are:
+
+1. Ensure that the orders filter (o_orderstatus = 'F') is applied as early as possible to reduce the number of rows processed in subsequent joins.
+
+2. Rewrite the NOT EXISTS using a LEFT JOIN to avoid a correlated subquery, but this might not be better.
+
+3. Precompute problematic orders with multiple delayed suppliers and exclude them.
+
+Given the original query's high cost in the anti join, the third approach might help. Let's try rewriting the query accordingly.
+
+Final proposed query:
+
+WITH problematic_orders AS (
+    SELECT l_orderkey
+    FROM lineitem
+    WHERE l_receiptdate > l_commitdate
+    GROUP BY l_orderkey
+    HAVING COUNT(DISTINCT l_suppkey) > 1
+)
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON supplier.s_nationkey = nation.n_nationkey AND nation.n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON supplier.s_suppkey = l1.l_suppkey
+JOIN orders ON l1.l_orderkey = orders.o_orderkey AND orders.o_orderstatus = 'F'
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (
+    SELECT 1
+    FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+)
+AND l1.l_orderkey NOT IN (SELECT l_orderkey FROM problematic_orders)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+
+This query uses a CTE to identify orders with multiple delayed suppliers and excludes them. The EXISTS ensures there's at least one other supplier in the order. The rest of the joins remain the same.
+
+But wait, in the original query, the NOT EXISTS is per l1's order and checks for any l3 (different supplier) that's delayed. The CTE approach finds all orders with multiple delayed suppliers and excludes them. So if an order has exactly two delayed suppliers (including l1), it would be excluded. But the original NOT EXISTS allows the order to have other suppliers, as long as none of them are delayed. So the CTE approach may be more efficient if the number of problematic orders is small.
+
+However, the CTE requires scanning all lineitems with l_receiptdate > l_commitdate and grouping by l_orderkey. This could be expensive but is done once. The original query's anti join does a similar scan for each l1, which might be more expensive.
+
+Another thing to note: The EXISTS clause in the rewritten query still requires a scan of lineitem l2 for each l1, but that's using an index in the original plan. The NOT IN clause uses the precomputed problematic_orders, which might be faster.
+
+However, there's a potential issue with the EXISTS clause: in the original query, the EXISTS is for any l2 in the same order (different supplier). The rewritten query still has this EXISTS, which is necessary because the CTE only ensures no multiple delayed suppliers, but the order might still have only one supplier (l1), which would not have any l2. Thus, the EXISTS is still needed to ensure there's another supplier.
+
+This seems correct. The final query would count suppliers from Mozambique who are the only delayed suppliers in orders with multiple suppliers, none of which have other delayed suppliers.
+
+Comparing this to the original query, the CTE approach replaces the NOT EXISTS with a NOT IN against a precomputed list, which could be more efficient if the problematic_orders are a small subset.
+
+But given that lineitem is huge, the CTE's GROUP BY could take time. However, it's done once, whereas the original query's anti join is per row, which might be worse.
+
+Another possible optimization: Add a filter to the problematic_orders CTE to only consider orders that are in the 'F' status and have suppliers from Mozambique. But that might complicate the CTE.
+
+Alternatively, the CTE could be joined with orders to filter o_orderstatus = 'F' early. But that would require joining with orders, which might not be more efficient.
+
+Overall, this rewritten query has a chance of being more efficient by replacing the correlated anti join with a precomputed list of orders to exclude. However, the actual performance would depend on the data distribution. If most orders don't have multiple delayed suppliers, then the problematic_orders CTE is small, and the NOT IN is fast. Otherwise, it might not help.
+
+Another potential issue: The rewritten query's CTE does not include the o_orderstatus = 'F' condition. So it processes all lineitems with delayed receipts, regardless of order status. This might include orders that are not 'F', which are then filtered out later. But in the original query, the orders are joined with o_orderstatus = 'F', so the anti join only processes 'F' orders. The rewritten query's CTE includes all orders, which might be a larger dataset. To address this, the CTE could be modified to join with orders:
+
+WITH problematic_orders AS (
+    SELECT l.l_orderkey
+    FROM lineitem l
+    JOIN orders o ON l.l_orderkey = o.o_orderkey AND o.o_orderstatus = 'F'
+    WHERE l.l_receiptdate > l.l_commitdate
+    GROUP BY l.l_orderkey
+    HAVING COUNT(DISTINCT l.l_suppkey) > 1
+)
+...
+
+This would limit the problematic_orders to only 'F' orders, which aligns with the original query's logic. This might reduce the size of the CTE, making it more efficient.
+
+Incorporating this into the rewritten query:
+
+WITH problematic_orders AS (
+    SELECT l.l_orderkey
+    FROM lineitem l
+    JOIN orders o ON l.l_orderkey = o.o_orderkey AND o.o_orderstatus = 'F'
+    WHERE l.l_receiptdate > l.l_commitdate
+    GROUP BY l.l_orderkey
+    HAVING COUNT(DISTINCT l.l_suppkey) > 1
+)
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON supplier.s_nationkey = nation.n_nationkey AND nation.n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON supplier.s_suppkey = l1.l_suppkey
+JOIN orders ON l1.l_orderkey = orders.o_orderkey AND orders.o_orderstatus = 'F'
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (
+    SELECT 1
+    FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+)
+AND l1.l_orderkey NOT IN (SELECT l_orderkey FROM problematic_orders)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+
+This version of the CTE joins with orders to filter o_orderstatus = 'F' early, which reduces the number of orders processed in the CTE. This could make the CTE more efficient.
+
+In this case, the CTE is now only considering 'F' orders with delayed lineitems, which aligns with the main query's conditions. This should be more efficient than the original approach.
+
+Comparing the original query's plan, which performs a Nested Loop Semi Join and a Hash Anti Join, this rewritten query uses a CTE to handle the anti condition as a NOT IN, which could be more efficient if the CTE is small.
+
+Another advantage is that the EXISTS in the rewritten query can utilize an index on lineitem(l_orderkey, l_suppkey), which might speed up the check for other suppliers in the order.
+
+Overall, this rewritten query has the potential to be more efficient by reducing the complexity of the anti join and leveraging a precomputed list of problematic orders.
+
+Now, checking for equivalence: The original query and rewritten query should return the same results. The original ensures that for each l1, there's an l2 (other supplier) and no l3 (other delayed supplier). The rewritten query ensures that the order is not in the problematic_orders (multiple delayed suppliers) and has at least one other supplier (l2). Since the order has l1 (delayed) and is not in problematic_orders, it can have at most one delayed supplier (l1), and the EXISTS ensures there's at least one other supplier. Thus, equivalence holds.
+
+Executability: The rewritten query uses standard SQL syntax and should be executable.
+
+Efficiency: As discussed, it depends on data distribution but has potential for improvement.
+
+Readability: The CTE makes the intention clearer, separating the identification of problematic orders.
+
+Therefore, the rewritten query using the CTE is a valid optimization. The final step is to present this rewritten query and explain the optimizations.
+
+=== 进入总结状态 ===
+I'll analyze the SQL rewrite suggestions and provide an enhanced version of the query.
+
+</produced_sql>
+```sql
+WITH problematic_orders AS (
+    SELECT l.l_orderkey
+    FROM lineitem l
+    JOIN orders o ON l.l_orderkey = o.o_orderkey AND o.o_orderstatus = 'F'
+    WHERE l.l_receiptdate > l.l_commitdate
+    GROUP BY l.l_orderkey
+    HAVING COUNT(DISTINCT l.l_suppkey) > 1
+)
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON supplier.s_nationkey = nation.n_nationkey AND nation.n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON supplier.s_suppkey = l1.l_suppkey
+JOIN orders ON l1.l_orderkey = orders.o_orderkey AND orders.o_orderstatus = 'F'
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (
+    SELECT 1
+    FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+)
+AND l1.l_orderkey NOT IN (SELECT l_orderkey FROM problematic_orders)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+```
+</produced_sql>
+
+</advice>
+[
+        {
+            "group": "Query_optimization",
+            "produced_suggestion": "Use a CTE to precompute problematic orders with multiple delayed suppliers"
+        },
+        {
+            "group": "Join_optimization",
+            "produced_suggestion": "Replace the NOT EXISTS anti-join with a NOT IN clause against a precomputed list"
+        },
+        {
+            "group": "Query_optimization",
+            "produced_suggestion": "Apply the order status filter early in the CTE to reduce the dataset size"
+        },
+        {
+            "group": "Join_optimization",
+            "produced_suggestion": "Use explicit JOIN syntax instead of implicit joins in the FROM clause"
+        }
+]
+</advice>
+
+</analysis>
+The rewritten SQL query makes several significant improvements to the original query:
+
+1. It uses a Common Table Expression (CTE) called "problematic_orders" to precompute orders that have multiple delayed suppliers (where receipt date > commit date). This is more efficient than repeatedly checking this condition in a correlated subquery.
+
+2. The query replaces the expensive NOT EXISTS anti-join with a simpler NOT IN clause that references the precomputed problematic_orders CTE. This reduces the computational overhead of repeatedly scanning the lineitem table.
+
+3. The CTE joins with the orders table early to filter for orders with status 'F', which reduces the dataset size before the expensive grouping operation.
+
+4. The query uses explicit JOIN syntax instead of implicit joins in the FROM clause, which improves readability and can help the optimizer understand the join relationships better.
+
+5. Table aliases are used consistently and column references include table names where appropriate, making the query more maintainable.
+
+Given the data statistics showing that lineitem (179M rows) and orders (45M rows) are very large tables, this optimization should significantly improve performance by reducing the number of full table scans and replacing the expensive anti-join with a more efficient approach.
+</analysis>
+
+</enhanced_sql>
+```sql
+WITH problematic_orders AS (
+    SELECT l.l_orderkey
+    FROM lineitem l
+    JOIN orders o ON l.l_orderkey = o.o_orderkey AND o.o_orderstatus = 'F'
+    WHERE l.l_receiptdate > l.l_commitdate
+    GROUP BY l.l_orderkey
+    HAVING COUNT(DISTINCT l.l_suppkey) > 1
+)
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON supplier.s_nationkey = nation.n_nationkey AND nation.n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON supplier.s_suppkey = l1.l_suppkey
+JOIN orders ON l1.l_orderkey = orders.o_orderkey AND orders.o_orderstatus = 'F'
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (
+    SELECT 1
+    FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+)
+AND l1.l_orderkey NOT IN (SELECT l_orderkey FROM problematic_orders)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+```
+</enhanced_sql>
+
+=== 进入报告状态 ===
+DBMS_syntax_Tool starts...
+✓ 语法检查通过
+进行SQL等价性检查
+</analysis>
+I need to analyze both queries to determine if they are equivalent.
+
+Original SQL:
+- Joins supplier, lineitem, orders, and nation tables
+- Filters for orders with status 'F'
+- Filters for lineitem records where receipt date > commit date
+- Requires that there exists another lineitem for the same order with a different supplier
+- Requires that there does NOT exist another lineitem for the same order with a different supplier where receipt date > commit date
+- Filters for suppliers from 'MOZAMBIQUE'
+- Groups by supplier name and counts occurrences
+- Orders by count descending, then supplier name
+- Limits to 100 results
+
+Rewritten SQL:
+- Uses a CTE to identify "problematic orders" - orders where at least one lineitem has receipt date > commit date and the order has multiple suppliers
+- Joins supplier, nation, lineitem, and orders tables
+- Filters for orders with status 'F'
+- Filters for lineitem records where receipt date > commit date
+- Requires that there exists another lineitem for the same order with a different supplier
+- Excludes orders from the "problematic_orders" CTE
+- Filters for suppliers from 'MOZAMBIQUE'
+- Groups by supplier name and counts occurrences
+- Orders by count descending, then supplier name
+- Limits to 100 results
+
+The issue is in the logic of the CTE and how it's used. The original query excludes cases where ANY other supplier for the same order has a late delivery. The rewritten query's CTE identifies orders with multiple suppliers where at least one has a late delivery, but then excludes ALL of these orders. This is not equivalent to the original logic.
+</analysis>
+
+</equivalence>
+False
+</equivalence>
+
+</corrected_sql>
+WITH filtered_orders AS (
+    SELECT l3.l_orderkey, l3.l_suppkey
+    FROM lineitem l3
+    WHERE l3.l_receiptdate > l3.l_commitdate
+)
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON supplier.s_nationkey = nation.n_nationkey AND nation.n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON supplier.s_suppkey = l1.l_suppkey
+JOIN orders ON l1.l_orderkey = orders.o_orderkey AND orders.o_orderstatus = 'F'
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (
+    SELECT 1
+    FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM filtered_orders fo
+    WHERE fo.l_orderkey = l1.l_orderkey AND fo.l_suppkey <> l1.l_suppkey
+)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+</corrected_sql>
+X 优化SQL与原始SQL不等价 (尝试 1/3)
+</analysis>
+I need to check if the original SQL and the rewritten SQL are equivalent. Let me analyze both queries:
+
+Original SQL:
+- Joins supplier, lineitem (l1), orders, and nation tables
+- Filters for orders with status 'F'
+- Filters for lineitem records where receipt date > commit date
+- Requires that there exists another lineitem (l2) for the same order but different supplier
+- Requires that there does NOT exist a lineitem (l3) for the same order with a different supplier where receipt date > commit date
+- Filters for suppliers from 'MOZAMBIQUE'
+- Groups by supplier name and counts occurrences
+- Orders by count (desc) and supplier name
+- Limits to 100 results
+
+Rewritten SQL:
+- Uses a CTE to precompute "problematic_orders" - orders where multiple suppliers have delayed deliveries
+- Joins supplier, nation, lineitem (l1), and orders tables
+- Filters for orders with status 'F'
+- Filters for lineitem records where receipt date > commit date
+- Requires that there exists another lineitem (l2) for the same order but different supplier
+- Excludes orders that are in the "problematic_orders" CTE
+- Filters for suppliers from 'MOZAMBIQUE'
+- Groups by supplier name and counts occurrences
+- Orders by count (desc) and supplier name
+- Limits to 100 results
+
+The key issue is in the logic of the NOT EXISTS condition. In the original query, it excludes cases where there exists another supplier for the same order with a delayed delivery. In the rewritten query, the CTE identifies orders where multiple suppliers have delayed deliveries, but the logic is not equivalent.
+</analysis>
+
+</equivalence>
+False
+</equivalence>
+
+</corrected_sql>
+WITH filtered_lineitem AS (
+    SELECT l_orderkey, l_suppkey, l_receiptdate, l_commitdate
+    FROM lineitem
+    WHERE l_receiptdate > l_commitdate
+)
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON supplier.s_nationkey = nation.n_nationkey AND nation.n_name = 'MOZAMBIQUE'
+JOIN filtered_lineitem l1 ON supplier.s_suppkey = l1.l_suppkey
+JOIN orders ON l1.l_orderkey = orders.o_orderkey AND orders.o_orderstatus = 'F'
+WHERE EXISTS (
+    SELECT 1
+    FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM lineitem l3
+    WHERE l3.l_orderkey = l1.l_orderkey 
+    AND l3.l_suppkey <> l1.l_suppkey 
+    AND l3.l_receiptdate > l3.l_commitdate
+)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100
+</corrected_sql>
+X 优化SQL与原始SQL不等价 (尝试 2/3)
+</analysis>
+I need to analyze both queries to determine if they are equivalent.
+
+Original SQL:
+- Joins supplier, lineitem (l1), orders, and nation tables
+- Filters for orders with status 'F'
+- Filters for lineitem records where receipt date > commit date
+- Requires that there exists another lineitem (l2) for the same order but different supplier
+- Requires that there does NOT exist a lineitem (l3) for the same order with a different supplier where receipt date > commit date
+- Filters for suppliers from 'MOZAMBIQUE'
+- Groups by supplier name, counts occurrences, and orders by count desc, then name
+
+Rewritten SQL:
+- Uses a CTE to identify "problematic_orders" - orders where at least one lineitem has receipt date > commit date
+- The main query joins supplier, nation, lineitem (l1), and orders
+- Filters for orders with status 'F'
+- Filters for lineitem records where receipt date > commit date
+- Requires that there exists another lineitem (l2) for the same order but different supplier
+- Excludes orders in the "problematic_orders" CTE
+- Filters for suppliers from 'MOZAMBIQUE'
+- Groups by supplier name, counts occurrences, and orders by count desc, then name
+
+The issue is in the definition and usage of the problematic_orders CTE. The original query excludes orders where ANY other supplier (different from l1.l_suppkey) has a late delivery. The rewritten query's CTE is identifying orders with multiple suppliers where at least one has a late delivery, but then it's excluding ALL of these orders, which is not equivalent to the original logic.
+
+The NOT EXISTS condition in the original query is checking that there are no OTHER suppliers (different from the current one) with late deliveries for the same order. The rewritten query is incorrectly implementing this logic.
+</analysis>
+
+</equivalence>
+False
+</equivalence>
+
+</corrected_sql>
+WITH problematic_orders AS (
+    SELECT l3.l_orderkey, l3.l_suppkey
+    FROM lineitem l3
+    WHERE l3.l_receiptdate > l3.l_commitdate
+)
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON supplier.s_nationkey = nation.n_nationkey AND nation.n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON supplier.s_suppkey = l1.l_suppkey
+JOIN orders ON l1.l_orderkey = orders.o_orderkey AND orders.o_orderstatus = 'F'
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (
+    SELECT 1
+    FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM problematic_orders po
+    WHERE po.l_orderkey = l1.l_orderkey AND po.l_suppkey <> l1.l_suppkey
+)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+</corrected_sql>
+X 优化SQL与原始SQL不等价 (尝试 3/3)
+X 等价性检查未通过，最大尝试次数到达，将使用原始SQL
+原始SQL: WITH problematic_orders AS (
+    SELECT l.l_orderkey
+    FROM lineitem l
+    JOIN orders o ON l.l_orderkey = o.o_orderkey AND o.o_orderstatus = 'F'
+    WHERE l.l_receiptdate > l.l_commitdate
+    GROUP BY l.l_orderkey
+    HAVING COUNT(DISTINCT l.l_suppkey) > 1
+)
+SELECT s_name, COUNT(*) as numwait
+FROM supplier
+JOIN nation ON supplier.s_nationkey = nation.n_nationkey AND nation.n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON supplier.s_suppkey = l1.l_suppkey
+JOIN orders ON l1.l_orderkey = orders.o_orderkey AND orders.o_orderstatus = 'F'
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (
+    SELECT 1
+    FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+)
+AND l1.l_orderkey NOT IN (SELECT l_orderkey FROM problematic_orders)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+<class 'str'>
+优化建议: [{'group': 'Query_optimization', 'produced_suggestion': 'Use a CTE to precompute problematic orders with multiple delayed suppliers'}, {'group': 'Join_optimization', 'produced_suggestion': 'Replace the NOT EXISTS anti-join with a NOT IN clause against a precomputed list'}, {'group': 'Query_optimization', 'produced_suggestion': 'Apply the order status filter early in the CTE to reduce the dataset size'}, {'group': 'Join_optimization', 'produced_suggestion': 'Use explicit JOIN syntax instead of implicit joins in the FROM clause'}]
+<class 'list'>
+优化SQL: select s_name, count(*) as numwait from supplier, lineitem l1, orders, nation where s_suppkey = l1.l_suppkey and o_orderkey = l1.l_orderkey and o_orderstatus = 'F' and l1.l_receiptdate > l1.l_commitdate and exists ( select * from lineitem l2 where l2.l_orderkey = l1.l_orderkey and l2.l_suppkey <> l1.l_suppkey ) and not exists ( select * from lineitem l3 where l3.l_orderkey = l1.l_orderkey and l3.l_suppkey <> l1.l_suppkey and l3.l_receiptdate > l3.l_commitdate ) and s_nationkey = n_nationkey and n_name = 'MOZAMBIQUE' group by s_name order by numwait desc, s_name limit 100;
+<class 'str'>
+improved SQL: select s_name, count(*) as numwait from supplier, lineitem l1, orders, nation where s_suppkey = l1.l_suppkey and o_orderkey = l1.l_orderkey and o_orderstatus = 'F' and l1.l_receiptdate > l1.l_commitdate and exists ( select * from lineitem l2 where l2.l_orderkey = l1.l_orderkey and l2.l_suppkey <> l1.l_suppkey ) and not exists ( select * from lineitem l3 where l3.l_orderkey = l1.l_orderkey and l3.l_suppkey <> l1.l_suppkey and l3.l_receiptdate > l3.l_commitdate ) and s_nationkey = n_nationkey and n_name = 'MOZAMBIQUE' group by s_name order by numwait desc, s_name limit 100;
+DBMS_EXPLAIN_Tool starts...
+DBMS_EXPLAIN_Tool ends...
+['Limit  (cost=9259851.35..9259851.35 rows=1 width=34)', '  ->  Sort  (cost=9259851.35..9259851.35 rows=1 width=34)', '        Sort Key: (count(*)) DESC, supplier.s_name', '        ->  GroupAggregate  (cost=9259851.32..9259851.34 rows=1 width=34)', '              Group Key: supplier.s_name', '              ->  Sort  (cost=9259851.32..9259851.32 rows=1 width=26)', '                    Sort Key: supplier.s_name', '                    ->  Nested Loop  (cost=4731290.25..9259851.31 rows=1 width=26)', '                          ->  Nested Loop Semi Join  (cost=4731289.68..9259843.10 rows=1 width=34)', '                                ->  Gather  (cost=4731289.11..9259087.36 rows=1 width=34)', '                                      Workers Planned: 2', '                                      ->  Parallel Hash Anti Join  (cost=4730289.11..9258087.26 rows=1 width=34)', '                                            Hash Cond: (l1.l_orderkey = l3.l_orderkey)', '                                            Join Filter: (l3.l_suppkey <> l1.l_suppkey)', '                                            ->  Parallel Hash Join  (cost=8347.56..4418035.07 rows=991928 width=34)', '                                                  Hash Cond: (l1.l_suppkey = supplier.s_suppkey)', '                                                  ->  Parallel Seq Scan on lineitem l1  (cost=0.00..4311810.42 rows=24998411 width=8)', '                                                        Filter: (l_receiptdate > l_commitdate)', '                                                  ->  Parallel Hash  (cost=8285.06..8285.06 rows=5000 width=30)', '                                                        ->  Hash Join  (cost=1.31..8285.06 rows=5000 width=30)', '                                                              Hash Cond: (supplier.s_nationkey = nation.n_nationkey)', '                                                              ->  Parallel Seq Scan on supplier  (cost=0.00..7900.00 rows=125000 width=34)', '                                                              ->  Hash  (cost=1.30..1.30 rows=1 width=4)', '                                                                    ->  Seq Scan on nation  (cost=0.00..1.30 rows=1 width=4)', "                                                                          Filter: (n_name = 'MOZAMBIQUE'::bpchar)", '                                            ->  Parallel Hash  (cost=4311810.42..4311810.42 rows=24998411 width=8)', '                                                  ->  Parallel Seq Scan on lineitem l3  (cost=0.00..4311810.42 rows=24998411 width=8)', '                                                        Filter: (l_receiptdate > l_commitdate)', '                                ->  Index Scan using lineitem_pkey on lineitem l2  (cost=0.57..755.72 rows=431 width=8)', '                                      Index Cond: (l_orderkey = l1.l_orderkey)', '                                      Filter: (l_suppkey <> l1.l_suppkey)', '                          ->  Index Scan using orders_pkey on orders  (cost=0.56..8.21 rows=1 width=4)', '                                Index Cond: (o_orderkey = l1.l_orderkey)', "                                Filter: (o_orderstatus = 'F'::bpchar)", 'JIT:', '  Functions: 50', '  Options: Inlining true, Optimization true, Expressions true, Deforming true']
+DBMS_EXPLAIN_Tool starts...
+DBMS_EXPLAIN_Tool ends...
+['Limit  (cost=9259851.35..9259851.35 rows=1 width=34)', '  ->  Sort  (cost=9259851.35..9259851.35 rows=1 width=34)', '        Sort Key: (count(*)) DESC, supplier.s_name', '        ->  GroupAggregate  (cost=9259851.32..9259851.34 rows=1 width=34)', '              Group Key: supplier.s_name', '              ->  Sort  (cost=9259851.32..9259851.32 rows=1 width=26)', '                    Sort Key: supplier.s_name', '                    ->  Nested Loop  (cost=4731290.25..9259851.31 rows=1 width=26)', '                          ->  Nested Loop Semi Join  (cost=4731289.68..9259843.10 rows=1 width=34)', '                                ->  Gather  (cost=4731289.11..9259087.36 rows=1 width=34)', '                                      Workers Planned: 2', '                                      ->  Parallel Hash Anti Join  (cost=4730289.11..9258087.26 rows=1 width=34)', '                                            Hash Cond: (l1.l_orderkey = l3.l_orderkey)', '                                            Join Filter: (l3.l_suppkey <> l1.l_suppkey)', '                                            ->  Parallel Hash Join  (cost=8347.56..4418035.07 rows=991928 width=34)', '                                                  Hash Cond: (l1.l_suppkey = supplier.s_suppkey)', '                                                  ->  Parallel Seq Scan on lineitem l1  (cost=0.00..4311810.42 rows=24998411 width=8)', '                                                        Filter: (l_receiptdate > l_commitdate)', '                                                  ->  Parallel Hash  (cost=8285.06..8285.06 rows=5000 width=30)', '                                                        ->  Hash Join  (cost=1.31..8285.06 rows=5000 width=30)', '                                                              Hash Cond: (supplier.s_nationkey = nation.n_nationkey)', '                                                              ->  Parallel Seq Scan on supplier  (cost=0.00..7900.00 rows=125000 width=34)', '                                                              ->  Hash  (cost=1.30..1.30 rows=1 width=4)', '                                                                    ->  Seq Scan on nation  (cost=0.00..1.30 rows=1 width=4)', "                                                                          Filter: (n_name = 'MOZAMBIQUE'::bpchar)", '                                            ->  Parallel Hash  (cost=4311810.42..4311810.42 rows=24998411 width=8)', '                                                  ->  Parallel Seq Scan on lineitem l3  (cost=0.00..4311810.42 rows=24998411 width=8)', '                                                        Filter: (l_receiptdate > l_commitdate)', '                                ->  Index Scan using lineitem_pkey on lineitem l2  (cost=0.57..755.72 rows=431 width=8)', '                                      Index Cond: (l_orderkey = l1.l_orderkey)', '                                      Filter: (l_suppkey <> l1.l_suppkey)', '                          ->  Index Scan using orders_pkey on orders  (cost=0.56..8.21 rows=1 width=4)', '                                Index Cond: (o_orderkey = l1.l_orderkey)', "                                Filter: (o_orderstatus = 'F'::bpchar)", 'JIT:', '  Functions: 50', '  Options: Inlining true, Optimization true, Expressions true, Deforming true']
+DBMS_EXPLAIN_Tool starts...
+DBMS_EXPLAIN_Tool ends...
+['Limit  (cost=9259851.35..9259851.35 rows=1 width=34)', '  ->  Sort  (cost=9259851.35..9259851.35 rows=1 width=34)', '        Sort Key: (count(*)) DESC, supplier.s_name', '        ->  GroupAggregate  (cost=9259851.32..9259851.34 rows=1 width=34)', '              Group Key: supplier.s_name', '              ->  Sort  (cost=9259851.32..9259851.32 rows=1 width=26)', '                    Sort Key: supplier.s_name', '                    ->  Nested Loop  (cost=4731290.25..9259851.31 rows=1 width=26)', '                          ->  Nested Loop Semi Join  (cost=4731289.68..9259843.10 rows=1 width=34)', '                                ->  Gather  (cost=4731289.11..9259087.36 rows=1 width=34)', '                                      Workers Planned: 2', '                                      ->  Parallel Hash Anti Join  (cost=4730289.11..9258087.26 rows=1 width=34)', '                                            Hash Cond: (l1.l_orderkey = l3.l_orderkey)', '                                            Join Filter: (l3.l_suppkey <> l1.l_suppkey)', '                                            ->  Parallel Hash Join  (cost=8347.56..4418035.07 rows=991928 width=34)', '                                                  Hash Cond: (l1.l_suppkey = supplier.s_suppkey)', '                                                  ->  Parallel Seq Scan on lineitem l1  (cost=0.00..4311810.42 rows=24998411 width=8)', '                                                        Filter: (l_receiptdate > l_commitdate)', '                                                  ->  Parallel Hash  (cost=8285.06..8285.06 rows=5000 width=30)', '                                                        ->  Hash Join  (cost=1.31..8285.06 rows=5000 width=30)', '                                                              Hash Cond: (supplier.s_nationkey = nation.n_nationkey)', '                                                              ->  Parallel Seq Scan on supplier  (cost=0.00..7900.00 rows=125000 width=34)', '                                                              ->  Hash  (cost=1.30..1.30 rows=1 width=4)', '                                                                    ->  Seq Scan on nation  (cost=0.00..1.30 rows=1 width=4)', "                                                                          Filter: (n_name = 'MOZAMBIQUE'::bpchar)", '                                            ->  Parallel Hash  (cost=4311810.42..4311810.42 rows=24998411 width=8)', '                                                  ->  Parallel Seq Scan on lineitem l3  (cost=0.00..4311810.42 rows=24998411 width=8)', '                                                        Filter: (l_receiptdate > l_commitdate)', '                                ->  Index Scan using lineitem_pkey on lineitem l2  (cost=0.57..755.72 rows=431 width=8)', '                                      Index Cond: (l_orderkey = l1.l_orderkey)', '                                      Filter: (l_suppkey <> l1.l_suppkey)', '                          ->  Index Scan using orders_pkey on orders  (cost=0.56..8.21 rows=1 width=4)', '                                Index Cond: (o_orderkey = l1.l_orderkey)', "                                Filter: (o_orderstatus = 'F'::bpchar)", 'JIT:', '  Functions: 50', '  Options: Inlining true, Optimization true, Expressions true, Deforming true']
+<analysis>
+After comparing the three EXPLAIN results (original, rewritten, and improved), I observe that all three execution plans are identical. The query execution strategy, cost estimates, and execution paths remain unchanged across all three versions. This suggests that either:
+
+1. The query was already optimized and no further improvements were possible
+2. The rewrite and improvement attempts did not result in any changes to the execution plan
+3. The database optimizer chose the same execution plan regardless of any query modifications
+
+The execution plan shows a complex query with multiple nested loops, hash joins, and anti-joins, with a total estimated cost of approximately 9,259,851.35.
+</analysis>
+
+<report>
+# Query Execution Plan Analysis Report
+
+## Summary
+After analyzing the original, rewritten, and improved EXPLAIN results, I've determined that all three execution plans are identical. This indicates that either the query was already optimized, the attempted rewrites did not affect the execution plan, or the database optimizer determined the same plan was optimal regardless of the changes.
+
+## 1. Cost Changes
+- **Total cost change percentage**: 0% (unchanged at 9,259,851.35)
+- **Cost change of the most expensive node**: 0% (the Parallel Hash Anti Join node remains at cost=4,730,289.11..9,258,087.26)
+
+## 2. Execution Strategy Changes
+- **Scan type improvement**: No changes observed. The plan continues to use:
+  - Parallel Seq Scan on lineitem tables (l1 and l3)
+  - Index Scan on lineitem (l2) using lineitem_pkey
+  - Index Scan on orders using orders_pkey
+  - Seq Scan on nation
+  - Parallel Seq Scan on supplier
+- **Join algorithm optimization**: No changes. The plan maintains the same mix of:
+  - Nested Loop joins
+  - Hash Joins
+  - Hash Anti Join
+  - Nested Loop Semi Join
+- **Parallelism adjustment**: Unchanged with 2 workers planned
+
+## 3. Resource Consumption Changes
+- **Memory usage**: No changes in hash node configurations
+- **Worker count adjustment**: Consistently using 2 workers across all plans
+
+## 4. Improved Filtering Efficiency
+- **Post-filter row estimates**: No changes in row estimates across all plans
+- **Predicate pushdown scenarios**: No additional predicate pushdowns observed
+
+## 5. Key Optimization Indicators
+- **Elimination of explicit sorting**: No change - the plan still requires sorting operations
+- **Reduction of intermediate result sets**: No reduction observed in estimated row counts
+- **Improved parallelism utilization**: Parallelism strategy remains unchanged
+
+## Conclusion
+The query execution plan remained completely unchanged across all three versions. This suggests that either the query was already optimized for the current database schema and statistics, or that the attempted rewrites did not introduce any changes that would affect the optimizer's decisions. For further optimization, it might be worth exploring:
+
+1. Adding or modifying indexes, particularly on the lineitem table
+2. Updating table statistics
+3. Restructuring the query more significantly
+4. Examining the actual execution time rather than just the estimated costs
+5. Considering materialized views for frequently accessed data patterns
+</report>
+<analysis>
+After comparing the three EXPLAIN results (original, rewritten, and improved), I observe that all three execution plans are identical. The query execution strategy, cost estimates, and execution paths remain unchanged across all three versions. This suggests that either:
+
+1. The query was already optimized and no further improvements were possible
+2. The rewrite and improvement attempts did not result in any changes to the execution plan
+3. The database optimizer chose the same execution plan regardless of any query modifications
+
+The execution plan shows a complex query with multiple nested loops, hash joins, and anti-joins, with a total estimated cost of approximately 9,259,851.35.
+</analysis>
+
+<report>
+# Query Execution Plan Analysis Report
+
+## Summary
+After analyzing the original, rewritten, and improved EXPLAIN results, I've determined that all three execution plans are identical. This indicates that either the query was already optimized, the attempted rewrites did not affect the execution plan, or the database optimizer determined the same plan was optimal regardless of the changes.
+
+## 1. Cost Changes
+- **Total cost change percentage**: 0% (unchanged at 9,259,851.35)
+- **Cost change of the most expensive node**: 0% (the Parallel Hash Anti Join node remains at cost=4,730,289.11..9,258,087.26)
+
+## 2. Execution Strategy Changes
+- **Scan type improvement**: No changes observed. The plan continues to use:
+  - Parallel Seq Scan on lineitem tables (l1 and l3)
+  - Index Scan on lineitem (l2) using lineitem_pkey
+  - Index Scan on orders using orders_pkey
+  - Seq Scan on nation
+  - Parallel Seq Scan on supplier
+- **Join algorithm optimization**: No changes. The plan maintains the same mix of:
+  - Nested Loop joins
+  - Hash Joins
+  - Hash Anti Join
+  - Nested Loop Semi Join
+- **Parallelism adjustment**: Unchanged with 2 workers planned
+
+## 3. Resource Consumption Changes
+- **Memory usage**: No changes in hash node configurations
+- **Worker count adjustment**: Consistently using 2 workers across all plans
+
+## 4. Improved Filtering Efficiency
+- **Post-filter row estimates**: No changes in row estimates across all plans
+- **Predicate pushdown scenarios**: No additional predicate pushdowns observed
+
+## 5. Key Optimization Indicators
+- **Elimination of explicit sorting**: No change - the plan still requires sorting operations
+- **Reduction of intermediate result sets**: No reduction observed in estimated row counts
+- **Improved parallelism utilization**: Parallelism strategy remains unchanged
+
+## Conclusion
+The query execution plan remained completely unchanged across all three versions. This suggests that either the query was already optimized for the current database schema and statistics, or that the attempted rewrites did not introduce any changes that would affect the optimizer's decisions. For further optimization, it might be worth exploring:
+
+1. Adding or modifying indexes, particularly on the lineitem table
+2. Updating table statistics
+3. Restructuring the query more significantly
+4. Examining the actual execution time rather than just the estimated costs
+5. Considering materialized views for frequently accessed data patterns
+</report>
+
+=== 进入决策状态 ===
+I need to analyze the original SQL and the enhanced SQL to determine if the process should be terminated.
+
+Looking at the original SQL and the enhanced SQL, I notice they are identical. The produced rewrite SQL is different, but the enhanced SQL is exactly the same as the original SQL.
+
+Since the enhanced SQL is the same as the original SQL, there is no optimization or improvement. The execution time would be the same, and there's no change in the query logic.
+
+{  
+    {
+        "terminate": False,
+        "reason": "The enhanced SQL is identical to the original SQL. There is no optimization or improvement made, so the execution time would be the same. No SQL optimization has been performed."
+    }
+}
+this is the state:  DECISION
+Knowledge_Pool_Tool starts...
+Loading documents from file...
+Error in retrieval for navie_suggestion {'group': 'Query_optimization', 'produced_suggestion': 'Apply the order status filter early in the CTE to reduce the dataset size'}: 'navie_suggestion'
+Error in retrieval for navie_suggestion {'group': 'Query_optimization', 'produced_suggestion': 'Use a CTE to precompute problematic orders with multiple delayed suppliers'}: 'navie_suggestion'
+Error in retrieval for navie_suggestion {'group': 'Join_optimization', 'produced_suggestion': 'Replace the NOT EXISTS anti-join with a NOT IN clause against a precomputed list'}: 'navie_suggestion'
+Error in retrieval for navie_suggestion {'group': 'Join_optimization', 'produced_suggestion': 'Use explicit JOIN syntax instead of implicit joins in the FROM clause'}: 'navie_suggestion'
+Retrieval time: 0.00 seconds.
+Knowledge Pool ends.. []
+```json
+{
+    "optimizations": [
+        {
+            "group": "Query_optimization",
+            "produced_suggestion": "Use a CTE to precompute problematic orders with multiple delayed suppliers"
+        },
+        {
+            "group": "Join_optimization",
+            "produced_suggestion": "Replace the NOT EXISTS anti-join with a NOT IN clause against a precomputed list"
+        },
+        {
+            "group": "Query_optimization",
+            "produced_suggestion": "Apply the order status filter early in the CTE to reduce the dataset size"
+        },
+        {
+            "group": "Join_optimization",
+            "produced_suggestion": "Use explicit JOIN syntax instead of implicit joins in the FROM clause"
+        }
+    ]
+}
+```
+
+=== 进入推理状态 ===
+DBMS_EXPLAIN_Tool starts...
+DBMS_EXPLAIN_Tool ends...
+['Limit  (cost=9259851.35..9259851.35 rows=1 width=34)', '  ->  Sort  (cost=9259851.35..9259851.35 rows=1 width=34)', '        Sort Key: (count(*)) DESC, supplier.s_name', '        ->  GroupAggregate  (cost=9259851.32..9259851.34 rows=1 width=34)', '              Group Key: supplier.s_name', '              ->  Sort  (cost=9259851.32..9259851.32 rows=1 width=26)', '                    Sort Key: supplier.s_name', '                    ->  Nested Loop  (cost=4731290.25..9259851.31 rows=1 width=26)', '                          ->  Nested Loop Semi Join  (cost=4731289.68..9259843.10 rows=1 width=34)', '                                ->  Gather  (cost=4731289.11..9259087.36 rows=1 width=34)', '                                      Workers Planned: 2', '                                      ->  Parallel Hash Anti Join  (cost=4730289.11..9258087.26 rows=1 width=34)', '                                            Hash Cond: (l1.l_orderkey = l3.l_orderkey)', '                                            Join Filter: (l3.l_suppkey <> l1.l_suppkey)', '                                            ->  Parallel Hash Join  (cost=8347.56..4418035.07 rows=991928 width=34)', '                                                  Hash Cond: (l1.l_suppkey = supplier.s_suppkey)', '                                                  ->  Parallel Seq Scan on lineitem l1  (cost=0.00..4311810.42 rows=24998411 width=8)', '                                                        Filter: (l_receiptdate > l_commitdate)', '                                                  ->  Parallel Hash  (cost=8285.06..8285.06 rows=5000 width=30)', '                                                        ->  Hash Join  (cost=1.31..8285.06 rows=5000 width=30)', '                                                              Hash Cond: (supplier.s_nationkey = nation.n_nationkey)', '                                                              ->  Parallel Seq Scan on supplier  (cost=0.00..7900.00 rows=125000 width=34)', '                                                              ->  Hash  (cost=1.30..1.30 rows=1 width=4)', '                                                                    ->  Seq Scan on nation  (cost=0.00..1.30 rows=1 width=4)', "                                                                          Filter: (n_name = 'MOZAMBIQUE'::bpchar)", '                                            ->  Parallel Hash  (cost=4311810.42..4311810.42 rows=24998411 width=8)', '                                                  ->  Parallel Seq Scan on lineitem l3  (cost=0.00..4311810.42 rows=24998411 width=8)', '                                                        Filter: (l_receiptdate > l_commitdate)', '                                ->  Index Scan using lineitem_pkey on lineitem l2  (cost=0.57..755.72 rows=431 width=8)', '                                      Index Cond: (l_orderkey = l1.l_orderkey)', '                                      Filter: (l_suppkey <> l1.l_suppkey)', '                          ->  Index Scan using orders_pkey on orders  (cost=0.56..8.21 rows=1 width=4)', '                                Index Cond: (o_orderkey = l1.l_orderkey)', "                                Filter: (o_orderstatus = 'F'::bpchar)", 'JIT:', '  Functions: 50', '  Options: Inlining true, Optimization true, Expressions true, Deforming true']
+Okay, let's tackle this SQL optimization. The query is joining supplier, lineitem (as l1), orders, and nation. It's looking for suppliers in Mozambique where there's a lineitem with a receipt date after commit date, and there exists another lineitem for the same order from a different supplier, but no lineitem from another supplier that also has receipt after commit. Then grouping by supplier name and ordering by count.
+
+First, I need to check the existing execution plan. The explain info shows a lot of nested loops and parallel scans, which might be expensive. The cost is quite high, up to 9 million. Let's see where the bottlenecks are.
+
+The lineitem table is huge (179 million rows), so any full scans here are bad. The EXISTS and NOT EXISTS subqueries on lineitem (l2 and l3) might be causing issues. The current plan does a semi-join and an anti-join. For l2, it's using an index scan on lineitem_pkey, which is good because it's looking for l_orderkey. But for l3, there's a parallel seq scan with a filter, which might be slow because it's checking all lineitems where receipt > commit.
+
+Wait, the NOT EXISTS subquery on l3 requires that there's no other lineitem in the same order with a different supplier and receipt after commit. So maybe rewriting these subqueries as joins could help. Alternatively, using CTEs for common conditions.
+
+Looking at the WHERE clauses: o_orderstatus = 'F', n_name = 'MOZAMBIQUE', and the two EXISTS clauses. Also, s_nationkey = n_nationkey.
+
+The nation filter is on Mozambique, so that's a small result set. The supplier is filtered by nation, so that reduces the number of suppliers. The lineitem l1 is filtered by receiptdate > commitdate, which is a big filter but necessary. The EXISTS and NOT EXISTS are correlated subqueries.
+
+Possible optimizations:
+
+1. Convert EXISTS and NOT EXISTS into joins. For EXISTS (l2), maybe a semi-join where l2.l_orderkey = l1.l_orderkey and l2.l_suppkey <> l1.l_suppkey. Similarly for NOT EXISTS (l3), an anti-join where l3.l_orderkey = l1.l_orderkey, l3.l_suppkey <> l1.l_suppkey, and l3.l_receiptdate > l3.l_commitdate. This could allow the optimizer to use better join strategies instead of correlated subqueries.
+
+2. Check indexes. For lineitem, having indexes on l_orderkey, l_suppkey, and the receiptdate/commitdate conditions. If not present, suggesting indexes might help, but since we can't create indexes here, we have to work with existing.
+
+3. The orders table is joined on o_orderkey = l1.l_orderkey and o_orderstatus = 'F'. If the orders table has an index on o_orderkey including o_orderstatus, that could help. The current plan uses an index scan on orders_pkey, which is good for the join, but then filters on o_orderstatus. If there's an index on o_orderstatus, that might be better, but the explain shows a filter after index scan, so maybe not.
+
+4. The nation table is small and filtered by name, so that's efficient.
+
+5. The GROUP BY s_name and ORDER BY numwait desc might be using a sort, which is expensive. If there's a way to reduce the data earlier, that would help.
+
+Looking at the previous report, maybe they considered CTEs but decided against them because of many WHERE/join conditions. But here, maybe moving some subqueries into joins can help.
+
+Let me try rewriting the EXISTS and NOT EXISTS as joins. For example, the EXISTS (select * from lineitem l2 ...) can be a semi-join with l2. Similarly, the NOT EXISTS becomes an anti-join.
+
+Original query has:
+
+EXISTS (select * from lineitem l2 where l2.l_orderkey = l1.l_orderkey and l2.l_suppkey <> l1.l_suppkey)
+
+This checks if there's any other lineitem for the same order with a different supplier. So, joining l1 to l2 on l_orderkey and l_suppkey <> l1's, then using a semi-join (like INNER JOIN and limit 1).
+
+Similarly, the NOT EXISTS (select * from lineitem l3 where ...) becomes an anti-join, ensuring no such rows exist.
+
+So rewriting the query using LEFT JOINs for the NOT EXISTS:
+
+For the EXISTS clause, we can use an INNER JOIN with lineitem l2 on l1.l_orderkey = l2.l_orderkey and l1.l_suppkey <> l2.l_suppkey. But since it's an EXISTS, we just need at least one row, so a semi-join (like using EXISTS). However, maybe the optimizer can handle a join here better.
+
+Alternatively, perhaps using a JOIN with DISTINCT could help, but might not be better than the semi-join.
+
+Wait, the problem with the current plan is that for the anti-join on l3, it's doing a parallel seq scan with a filter. Maybe rewriting the NOT EXISTS as a LEFT JOIN with a condition and checking for NULL would be more efficient.
+
+So the original subqueries in WHERE clauses can be transformed into LEFT JOINs in the FROM clause. Let's try:
+
+SELECT s_name, COUNT(*) AS numwait
+FROM supplier
+JOIN nation ON s_nationkey = n_nationkey AND n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON s_suppkey = l1.l_suppkey
+JOIN orders ON o_orderkey = l1.l_orderkey AND o_orderstatus = 'F'
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (
+    SELECT 1
+    FROM lineitem l2
+    WHERE l2.l_orderkey = l1.l_orderkey
+    AND l2.l_suppkey <> l1.l_suppkey
+)
+AND NOT EXISTS (
+    SELECT 1
+    FROM lineitem l3
+    WHERE l3.l_orderkey = l1.l_orderkey
+    AND l3.l_suppkey <> l1.l_suppkey
+    AND l3.l_receiptdate > l3.l_commitdate
+)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+
+But the current approach uses EXISTS and NOT EXISTS. The execution plan might already be using semi-join and anti-join. The issue is whether the subqueries are causing repeated scans of lineitem.
+
+Alternative approach: Instead of correlated subqueries, precompute the orders that meet the conditions.
+
+For example, first find all orders that have at least two different suppliers (EXISTS condition) and do not have any other supplier with receiptdate > commitdate (NOT EXISTS condition). Then join this set with lineitem l1, supplier, orders, nation.
+
+But how to represent that. Maybe using a CTE for the qualifying orders:
+
+WITH qualified_orders AS (
+    SELECT l_orderkey
+    FROM lineitem
+    GROUP BY l_orderkey
+    HAVING COUNT(DISTINCT l_suppkey) >= 2  -- At least two different suppliers
+    AND SUM(CASE WHEN l_receiptdate > l_commitdate THEN 1 ELSE 0 END) = 1  -- Only one supplier has receiptdate > commitdate
+)
+SELECT s_name, COUNT(*) AS numwait
+FROM supplier
+JOIN nation ON s_nationkey = n_nationkey AND n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON s_suppkey = l1.l_suppkey
+JOIN orders ON o_orderkey = l1.l_orderkey AND o_orderstatus = 'F'
+JOIN qualified_orders qo ON l1.l_orderkey = qo.l_orderkey
+WHERE l1.l_receiptdate > l1.l_commitdate
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+
+But this approach might not be equivalent. The original query's NOT EXISTS condition requires that for the specific lineitem l1, there is no l3 in the same order with different supplier and l3.receiptdate > commitdate. The HAVING clause approach groups by order and checks the count. However, if the order has two lineitems where one (l1) has receiptdate > commitdate and another (l3) also has it, then SUM would be >=2, which would be excluded. So the HAVING SUM(...) =1 would capture orders where exactly one lineitem has receiptdate > commitdate. But the original condition allows for other lineitems (same supplier) as long as they don't have receiptdate > commitdate. Wait, the original NOT EXISTS is checking for other suppliers (l3.l_suppkey <> l1.l_suppkey) that have receiptdate > commitdate. So the qualified orders are those where for the given l1, there are no other lineitems in the order with different supplier and receiptdate > commitdate. So in the CTE approach, this would require that for each order, the sum of lineitems where receiptdate > commitdate and suppkey is different from l1's suppkey is zero. But that's not possible to capture in the CTE without knowing l1's suppkey.
+
+Thus, the CTE approach may not work because it's per-order, not per-lineitem. So the original approach of correlated subqueries might be necessary. Therefore, maybe the problem is in how the subqueries are executed.
+
+Looking at the explain plan: For the anti-join (NOT EXISTS), the plan does a parallel seq scan on lineitem l3 with a filter. This could be expensive. If there's an index on l_orderkey and (l_receiptdate > l_commitdate), that might help, but without creating indexes, perhaps we can rephrase the query.
+
+Alternative idea: pre-filter lineitem l3 to those where l_receiptdate > l_commitdate, then check for existence. So the NOT EXISTS could be rewritten as:
+
+AND NOT EXISTS (
+    SELECT 1
+    FROM lineitem l3
+    WHERE l3.l_orderkey = l1.l_orderkey
+    AND l3.l_suppkey <> l1.l_suppkey
+    AND l3.l_receiptdate > l3.l_commitdate
+)
+
+This is already the case. So perhaps using a different join strategy. The current plan uses a Hash Anti Join. Maybe the issue is the size of the data. If the Hash Anti Join is expensive, perhaps a nested loop with an index could be better, but that depends on the data distribution.
+
+Another point: the lineitem_pkey is probably on (l_orderkey, l_linenumber), so the index scan for l2 is efficient. But for l3, the filter after the scan might not be using an index.
+
+Another possible optimization: since both EXISTS and NOT EXISTS are on lineitem, maybe combining them into a single condition. But I don't see an obvious way.
+
+Alternatively, move the conditions into the JOIN clauses. For example, joining lineitem l1 with lineitem l2 for the EXISTS condition and left joining with lineitem l3 for the NOT EXISTS.
+
+Wait, the EXISTS requires at least one l2 row, and NOT EXISTS requires no l3 rows. So perhaps:
+
+SELECT s_name, COUNT(*) AS numwait
+FROM supplier
+JOIN nation ON supplier.s_nationkey = nation.n_nationkey AND nation.n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON supplier.s_suppkey = l1.l_suppkey
+JOIN orders ON l1.l_orderkey = orders.o_orderkey AND orders.o_orderstatus = 'F'
+JOIN lineitem l2 ON l1.l_orderkey = l2.l_orderkey AND l2.l_suppkey <> l1.l_suppkey
+LEFT JOIN lineitem l3 ON l1.l_orderkey = l3.l_orderkey AND l3.l_suppkey <> l1.l_suppkey AND l3.l_receiptdate > l3.l_commitdate
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND l3.l_orderkey IS NULL
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+
+But this might change the semantics. Let's see: The JOIN with l2 ensures there's at least one other lineitem, and the LEFT JOIN with l3 (with the conditions) and checking l3.l_orderkey IS NULL would mean there are no such l3. However, the LEFT JOIN could multiply rows if there are multiple l2 or l3. But with the DISTINCT in GROUP BY, maybe it's okay. But this approach could be incorrect because joining l2 could cause duplicates. For example, if an order has multiple l2 entries, the same l1 would be joined multiple times, leading to higher counts. So the original approach using EXISTS is better because it checks existence without affecting the row count. Therefore, this rewrite might not be equivalent.
+
+Therefore, the original approach with EXISTS and NOT EXISTS is probably the right way, but the question is how to optimize the execution.
+
+Looking back, the explain plan shows that the anti-join (for NOT EXISTS) is doing a Parallel Seq Scan on lineitem l3. If there's a way to reduce the number of rows scanned here, that would help. The lineitem table is huge, so any scan is expensive. If we can push down the filter conditions earlier, that might help. For example, pre-filtering l3 to only those where l_receiptdate > l_commitdate and then joining on l_orderkey and l_suppkey <> l1's.
+
+Alternatively, using an index on lineitem(l_orderkey, l_suppkey, l_receiptdate, l_commitdate) could allow the anti-join to use an index seek, but without creating indexes, we can't do that.
+
+Another thought: The orders table has a filter o_orderstatus = 'F'. If this is a low-selectivity condition, pushing it down early could reduce the number of rows early on.
+
+In the current query, orders are joined after the lineitem and supplier. Maybe reordering the joins to filter orders first. For example:
+
+Start with orders where o_orderstatus = 'F', then join to lineitem l1, then supplier and nation. This way, we reduce the number of orders early.
+
+So rewriting the query to:
+
+SELECT s_name, COUNT(*) AS numwait
+FROM orders
+JOIN lineitem l1 ON orders.o_orderkey = l1.l_orderkey
+JOIN supplier ON l1.l_suppkey = supplier.s_suppkey
+JOIN nation ON supplier.s_nationkey = nation.n_nationkey AND nation.n_name = 'MOZAMBIQUE'
+WHERE orders.o_orderstatus = 'F'
+AND l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (SELECT 1 FROM lineitem l2 WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey)
+AND NOT EXISTS (SELECT 1 FROM lineitem l3 WHERE l3.l_orderkey = l1.l_orderkey AND l3.l_suppkey <> l1.l_suppkey AND l3.l_receiptdate > l3.l_commitdate)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+
+This changes the join order, starting with orders. But depending on the indexes, this might allow the optimizer to use an index on orders.o_orderstatus. If there's an index, this could be faster. The explain plan currently does an index scan on orders_pkey, but filters o_orderstatus = 'F'. If we can use an index on o_orderstatus, that would be better. However, without such an index, the planner might not choose this path. But the user hasn't mentioned indexes, so we can't assume they exist.
+
+Another optimization is to avoid redundant subqueries. For example, the EXISTS and NOT EXISTS both involve lineitem for the same order. Maybe combining them into a single subquery, but not sure how.
+
+Alternatively, use a derived table for lineitem l1 that pre-filters the receiptdate > commitdate. But the current query already has that in WHERE.
+
+Another angle: The GROUP BY s_name and ORDER BY count could be optimized by ensuring that the aggregation is done as early as possible. However, since the COUNT(*) depends on all the joins and conditions, it's unlikely to be pushed earlier.
+
+Looking at the data statistics, lineitem has 179M rows, orders 45M. The nation Mozambique is one row. Supplier has 299,999 rows. So joining supplier and nation first would be efficient, then joining to lineitem l1 which has a filter on receiptdate > commitdate. However, the current plan does a hash join on supplier and nation, which is good.
+
+Wait, in the explain plan, the supplier is joined to nation via a hash join, then to lineitem l1. The l1 is filtered with receiptdate > commitdate. That's okay. The problem seems to be the anti-join on l3, which is a big parallel scan.
+
+Another approach: Since the NOT EXISTS requires that there's no l3 in the same order with different supplier and receiptdate > commitdate, maybe for each l1, after ensuring that there's at least one l2 (different supplier), we can check that all other lineitems in the order either have the same supplier or don't have receiptdate > commitdate. But how to express that.
+
+Alternatively, using a window function to count over the order's lineitems, but that might complicate things.
+
+Alternatively, precompute for each lineitem l1 whether there exists an l3, and filter those out. But that's what the original query does.
+
+At this point, I think the main issue is the anti-join on l3, which is causing a full scan. If there's no index to help, perhaps rephrasing the query to use a NOT IN clause with a subquery that selects l_orderkey where the conditions are met. But that's similar to the current approach.
+
+Alternatively, using a LEFT JOIN and checking for NULL:
+
+SELECT s_name, COUNT(*) AS numwait
+FROM supplier
+JOIN nation ON s_nationkey = n_nationkey AND n_name = 'MOZAMBIQUE'
+JOIN lineitem l1 ON s_suppkey = l1.l_suppkey
+JOIN orders ON o_orderkey = l1.l_orderkey AND o_orderstatus = 'F'
+WHERE l1.l_receiptdate > l1.l_commitdate
+AND EXISTS (SELECT 1 FROM lineitem l2 WHERE l2.l_orderkey = l1.l_orderkey AND l2.l_suppkey <> l1.l_suppkey)
+AND NOT EXISTS (SELECT 1 FROM lineitem l3 WHERE l3.l_orderkey = l1.l_orderkey AND l3.l_suppkey <> l1.l_suppkey AND l3.l_receiptdate > l3.l_commitdate)
+GROUP BY s_name
+ORDER BY numwait DESC, s_name
+LIMIT 100;
+
+This is the same as the original. Maybe the problem is that the EXISTS and NOT EXISTS are correlated and causing repeated subquery executions. If the optimizer can flatten these into joins, that would help. But if it's already doing that, maybe there's no further optimization.
+
+Alternatively, use a derived table for the lineitem l1 that includes only the necessary columns, but that's probably not helpful.
+
+Another idea: Since the query groups by s_name, which is from supplier, perhaps aggregating early. But again, the COUNT depends on multiple joins.
+
+Alternatively, check if the query can be rephrased to use a COUNT(DISTINCT ...) if duplicates are introduced by joins, but I don't think that's the case here.
+
+Looking at the previous decision: the previous report mentions not to always create CTEs, especially with many WHERE/JOIN conditions. So maybe the current query is as optimized as possible, given the constraints. The explain plan shows high costs, but perhaps there's no better way without indexes.
+
+Wait, the explain plan shows a JIT with inlining and optimizations. Maybe the query is already as optimized as possible.
+
+In that case, the answer might be that the query is already well-optimized, and no further changes are needed. Hence, TERMINATE.
+This sql is well down or too easy to give a rewrite process, no need to optimize
+

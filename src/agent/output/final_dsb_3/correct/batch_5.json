@@ -1,0 +1,22 @@
+[
+  {
+    "id": "137",
+    "original_query": "select     sum(ws_ext_discount_amt)  as \"Excess Discount Amount\" from     web_sales    ,item    ,date_dim where (i_manufact_id BETWEEN 749 and 948 or i_category IN ('Books', 'Home', 'Sports')) and i_item_sk = ws_item_sk and d_date between '2001-01-31' and         cast('2001-01-31' as date) + interval '90' day and d_date_sk = ws_sold_date_sk and ws_wholesale_cost BETWEEN 57 AND 77 and ws_ext_discount_amt      > (          SELECT             1.3 * avg(ws_ext_discount_amt)          FROM             web_sales            ,date_dim          WHERE               ws_item_sk = i_item_sk           and d_date between '2001-01-31' and                              cast('2001-01-31' as date) + interval '90' day           and d_date_sk = ws_sold_date_sk           and ws_wholesale_cost BETWEEN 57 AND 77           and ws_sales_price / ws_list_price BETWEEN 17 * 0.01 AND 32 * 0.01   ) order by sum(ws_ext_discount_amt) limit 100;",
+    "rewritten_query": "WITH date_range AS (\n    SELECT d_date_sk\n    FROM date_dim\n    WHERE d_date BETWEEN '2001-01-31' AND CAST('2001-01-31' AS DATE) + INTERVAL '90' DAY\n), \navg_discounts AS (\n    SELECT\n        ws_item_sk,\n        AVG(ws_ext_discount_amt) AS avg_disc\n    FROM\n        web_sales\n        JOIN date_range ON web_sales.ws_sold_date_sk = date_range.d_date_sk\n    WHERE\n        web_sales.ws_wholesale_cost BETWEEN 57 AND 77\n        AND (web_sales.ws_sales_price / web_sales.ws_list_price) BETWEEN 0.17 AND 0.32\n    GROUP BY\n        ws_item_sk\n)\nSELECT\n    SUM(ws.ws_ext_discount_amt) AS \"Excess Discount Amount\"\nFROM\n    web_sales ws\n    JOIN item i ON ws.ws_item_sk = i.i_item_sk\n    JOIN date_range dr ON ws.ws_sold_date_sk = dr.d_date_sk\n    JOIN avg_discounts ad ON ws.ws_item_sk = ad.ws_item_sk\nWHERE\n    (i.i_manufact_id BETWEEN 749 AND 948 OR i.i_category IN ('Books', 'Home', 'Sports'))\n    AND ws.ws_wholesale_cost BETWEEN 57 AND 77\n    AND ws.ws_ext_discount_amt > 1.3 * ad.avg_disc\nORDER BY SUM(ws.ws_ext_discount_amt)\nLIMIT 100;",
+    "time_cost": 276.88919377326965,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Replaced the correlated subquery with a CTE to calculate average discount amounts per item once, instead of recalculating for each row."
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Created a date_range CTE to precompute the date range once and reuse it in both the main query and the avg_discounts calculation."
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Changed the query structure to use explicit joins with the precomputed CTEs, reducing redundant calculations."
+      }
+    ]
+  }
+]

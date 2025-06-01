@@ -1,0 +1,22 @@
+[
+  {
+    "id": "56",
+    "original_query": "select  sum(cs_ext_discount_amt)  as \"excess discount amount\" from    catalog_sales    ,item    ,date_dim where (i_manufact_id in (291, 335, 604, 696, 887) or i_manager_id BETWEEN 35 and 64) and i_item_sk = cs_item_sk and d_date between '1998-03-22' and         cast('1998-03-22' as date) + interval '90' day and d_date_sk = cs_sold_date_sk and cs_ext_discount_amt      > (          select             1.3 * avg(cs_ext_discount_amt)          from             catalog_sales            ,date_dim          where               cs_item_sk = i_item_sk           and d_date between '1998-03-22' and                              cast('1998-03-22' as date) + interval '90' day           and d_date_sk = cs_sold_date_sk           and cs_list_price between 119 and 148           and cs_sales_price / cs_list_price BETWEEN 58 * 0.01 AND 78 * 0.01       ) order by sum(cs_ext_discount_amt) limit 100;",
+    "rewritten_query": "WITH date_range AS (\n    SELECT d_date_sk\n    FROM date_dim\n    WHERE d_date BETWEEN '1998-03-22' AND (CAST('1998-03-22' AS DATE) + INTERVAL '90' DAY)\n),\nsubquery_avg AS (\n    SELECT cs_item_sk, 1.3 * AVG(cs_ext_discount_amt) AS avg_discount\n    FROM catalog_sales cs\n    JOIN date_range dr ON cs.cs_sold_date_sk = dr.d_date_sk\n    WHERE cs.cs_list_price BETWEEN 119 AND 148\n      AND (cs.cs_sales_price / cs.cs_list_price) BETWEEN 0.58 AND 0.78\n    GROUP BY cs.cs_item_sk\n)\nSELECT SUM(cs.cs_ext_discount_amt) AS \"excess discount amount\"\nFROM catalog_sales cs\nJOIN item i ON cs.cs_item_sk = i.i_item_sk\nJOIN date_range dr ON cs.cs_sold_date_sk = dr.d_date_sk\nJOIN subquery_avg sa ON cs.cs_item_sk = sa.cs_item_sk\nWHERE (i.i_manufact_id IN (291, 335, 604, 696, 887) OR i.i_manager_id BETWEEN 35 AND 64)\n  AND cs.cs_ext_discount_amt > sa.avg_discount\nORDER BY SUM(cs.cs_ext_discount_amt)\nLIMIT 100;",
+    "time_cost": 155.04087805747986,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Replace the correlated subquery with a CTE to precompute the average discount per item once instead of calculating it for each row in the main query."
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Use a date_range CTE to precompute date filter once and reuse it in both the main query and subquery to avoid redundant date_dim scans."
+      },
+      {
+        "group": "Constant_folding",
+        "nave_suggestion": "Precompute the constant expressions in the query for better readability and potentially improved performance."
+      }
+    ]
+  }
+]

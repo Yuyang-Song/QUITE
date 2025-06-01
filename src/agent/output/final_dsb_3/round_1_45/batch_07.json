@@ -1,0 +1,26 @@
+[
+  {
+    "id": "7",
+    "original_query": "select min(c_customer_sk), min(ss_item_sk), min(sr_ticket_number), min(ws_order_number) FROM store_sales, store_returns, web_sales, date_dim d1, date_dim d2, item, customer, customer_address, household_demographics WHERE ss_ticket_number = sr_ticket_number AND ss_customer_sk = ws_bill_customer_sk AND ss_customer_sk = c_customer_sk AND c_current_addr_sk = ca_address_sk AND c_current_hdemo_sk = hd_demo_sk AND ss_item_sk = sr_item_sk AND sr_item_sk = ws_item_sk AND i_item_sk = ss_item_sk AND i_category IN ('Books', 'Shoes', 'Sports') AND sr_returned_date_sk = d1.d_date_sk AND ws_sold_date_sk = d2.d_date_sk AND d2.d_date between d1.d_date AND (d1.d_date + interval '90' day) AND ca_state in ('IN', 'MT', 'NM', 'OH', 'OR') AND d1.d_year = 1999 AND hd_income_band_sk BETWEEN 14 AND 20 AND hd_buy_potential = '5001-10000' AND ss_sales_price / ss_list_price BETWEEN 80 * 0.01 AND 100 * 0.01 ;",
+    "rewritten_query": "WITH d1_filtered AS (\n    SELECT d_date_sk, d_date, d_date + INTERVAL '90' DAY AS end_date\n    FROM date_dim\n    WHERE d_year = 1999\n),\nitem_filtered AS (\n    SELECT i_item_sk\n    FROM item\n    WHERE i_category IN ('Books', 'Shoes', 'Sports')\n),\nhd_filtered AS (\n    SELECT hd_demo_sk\n    FROM household_demographics\n    WHERE hd_income_band_sk BETWEEN 14 AND 20\n    AND hd_buy_potential = '5001-10000'\n),\nca_filtered AS (\n    SELECT ca_address_sk\n    FROM customer_address\n    WHERE ca_state IN ('IN', 'MT', 'NM', 'OH', 'OR')\n)\nSELECT min(c_customer_sk), min(ss_item_sk), min(sr_ticket_number), min(ws_order_number)\nFROM store_returns sr\nINNER JOIN d1_filtered d1 ON sr.sr_returned_date_sk = d1.d_date_sk\nINNER JOIN item_filtered i ON sr.sr_item_sk = i.i_item_sk\nINNER JOIN store_sales ss ON sr.sr_item_sk = ss.ss_item_sk\n                          AND sr.sr_ticket_number = ss.ss_ticket_number\n                          AND ss.ss_sales_price >= 0.80 * ss.ss_list_price\n                          AND ss.ss_sales_price <= 1.00 * ss.ss_list_price\nINNER JOIN customer c ON ss.ss_customer_sk = c.c_customer_sk\nINNER JOIN ca_filtered ca ON c.c_current_addr_sk = ca.ca_address_sk\nINNER JOIN hd_filtered hd ON c.c_current_hdemo_sk = hd.hd_demo_sk\nINNER JOIN web_sales ws ON ss.ss_customer_sk = ws.ws_bill_customer_sk\n                        AND sr.sr_item_sk = ws.ws_item_sk\nINNER JOIN date_dim d2 ON ws.ws_sold_date_sk = d2.d_date_sk\n                       AND d2.d_date BETWEEN d1.d_date AND d1.end_date;",
+    "time_cost": 204.82258319854736,
+    "rewrite_suggestion": [
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Convert implicit joins (comma-separated tables in FROM clause) to explicit INNER JOIN syntax with proper ON clauses to help the optimizer better understand join relationships."
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Reorder the join sequence to filter data early, starting with tables that have more restrictive filters like date_dim with year=1999 and store_returns."
+      },
+      {
+        "group": "Predicate_simplification",
+        "nave_suggestion": "Replace the division operation in 'ss_sales_price / ss_list_price BETWEEN 80 * 0.01 AND 100 * 0.01' with equivalent multiplication operations to improve computational efficiency: 'ss_sales_price >= 0.80 * ss_list_price AND ss_sales_price <= 1.00 * ss_list_price'."
+      },
+      {
+        "group": "Constant_folding",
+        "nave_suggestion": "Simplify the constant expressions by pre-calculating '80 * 0.01' to '0.80' and '100 * 0.01' to '1.00' in the price ratio condition."
+      }
+    ]
+  }
+]

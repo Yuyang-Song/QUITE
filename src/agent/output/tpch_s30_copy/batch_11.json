@@ -1,0 +1,26 @@
+[
+  {
+    "id": "60",
+    "original_query": "select s_name, s_address from supplier, nation where s_suppkey in ( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'burlywood%' ) and ps_availqty > ( select 0.5 * sum(l_quantity) from lineitem where l_partkey = ps_partkey and l_suppkey = ps_suppkey and l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) and s_nationkey = n_nationkey and n_name = 'ETHIOPIA' order by s_name;",
+    "rewritten_query": "WITH lineitem_sum AS (\n    SELECT l_partkey, l_suppkey, 0.5 * SUM(l_quantity) AS half_sum\n    FROM lineitem\n    WHERE l_shipdate BETWEEN DATE '1994-01-01' AND DATE '1994-12-31'\n    GROUP BY l_partkey, l_suppkey\n)\nSELECT s_name, s_address\nFROM supplier\nJOIN nation ON s_nationkey = n_nationkey AND n_name = 'ETHIOPIA'\nWHERE EXISTS (\n    SELECT 1\n    FROM partsupp\n    JOIN part ON partsupp.ps_partkey = part.p_partkey AND part.p_name LIKE 'burlywood%'\n    JOIN lineitem_sum ON partsupp.ps_partkey = lineitem_sum.l_partkey \n        AND partsupp.ps_suppkey = lineitem_sum.l_suppkey\n    WHERE partsupp.ps_suppkey = supplier.s_suppkey\n    AND partsupp.ps_availqty > lineitem_sum.half_sum\n)\nORDER BY s_name;",
+    "time_cost": 428.5984241962433,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "produced_suggestion": "Precomputed the lineitem sum in a CTE to avoid recalculating it for each row in partsupp"
+      },
+      {
+        "group": "Join_optimization",
+        "produced_suggestion": "Replaced nested IN subqueries with EXISTS and explicit JOINs for better performance"
+      },
+      {
+        "group": "Query_optimization",
+        "produced_suggestion": "Used BETWEEN for date range instead of separate comparisons"
+      },
+      {
+        "group": "Constant_folding",
+        "produced_suggestion": "Calculated the date '1994-01-01' + interval '1' year as '1994-12-31'"
+      }
+    ]
+  }
+]

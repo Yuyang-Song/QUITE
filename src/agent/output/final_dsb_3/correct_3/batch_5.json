@@ -1,0 +1,18 @@
+[
+  {
+    "id": "110",
+    "original_query": "with customer_total_return as  (select cr_returning_customer_sk as ctr_customer_sk         ,ca_state as ctr_state,   \tsum(cr_return_amt_inc_tax) as ctr_total_return  from catalog_returns      ,date_dim      ,customer_address  where cr_returned_date_sk = d_date_sk     and d_year =2001    and cr_returning_addr_sk = ca_address_sk   group by cr_returning_customer_sk          ,ca_state )   select  c_customer_id,c_salutation,c_first_name,c_last_name,ca_street_number,ca_street_name                    ,ca_street_type,ca_suite_number,ca_city,ca_county,ca_state,ca_zip,ca_country,ca_gmt_offset                   ,ca_location_type,ctr_total_return  from customer_total_return ctr1      ,customer_address      ,customer  where ctr1.ctr_total_return > (select avg(ctr_total_return)*1.2  \t\t\t  from customer_total_return ctr2                    \t  where ctr1.ctr_state = ctr2.ctr_state)        and ca_address_sk = c_current_addr_sk        and ca_state = 'OH'        and ctr1.ctr_customer_sk = c_customer_sk  order by c_customer_id,c_salutation,c_first_name,c_last_name,ca_street_number,ca_street_name                    ,ca_street_type,ca_suite_number,ca_city,ca_county,ca_state,ca_zip,ca_country,ca_gmt_offset                   ,ca_location_type,ctr_total_return  limit 100;",
+    "rewritten_query": "with customer_total_return as (\n    select \n        cr_returning_customer_sk as ctr_customer_sk,\n        ca_state as ctr_state,\n        sum(cr_return_amt_inc_tax) as ctr_total_return\n    from catalog_returns\n    join date_dim on cr_returned_date_sk = d_date_sk\n    join customer_address on cr_returning_addr_sk = ca_address_sk\n    where d_year = 2001\n    group by cr_returning_customer_sk,\n             ca_state\n),\nstate_averages as (\n    select \n        ctr_state,\n        avg(ctr_total_return) * 1.2 as avg_120pct\n    from customer_total_return\n    group by ctr_state\n)\nselect \n    c_customer_id,\n    c_salutation,\n    c_first_name,\n    c_last_name,\n    ca_street_number,\n    ca_street_name,\n    ca_street_type,\n    ca_suite_number,\n    ca_city,\n    ca_county,\n    ca_state,\n    ca_zip,\n    ca_country,\n    ca_gmt_offset,\n    ca_location_type,\n    ctr_total_return\nfrom customer_total_return ctr1\njoin state_averages sa on ctr1.ctr_state = sa.ctr_state\njoin customer on ctr1.ctr_customer_sk = c_customer_sk\njoin customer_address on customer.c_current_addr_sk = customer_address.ca_address_sk\nwhere ctr1.ctr_total_return > sa.avg_120pct\n  and customer_address.ca_state = 'OH'\norder by \n    c_customer_id,\n    c_salutation,\n    c_first_name,\n    c_last_name,\n    ca_street_number,\n    ca_street_name,\n    ca_street_type,\n    ca_suite_number,\n    ca_city,\n    ca_county,\n    ca_state,\n    ca_zip,\n    ca_country,\n    ca_gmt_offset,\n    ca_location_type,\n    ctr_total_return\nlimit 100;",
+    "time_cost": 169.719242811203,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Replaced the correlated subquery with a separate CTE (state_averages) that calculates the average return amount per state multiplied by 1.2. This eliminates the O(n\u00b2) complexity of the original query where the subquery was executed for each row."
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Converted implicit joins to explicit JOIN syntax for better readability and potentially better optimization by the query planner."
+      }
+    ]
+  }
+]

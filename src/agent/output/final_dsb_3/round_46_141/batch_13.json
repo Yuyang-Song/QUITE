@@ -1,0 +1,22 @@
+[
+  {
+    "id": "58",
+    "original_query": "select  count(*) from (     select distinct c_last_name, c_first_name, d_date     from store_sales, date_dim, customer           where store_sales.ss_sold_date_sk = date_dim.d_date_sk       and store_sales.ss_customer_sk = customer.c_customer_sk       and d_month_seq between 1185 and 1185 + 11       and c_birth_month in (2, 3, 10, 12)       and ss_list_price between 28 and 87       and ss_wholesale_cost BETWEEN 80 AND 100   intersect     select distinct c_last_name, c_first_name, d_date     from catalog_sales, date_dim, customer           where catalog_sales.cs_sold_date_sk = date_dim.d_date_sk       and catalog_sales.cs_bill_customer_sk = customer.c_customer_sk       and d_month_seq between 1185 and 1185 + 11       and c_birth_month in (2, 3, 10, 12)       and cs_list_price between 28 and 87       and cs_wholesale_cost BETWEEN 80 AND 100   intersect     select distinct c_last_name, c_first_name, d_date     from web_sales, date_dim, customer           where web_sales.ws_sold_date_sk = date_dim.d_date_sk       and web_sales.ws_bill_customer_sk = customer.c_customer_sk       and d_month_seq between 1185 and 1185 + 11       and c_birth_month in (2, 3, 10, 12)       and ws_list_price between 28 and 87       and ws_wholesale_cost BETWEEN 80 AND 100 ) hot_cust limit 100;",
+    "rewritten_query": "WITH filtered_date AS (\n    SELECT d_date_sk, d_date\n    FROM date_dim\n    WHERE d_month_seq BETWEEN 1185 AND 1196\n), filtered_customer AS (\n    SELECT c_customer_sk, c_last_name, c_first_name\n    FROM customer\n    WHERE c_birth_month IN (2, 3, 10, 12)\n)\nSELECT COUNT(*)\nFROM (\n    SELECT c_last_name, c_first_name, d_date\n    FROM (\n        SELECT DISTINCT \n            fc.c_last_name, \n            fc.c_first_name, \n            fd.d_date,\n            1 AS sales_source\n        FROM store_sales ss\n        JOIN filtered_date fd ON ss.ss_sold_date_sk = fd.d_date_sk\n        JOIN filtered_customer fc ON ss.ss_customer_sk = fc.c_customer_sk\n        WHERE ss.ss_list_price BETWEEN 28 AND 87\n          AND ss.ss_wholesale_cost BETWEEN 80 AND 100\n        UNION ALL\n        SELECT DISTINCT \n            fc.c_last_name, \n            fc.c_first_name, \n            fd.d_date,\n            2 AS sales_source\n        FROM catalog_sales cs\n        JOIN filtered_date fd ON cs.cs_sold_date_sk = fd.d_date_sk\n        JOIN filtered_customer fc ON cs.cs_bill_customer_sk = fc.c_customer_sk\n        WHERE cs.cs_list_price BETWEEN 28 AND 87\n          AND cs.cs_wholesale_cost BETWEEN 80 AND 100\n        UNION ALL\n        SELECT DISTINCT \n            fc.c_last_name, \n            fc.c_first_name, \n            fd.d_date,\n            3 AS sales_source\n        FROM web_sales ws\n        JOIN filtered_date fd ON ws.ws_sold_date_sk = fd.d_date_sk\n        JOIN filtered_customer fc ON ws.ws_bill_customer_sk = fc.c_customer_sk\n        WHERE ws.ws_list_price BETWEEN 28 AND 87\n          AND ws.ws_wholesale_cost BETWEEN 80 AND 100\n    ) combined_sales\n    GROUP BY c_last_name, c_first_name, d_date\n    HAVING COUNT(DISTINCT sales_source) = 3\n) hot_cust\nLIMIT 100;",
+    "time_cost": 327.06820940971375,
+    "rewrite_suggestion": [
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Use Common Table Expressions (CTEs) to pre-filter date_dim and customer tables, reducing redundant filtering operations across the three sales queries."
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Replace multiple INTERSECT operations with a UNION ALL approach combined with GROUP BY and HAVING, which can be more efficient for finding records that exist in all three sales channels."
+      },
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Add a sales_source identifier to track which sales channel each record comes from, allowing the use of COUNT(DISTINCT sales_source) = 3 to identify customers present in all three channels."
+      }
+    ]
+  }
+]

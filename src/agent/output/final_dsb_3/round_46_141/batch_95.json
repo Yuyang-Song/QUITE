@@ -1,0 +1,18 @@
+[
+  {
+    "id": "140",
+    "original_query": "select     count(distinct ws_order_number) as \"order count\"   ,sum(ws_ext_ship_cost) as \"total shipping cost\"   ,sum(ws_net_profit) as \"total net profit\" from    web_sales ws1   ,date_dim   ,customer_address   ,web_site where     d_date between '1998-9-01' and            cast('1998-9-01' as date) + interval '60 day' and ws1.ws_ship_date_sk = d_date_sk and ws1.ws_ship_addr_sk = ca_address_sk and ca_state in ('IN','KS','MD'             ,'NE' ,'OK' ,'VA') and ws1.ws_web_site_sk = web_site_sk and web_gmt_offset >= -7 and ws1.ws_list_price between 111 and 140 and exists (select *             from web_sales ws2             where ws1.ws_order_number = ws2.ws_order_number               and ws1.ws_warehouse_sk <> ws2.ws_warehouse_sk) and not exists(select *                from web_returns wr1                where ws1.ws_order_number = wr1.wr_order_number                and wr1.wr_reason_sk in (20, 27, 54, 55, 64)                ) order by count(distinct ws_order_number) limit 100;",
+    "rewritten_query": "WITH multi_warehouse_orders AS (\n    SELECT ws_order_number\n    FROM web_sales\n    GROUP BY ws_order_number\n    HAVING COUNT(DISTINCT ws_warehouse_sk) > 1\n)\nSELECT \n    COUNT(DISTINCT ws1.ws_order_number) AS \"order count\",\n    SUM(ws1.ws_ext_ship_cost) AS \"total shipping cost\",\n    SUM(ws1.ws_net_profit) AS \"total net profit\"\nFROM web_sales ws1\nINNER JOIN date_dim \n    ON ws1.ws_ship_date_sk = date_dim.d_date_sk\nINNER JOIN customer_address \n    ON ws1.ws_ship_addr_sk = customer_address.ca_address_sk\nINNER JOIN web_site \n    ON ws1.ws_web_site_sk = web_site.web_site_sk\nINNER JOIN multi_warehouse_orders mwo \n    ON ws1.ws_order_number = mwo.ws_order_number\nLEFT JOIN web_returns wr1 \n    ON ws1.ws_order_number = wr1.wr_order_number\n    AND wr1.wr_reason_sk IN (20, 27, 54, 55, 64)\nWHERE date_dim.d_date BETWEEN '1998-09-01' AND DATE '1998-09-01' + INTERVAL '60 days'\n  AND customer_address.ca_state IN ('IN','KS','MD','NE','OK','VA')\n  AND web_site.web_gmt_offset >= -7\n  AND ws1.ws_list_price BETWEEN 111 AND 140\n  AND wr1.wr_order_number IS NULL\nORDER BY 1\nLIMIT 100;",
+    "time_cost": 210.14444422721863,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Replace the EXISTS subquery with a CTE that precomputes orders with multiple warehouses. This reduces the overhead of correlated subqueries by calculating multi-warehouse orders once and then joining with the main query."
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Standardize date format from '1998-9-01' to '1998-09-01' and explicitly cast the date literal to DATE type for better readability and consistency."
+      }
+    ]
+  }
+]

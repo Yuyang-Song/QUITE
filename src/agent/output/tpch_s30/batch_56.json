@@ -1,0 +1,26 @@
+[
+  {
+    "id": "59",
+    "original_query": "select s_name, s_address from supplier, nation where s_suppkey in ( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'spring%' ) and ps_availqty > ( select 0.5 * sum(l_quantity) from lineitem where l_partkey = ps_partkey and l_suppkey = ps_suppkey and l_shipdate >= date '1997-01-01' and l_shipdate < date '1997-01-01' + interval '1' year ) ) and s_nationkey = n_nationkey and n_name = 'KENYA' order by s_name;",
+    "rewritten_query": "WITH spring_parts AS (\n    SELECT \n        p_partkey\n    FROM \n        part\n    WHERE \n        p_name LIKE 'spring%'\n),\nfiltered_partsupp AS (\n    SELECT \n        ps_suppkey,\n        ps_partkey,\n        ps_availqty\n    FROM \n        partsupp\n    JOIN \n        spring_parts ON ps_partkey = p_partkey\n),\nlineitem_agg AS (\n    SELECT \n        l_partkey, \n        l_suppkey, \n        0.5 * SUM(l_quantity) AS half_sum_quantity\n    FROM \n        lineitem\n    WHERE \n        l_shipdate >= DATE '1997-01-01' \n        AND l_shipdate < DATE '1998-01-01'\n    GROUP BY \n        l_partkey, l_suppkey\n)\nSELECT \n    s_name, \n    s_address\nFROM \n    supplier\nJOIN \n    nation ON s_nationkey = n_nationkey\nJOIN \n    filtered_partsupp ON s_suppkey = ps_suppkey\nJOIN \n    lineitem_agg ON ps_partkey = l_partkey AND ps_suppkey = l_suppkey\nWHERE \n    ps_availqty > half_sum_quantity\n    AND n_name = 'KENYA'\nORDER BY \n    s_name;",
+    "time_cost": 138.9551341533661,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "produced_suggestion": "Replaced correlated subquery for lineitem with a pre-aggregated CTE to avoid repeated calculations"
+      },
+      {
+        "group": "Subquery_optimization",
+        "produced_suggestion": "Created a CTE for parts with names starting with 'spring%' to avoid repeated subquery execution"
+      },
+      {
+        "group": "Join_optimization",
+        "produced_suggestion": "Replaced IN clauses with explicit JOIN operations for better query optimization"
+      },
+      {
+        "group": "Query_optimization",
+        "produced_suggestion": "Restructured the query to use CTEs for better readability and potential optimization"
+      }
+    ]
+  }
+]

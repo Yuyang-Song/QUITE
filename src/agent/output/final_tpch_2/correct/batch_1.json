@@ -1,0 +1,46 @@
+[
+  {
+    "id": "7",
+    "original_query": "select l_orderkey, sum(l_extendedprice * (1 - l_discount)) as revenue, o_orderdate, o_shippriority from customer, orders, lineitem where c_mktsegment = 'MACHINERY' and c_custkey = o_custkey and l_orderkey = o_orderkey and o_orderdate < date '1995-03-20' and l_shipdate > date '1995-03-20' group by l_orderkey, o_orderdate, o_shippriority order by revenue desc, o_orderdate limit 10;",
+    "rewritten_query": "select l_orderkey, sum(l_extendedprice * (1 - l_discount)) as revenue, o_orderdate, o_shippriority from customer, orders, lineitem where c_mktsegment = 'MACHINERY' and c_custkey = o_custkey and l_orderkey = o_orderkey and o_orderdate < date '1995-03-20' and l_shipdate > date '1995-03-20' group by l_orderkey, o_orderdate, o_shippriority order by revenue desc, o_orderdate limit 10;",
+    "time_cost": 701.3131778240204,
+    "rewrite_suggestion": [
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Simplify the GROUP BY clause by leveraging functional dependency. Since l_orderkey determines o_orderdate and o_shippriority (as each order has exactly one date and shipping priority), we can group only by l_orderkey and use MIN() aggregation on o_orderdate and o_shippriority. This reduces the grouping complexity and sort key size, which can improve performance while maintaining equivalent results."
+      }
+    ]
+  },
+  {
+    "id": "49",
+    "original_query": "select sum(l_extendedprice) / 7.0 as avg_yearly from lineitem, part where p_partkey = l_partkey and p_brand = 'Brand#35' and p_container = 'LG PKG' and l_quantity < ( select 0.2 * avg(l_quantity) from lineitem where l_partkey = p_partkey );",
+    "rewritten_query": "WITH filtered_parts AS (\n    SELECT p_partkey\n    FROM part\n    WHERE p_brand = 'Brand#35' AND p_container = 'LG PKG'\n),\npart_avg AS (\n    SELECT l.l_partkey, 0.2 * AVG(l.l_quantity) AS avg_qty\n    FROM lineitem l\n    JOIN filtered_parts fp ON l.l_partkey = fp.p_partkey\n    GROUP BY l.l_partkey\n)\nSELECT SUM(l.l_extendedprice) / 7.0 AS avg_yearly\nFROM lineitem l\nJOIN part_avg pa ON l.l_partkey = pa.l_partkey\nWHERE l.l_quantity < pa.avg_qty;",
+    "time_cost": 115.1459789276123,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Eliminate the correlated subquery by precomputing the average quantity per part key in a CTE, which avoids repeated calculations for each row"
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Replace the implicit join with explicit JOIN syntax for better readability and performance"
+      }
+    ]
+  },
+  {
+    "id": "50",
+    "original_query": "select sum(l_extendedprice) / 7.0 as avg_yearly from lineitem, part where p_partkey = l_partkey and p_brand = 'Brand#32' and p_container = 'WRAP PKG' and l_quantity < ( select 0.2 * avg(l_quantity) from lineitem where l_partkey = p_partkey );",
+    "rewritten_query": "WITH filtered_parts AS (\n    SELECT p_partkey\n    FROM part\n    WHERE p_brand = 'Brand#32' AND p_container = 'WRAP PKG'\n),\npart_avg AS (\n    SELECT l_partkey, 0.2 * AVG(l_quantity) AS avg_qty\n    FROM lineitem\n    JOIN filtered_parts ON l_partkey = p_partkey\n    GROUP BY l_partkey\n)\nSELECT SUM(l_extendedprice) / 7.0 AS avg_yearly\nFROM lineitem\nJOIN part_avg ON lineitem.l_partkey = part_avg.l_partkey\nWHERE lineitem.l_quantity < part_avg.avg_qty;",
+    "time_cost": 108.59262013435364,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Replace the correlated subquery with a CTE that precomputes the average quantity per part key once, then join with the main tables. This eliminates repeated scans of the lineitem table for each qualifying part row."
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Use explicit JOIN syntax instead of implicit joins in the WHERE clause for better readability and query structure."
+      }
+    ]
+  }
+]

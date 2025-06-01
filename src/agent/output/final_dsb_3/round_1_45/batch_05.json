@@ -1,0 +1,26 @@
+[
+  {
+    "id": "5",
+    "original_query": "with customer_total_return as (select sr_customer_sk as ctr_customer_sk ,sr_store_sk as ctr_store_sk ,sr_reason_sk as ctr_reason_sk ,sum(SR_RETURN_AMT) as ctr_total_return from store_returns ,date_dim where sr_returned_date_sk = d_date_sk and d_year =2001 and sr_return_amt / sr_return_quantity between 182 and 241 group by sr_customer_sk ,sr_store_sk, sr_reason_sk)  select  c_customer_id from customer_total_return ctr1 ,store ,customer ,customer_demographics where ctr1.ctr_total_return > (select avg(ctr_total_return)*1.2 from customer_total_return ctr2 where ctr1.ctr_store_sk = ctr2.ctr_store_sk ) and ctr1.ctr_reason_sk BETWEEN 24 AND 27 and s_store_sk = ctr1.ctr_store_sk and s_state IN ('IA', 'NE', 'TX') and ctr1.ctr_customer_sk = c_customer_sk and c_current_cdemo_sk = cd_demo_sk and cd_marital_status IN ('S', 'U') and cd_education_status IN ('Secondary', '4 yr Degree') and cd_gender = 'F' and c_birth_month = 6 and c_birth_year BETWEEN 1934 AND 1940 order by c_customer_id limit 100;",
+    "rewritten_query": "WITH customer_total_return AS (\n    SELECT \n        sr_customer_sk AS ctr_customer_sk,\n        sr_store_sk AS ctr_store_sk,\n        sr_reason_sk AS ctr_reason_sk,\n        SUM(SR_RETURN_AMT) AS ctr_total_return\n    FROM \n        store_returns \n        JOIN date_dim ON sr_returned_date_sk = d_date_sk\n    WHERE \n        d_year = 2001\n        AND sr_return_amt >= 182 * sr_return_quantity\n        AND sr_return_amt <= 241 * sr_return_quantity\n        AND sr_reason_sk BETWEEN 24 AND 27\n    GROUP BY \n        sr_customer_sk, \n        sr_store_sk, \n        sr_reason_sk\n), \nstore_avg_return AS (\n    SELECT \n        ctr_store_sk,\n        AVG(ctr_total_return) * 1.2 AS threshold_return\n    FROM \n        customer_total_return\n    GROUP BY \n        ctr_store_sk\n)\nSELECT \n    c_customer_id \nFROM \n    customer_total_return ctr1\n    JOIN store_avg_return sar ON ctr1.ctr_store_sk = sar.ctr_store_sk\n    JOIN store ON ctr1.ctr_store_sk = store.s_store_sk\n    JOIN customer ON ctr1.ctr_customer_sk = customer.c_customer_sk\n    JOIN customer_demographics ON customer.c_current_cdemo_sk = customer_demographics.cd_demo_sk\nWHERE \n    ctr1.ctr_total_return > sar.threshold_return\n    AND store.s_state IN ('IA', 'NE', 'TX') \n    AND customer_demographics.cd_marital_status IN ('S', 'U') \n    AND customer_demographics.cd_education_status IN ('Secondary', '4 yr Degree') \n    AND customer_demographics.cd_gender = 'F' \n    AND customer.c_birth_month = 6 \n    AND customer.c_birth_year BETWEEN 1934 AND 1940 \nORDER BY \n    c_customer_id \nLIMIT 100;",
+    "time_cost": 205.99417686462402,
+    "rewrite_suggestion": [
+      {
+        "group": "Predicate_simplification",
+        "nave_suggestion": "Replace division with multiplication in the filter condition (sr_return_amt / sr_return_quantity between 182 and 241) to avoid expensive division operations"
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Push down the filter on sr_reason_sk to the CTE to reduce the amount of data processed"
+      },
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Replace the correlated subquery with a separate CTE (store_avg_return) to compute store averages once instead of repeatedly"
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Replace implicit comma joins with explicit JOIN syntax for better readability and potentially more efficient execution"
+      }
+    ]
+  }
+]

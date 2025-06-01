@@ -1,0 +1,62 @@
+[
+  {
+    "id": "52",
+    "original_query": "select c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, sum(l_quantity) from customer, orders, lineitem where o_orderkey in ( select l_orderkey from lineitem group by l_orderkey having sum(l_quantity) > 315 ) and c_custkey = o_custkey and o_orderkey = l_orderkey group by c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice order by o_totalprice desc, o_orderdate limit 100;",
+    "rewritten_query": "SELECT \n    c.c_name, \n    c.c_custkey, \n    o.o_orderkey, \n    o.o_orderdate, \n    o.o_totalprice, \n    t.total_qty\nFROM customer c\nJOIN orders o ON c.c_custkey = o.o_custkey\nJOIN (\n    SELECT l_orderkey, SUM(l_quantity) AS total_qty\n    FROM lineitem\n    GROUP BY l_orderkey\n    HAVING SUM(l_quantity) > 315\n) t ON o.o_orderkey = t.l_orderkey\nORDER BY o.o_totalprice DESC, o.o_orderdate\nLIMIT 100;",
+    "time_cost": 137.82954573631287,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Convert the IN subquery to a JOIN with a derived table, which eliminates the need to scan the lineitem table twice"
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Eliminate redundant aggregation by reusing the sum already calculated in the subquery instead of computing it again in the main query"
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Use explicit JOIN syntax instead of implicit joins in the WHERE clause for better readability and optimization"
+      }
+    ]
+  },
+  {
+    "id": "53",
+    "original_query": "select c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, sum(l_quantity) from customer, orders, lineitem where o_orderkey in ( select l_orderkey from lineitem group by l_orderkey having sum(l_quantity) > 313 ) and c_custkey = o_custkey and o_orderkey = l_orderkey group by c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice order by o_totalprice desc, o_orderdate limit 100;",
+    "rewritten_query": "WITH filtered_orders AS (\n    SELECT \n        o.o_orderkey,\n        o.o_custkey,\n        o.o_orderdate,\n        o.o_totalprice,\n        sq.total_qty\n    FROM \n        orders o\n        JOIN (\n            SELECT \n                l_orderkey, \n                SUM(l_quantity) AS total_qty\n            FROM \n                lineitem\n            GROUP BY \n                l_orderkey\n            HAVING \n                SUM(l_quantity) > 313\n        ) sq ON o.o_orderkey = sq.l_orderkey\n)\nSELECT\n    c.c_name,\n    c.c_custkey,\n    fo.o_orderkey,\n    fo.o_orderdate,\n    fo.o_totalprice,\n    fo.total_qty\nFROM\n    customer c\n    JOIN filtered_orders fo ON c.c_custkey = fo.o_custkey\nORDER BY\n    fo.o_totalprice DESC,\n    fo.o_orderdate\nLIMIT 100;",
+    "time_cost": 193.879052400589,
+    "rewrite_suggestion": [
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Eliminated redundant GROUP BY in the main query by recognizing that each o_orderkey is unique in the subquery result"
+      },
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Converted the IN subquery to a JOIN and included the sum in the subquery's result to avoid recalculating it"
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Eliminated the need to join with the lineitem table twice by reusing the computed sum from the subquery"
+      }
+    ]
+  },
+  {
+    "id": "54",
+    "original_query": "select c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice, sum(l_quantity) from customer, orders, lineitem where o_orderkey in ( select l_orderkey from lineitem group by l_orderkey having sum(l_quantity) > 313 ) and c_custkey = o_custkey and o_orderkey = l_orderkey group by c_name, c_custkey, o_orderkey, o_orderdate, o_totalprice order by o_totalprice desc, o_orderdate limit 100;",
+    "rewritten_query": "WITH order_sums AS (\n  SELECT l_orderkey, SUM(l_quantity) AS total_quantity\n  FROM lineitem\n  GROUP BY l_orderkey\n  HAVING SUM(l_quantity) > 313\n)\nSELECT c.c_name, c.c_custkey, o.o_orderkey, o.o_orderdate, o.o_totalprice, os.total_quantity\nFROM customer c\nJOIN orders o ON c.c_custkey = o.o_custkey\nJOIN order_sums os ON o.o_orderkey = os.l_orderkey\nORDER BY o.o_totalprice DESC, o.o_orderdate\nLIMIT 100;",
+    "time_cost": 301.88704347610474,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Replace the IN subquery with a JOIN to a CTE that precomputes the sum of lineitem quantities"
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Eliminate redundant GROUP BY and SUM operations in the main query by reusing the precomputed sum from the CTE"
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Use explicit JOIN syntax instead of implicit joins in the WHERE clause for better readability and optimization"
+      }
+    ]
+  }
+]

@@ -1,0 +1,94 @@
+[
+    {
+        "id": "49",
+        "original_query": "select sum(l_extendedprice) / 7.0 as avg_yearly from lineitem, part where p_partkey = l_partkey and p_brand = 'Brand#35' and p_container = 'LG PKG' and l_quantity < ( select 0.2 * avg(l_quantity) from lineitem where l_partkey = p_partkey );",
+        "rewritten_query": "WITH filtered_part AS (\n    SELECT p_partkey\n    FROM part\n    WHERE p_brand = 'Brand#35' AND p_container = 'LG PKG'\n),\npart_avg AS (\n    SELECT l_partkey, 0.2 * AVG(l_quantity) AS avg_q\n    FROM lineitem\n    WHERE l_partkey IN (SELECT p_partkey FROM filtered_part)\n    GROUP BY l_partkey\n)\nSELECT SUM(l_extendedprice) / 7.0 AS avg_yearly\nFROM filtered_part fp\nJOIN lineitem l ON fp.p_partkey = l.l_partkey\nJOIN part_avg pa ON l.l_partkey = pa.l_partkey\nWHERE l.l_quantity < pa.avg_q;",
+        "time_cost": 579.9977519512177,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Replace the correlated subquery with CTEs to precompute the average quantities only for the relevant partkeys"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Filter the part table first to get only the relevant partkeys before computing averages"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Use explicit JOIN syntax instead of implicit joins in the WHERE clause"
+            }
+        ]
+    },
+    {
+        "id": "50",
+        "original_query": "select sum(l_extendedprice) / 7.0 as avg_yearly from lineitem, part where p_partkey = l_partkey and p_brand = 'Brand#32' and p_container = 'WRAP PKG' and l_quantity < ( select 0.2 * avg(l_quantity) from lineitem where l_partkey = p_partkey );",
+        "rewritten_query": "WITH filtered_part AS (\n    SELECT p_partkey\n    FROM part\n    WHERE p_brand = 'Brand#32' AND p_container = 'WRAP PKG'\n), avg_quantities AS (\n    SELECT l_partkey, 0.2 * AVG(l_quantity) AS avg_qty\n    FROM lineitem\n    WHERE l_partkey IN (SELECT p_partkey FROM filtered_part)\n    GROUP BY l_partkey\n)\nSELECT SUM(l.l_extendedprice) / 7.0 AS avg_yearly\nFROM filtered_part p\nJOIN avg_quantities a ON p.p_partkey = a.l_partkey\nJOIN lineitem l ON p.p_partkey = l.l_partkey\nWHERE l.l_quantity < a.avg_qty;",
+        "time_cost": 279.4549825191498,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Replaced the correlated subquery with a CTE to avoid repeated calculations"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Used a filtered_part CTE to pre-filter parts before joining"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Optimized the join order to reduce the number of rows processed"
+            }
+        ]
+    },
+    {
+        "id": "58",
+        "original_query": "select s_name, s_address from supplier, nation where s_suppkey in ( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'burnished%' ) and ps_availqty > ( select 0.5 * sum(l_quantity) from lineitem where l_partkey = ps_partkey and l_suppkey = ps_suppkey and l_shipdate >= date '1996-01-01' and l_shipdate < date '1996-01-01' + interval '1' year ) ) and s_nationkey = n_nationkey and n_name = 'GERMANY' order by s_name;",
+        "rewritten_query": "SELECT DISTINCT s_name, s_address\nFROM nation\nJOIN supplier ON supplier.s_nationkey = nation.n_nationkey\nJOIN partsupp ON supplier.s_suppkey = partsupp.ps_suppkey\nJOIN part ON partsupp.ps_partkey = part.p_partkey AND part.p_name LIKE 'burnished%'\nJOIN (\n    SELECT l_partkey, l_suppkey, 0.5 * SUM(l_quantity) AS half_sum\n    FROM lineitem\n    WHERE l_shipdate >= DATE '1996-01-01'\n      AND l_shipdate < DATE '1997-01-01'\n    GROUP BY l_partkey, l_suppkey\n) AS lineitem_sum\nON partsupp.ps_partkey = lineitem_sum.l_partkey\n   AND partsupp.ps_suppkey = lineitem_sum.l_suppkey\nWHERE partsupp.ps_availqty > lineitem_sum.half_sum\n  AND nation.n_name = 'GERMANY'\nORDER BY s_name;",
+        "time_cost": 266.87610626220703,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Replaced correlated subquery with a pre-computed aggregation in a derived table"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Converted IN subqueries to explicit JOIN operations"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Added DISTINCT to ensure each supplier appears only once in the result"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Moved filter conditions into JOIN clauses for early filtering"
+            },
+            {
+                "group": "Constant_folding",
+                "produced_suggestion": "Replaced date arithmetic with explicit date constant '1997-01-01'"
+            }
+        ]
+    },
+    {
+        "id": "60",
+        "original_query": "select s_name, s_address from supplier, nation where s_suppkey in ( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'burlywood%' ) and ps_availqty > ( select 0.5 * sum(l_quantity) from lineitem where l_partkey = ps_partkey and l_suppkey = ps_suppkey and l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) and s_nationkey = n_nationkey and n_name = 'ETHIOPIA' order by s_name;",
+        "rewritten_query": "WITH lineitem_sum AS (\n    SELECT l_partkey, l_suppkey, 0.5 * SUM(l_quantity) AS half_sum\n    FROM lineitem\n    WHERE l_shipdate BETWEEN DATE '1994-01-01' AND DATE '1994-12-31'\n    GROUP BY l_partkey, l_suppkey\n)\nSELECT s_name, s_address\nFROM supplier\nJOIN nation ON s_nationkey = n_nationkey AND n_name = 'ETHIOPIA'\nWHERE EXISTS (\n    SELECT 1\n    FROM partsupp\n    JOIN part ON partsupp.ps_partkey = part.p_partkey AND part.p_name LIKE 'burlywood%'\n    JOIN lineitem_sum ON partsupp.ps_partkey = lineitem_sum.l_partkey \n        AND partsupp.ps_suppkey = lineitem_sum.l_suppkey\n    WHERE partsupp.ps_suppkey = supplier.s_suppkey\n    AND partsupp.ps_availqty > lineitem_sum.half_sum\n)\nORDER BY s_name;",
+        "time_cost": 428.5984241962433,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Precomputed the lineitem sum in a CTE to avoid recalculating it for each row in partsupp"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Replaced nested IN subqueries with EXISTS and explicit JOINs for better performance"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Used BETWEEN for date range instead of separate comparisons"
+            },
+            {
+                "group": "Constant_folding",
+                "produced_suggestion": "Calculated the date '1994-01-01' + interval '1' year as '1994-12-31'"
+            }
+        ]
+    }
+]

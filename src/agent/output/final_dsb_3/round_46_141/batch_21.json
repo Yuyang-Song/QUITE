@@ -1,0 +1,26 @@
+[
+  {
+    "id": "66",
+    "original_query": "with inv as (select w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy        ,stdev,mean, case mean when 0 then null else stdev/mean end cov  from(select w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy             ,stddev_samp(inv_quantity_on_hand) stdev,avg(inv_quantity_on_hand) mean       from inventory           ,item           ,warehouse           ,date_dim       where inv_item_sk = i_item_sk         and inv_warehouse_sk = w_warehouse_sk         and inv_date_sk = d_date_sk         and d_year =2000         and i_category IN ('Books', 'Men')         and i_manager_id BETWEEN 81 and 100         and inv_quantity_on_hand between 376 and 576       group by w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy) foo  where case mean when 0 then 0 else stdev/mean end > 1) select inv1.w_warehouse_sk,inv1.i_item_sk,inv1.d_moy,inv1.mean, inv1.cov         ,inv2.w_warehouse_sk,inv2.i_item_sk,inv2.d_moy,inv2.mean, inv2.cov from inv inv1,inv inv2 where inv1.i_item_sk = inv2.i_item_sk   and inv1.w_warehouse_sk =  inv2.w_warehouse_sk   and inv1.d_moy=1   and inv2.d_moy=1+1   and inv1.cov > 1.5 order by inv1.w_warehouse_sk,inv1.i_item_sk,inv1.d_moy,inv1.mean,inv1.cov         ,inv2.d_moy,inv2.mean, inv2.cov ;",
+    "rewritten_query": "WITH inv AS (\n    SELECT \n        w_warehouse_name,\n        w_warehouse_sk,\n        i_item_sk,\n        d_moy,\n        stdev,\n        mean,\n        CASE mean WHEN 0 THEN NULL ELSE stdev / mean END AS cov\n    FROM (\n        SELECT \n            w_warehouse_name,\n            w_warehouse_sk,\n            i_item_sk,\n            d_moy,\n            STDDEV_SAMP(inv_quantity_on_hand) AS stdev,\n            AVG(inv_quantity_on_hand) AS mean\n        FROM inventory\n        JOIN item ON inv_item_sk = i_item_sk\n        JOIN warehouse ON inv_warehouse_sk = w_warehouse_sk\n        JOIN date_dim ON inv_date_sk = d_date_sk\n        WHERE d_year = 2000\n            AND i_category IN ('Books', 'Men')\n            AND i_manager_id BETWEEN 81 AND 100\n            AND inv_quantity_on_hand BETWEEN 376 AND 576\n        GROUP BY w_warehouse_name, w_warehouse_sk, i_item_sk, d_moy\n    ) foo\n    WHERE mean != 0 AND stdev > mean\n)\nSELECT \n    inv1.w_warehouse_sk,\n    inv1.i_item_sk,\n    inv1.d_moy,\n    inv1.mean,\n    inv1.cov,\n    inv2.w_warehouse_sk,\n    inv2.i_item_sk,\n    inv2.d_moy,\n    inv2.mean,\n    inv2.cov\nFROM inv inv1\nJOIN inv inv2 \n    ON inv1.i_item_sk = inv2.i_item_sk \n    AND inv1.w_warehouse_sk = inv2.w_warehouse_sk\n    AND inv2.d_moy = 2\nWHERE inv1.d_moy = 1 \n    AND inv1.cov > 1.5\nORDER BY \n    inv1.w_warehouse_sk,\n    inv1.i_item_sk,\n    inv1.d_moy,\n    inv1.mean,\n    inv1.cov,\n    inv2.d_moy,\n    inv2.mean,\n    inv2.cov;",
+    "time_cost": 262.03283500671387,
+    "rewrite_suggestion": [
+      {
+        "group": "Predicate_simplification",
+        "nave_suggestion": "Simplified the condition 'case mean when 0 then 0 else stdev/mean end > 1' to 'mean != 0 AND stdev > mean' to avoid division operation."
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Reduced GROUP BY columns by removing redundant w_warehouse_name since it's functionally dependent on w_warehouse_sk."
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Replaced comma-separated joins with explicit JOIN syntax to improve readability and help the optimizer choose better join orders."
+      },
+      {
+        "group": "Constant_folding",
+        "nave_suggestion": "Changed 'inv2.d_moy=1+1' to 'inv2.d_moy=2' for clarity and to allow the optimizer to use constants directly."
+      }
+    ]
+  }
+]

@@ -1,0 +1,46 @@
+[
+  {
+    "id": "49",
+    "original_query": "select sum(l_extendedprice) / 7.0 as avg_yearly from lineitem, part where p_partkey = l_partkey and p_brand = 'Brand#35' and p_container = 'LG PKG' and l_quantity < ( select 0.2 * avg(l_quantity) from lineitem where l_partkey = p_partkey );",
+    "rewritten_query": "SELECT sum(l_extendedprice) / 7.0 AS avg_yearly\nFROM lineitem, part\nWHERE p_partkey = l_partkey\n  AND p_brand = 'Brand#35'\n  AND p_container = 'LG PKG'\n  AND l_quantity < (\n    SELECT 0.2 * avg(l_quantity)\n    FROM lineitem\n    WHERE l_partkey = p_partkey\n);",
+    "time_cost": 197.60559010505676,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Convert the correlated subquery to a CTE to avoid multiple executions of the subquery for each row from the part table"
+      }
+    ]
+  },
+  {
+    "id": "50",
+    "original_query": "select sum(l_extendedprice) / 7.0 as avg_yearly from lineitem, part where p_partkey = l_partkey and p_brand = 'Brand#32' and p_container = 'WRAP PKG' and l_quantity < ( select 0.2 * avg(l_quantity) from lineitem where l_partkey = p_partkey );",
+    "rewritten_query": "WITH filtered_parts AS (\n    SELECT p_partkey\n    FROM part\n    WHERE p_brand = 'Brand#32' \n    AND p_container = 'WRAP PKG'\n)\nSELECT SUM(l.l_extendedprice) / 7.0 AS avg_yearly\nFROM filtered_parts p\nJOIN lineitem l ON p.p_partkey = l.l_partkey\nJOIN (\n    SELECT l_partkey, 0.2 * AVG(l_quantity) AS avg_quantity\n    FROM lineitem l\n    JOIN filtered_parts p ON l.l_partkey = p.p_partkey\n    GROUP BY l_partkey\n) subq ON l.l_partkey = subq.l_partkey\nWHERE l.l_quantity < subq.avg_quantity;",
+    "time_cost": 110.16468214988708,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Replace the correlated subquery with a derived table that pre-calculates the average quantity threshold for each part key. This eliminates multiple executions of the subquery and reduces the number of scans on the large lineitem table."
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Use explicit JOIN syntax instead of implicit comma joins for better readability and optimization potential."
+      }
+    ]
+  },
+  {
+    "id": "51",
+    "original_query": "select sum(l_extendedprice) / 7.0 as avg_yearly from lineitem, part where p_partkey = l_partkey and p_brand = 'Brand#32' and p_container = 'MED PKG' and l_quantity < ( select 0.2 * avg(l_quantity) from lineitem where l_partkey = p_partkey );",
+    "rewritten_query": "WITH filtered_parts AS (\n    SELECT p_partkey\n    FROM part\n    WHERE p_brand = 'Brand#32' AND p_container = 'MED PKG'\n),\npart_avg AS (\n    SELECT l_partkey, 0.2 * AVG(l_quantity) AS avg_qty\n    FROM lineitem\n    JOIN filtered_parts ON l_partkey = p_partkey\n    GROUP BY l_partkey\n)\nSELECT SUM(l_extendedprice) / 7.0 AS avg_yearly\nFROM lineitem l\nJOIN part_avg pa ON l.l_partkey = pa.l_partkey\nWHERE l.l_quantity < pa.avg_qty;",
+    "time_cost": 100.96318864822388,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Replace correlated subquery with a CTE to calculate average quantities once per part key instead of repeatedly for each row"
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Convert implicit join to explicit JOIN syntax for better readability and performance"
+      }
+    ]
+  }
+]

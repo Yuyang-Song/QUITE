@@ -1,0 +1,22 @@
+[
+  {
+    "id": "92",
+    "original_query": "select  \ts_store_name, \ti_item_desc, \tsc.revenue, \ti_current_price, \ti_wholesale_cost, \ti_brand  from store, item,      (select ss_store_sk, avg(revenue) as ave  \tfrom  \t    (select  ss_store_sk, ss_item_sk,  \t\t     sum(ss_sales_price) as revenue  \t\tfrom store_sales, date_dim  \t\twhere ss_sold_date_sk = d_date_sk and d_month_seq between 1192 and 1192+11     and ss_sales_price / ss_list_price BETWEEN 68 * 0.01 AND 78 * 0.01  \t\tgroup by ss_store_sk, ss_item_sk) sa  \tgroup by ss_store_sk) sb,      (select  ss_store_sk, ss_item_sk, sum(ss_sales_price) as revenue  \tfrom store_sales, date_dim  \twhere ss_sold_date_sk = d_date_sk and d_month_seq between 1192 and 1192+11   and ss_sales_price / ss_list_price BETWEEN 68 * 0.01 AND 78 * 0.01  \tgroup by ss_store_sk, ss_item_sk) sc  where sb.ss_store_sk = sc.ss_store_sk and        sc.revenue <= 0.1 * sb.ave and        s_store_sk = sc.ss_store_sk and        i_item_sk = sc.ss_item_sk        and i_manager_id BETWEEN 79 and 83        and s_state in ('IN','NM','VA')  order by s_store_name, i_item_desc limit 100;",
+    "rewritten_query": "WITH store_item_revenue AS (\n    SELECT \n        ss_store_sk, \n        ss_item_sk, \n        SUM(ss_sales_price) AS revenue,\n        AVG(SUM(ss_sales_price)) OVER (PARTITION BY ss_store_sk) AS avg_revenue_per_store\n    FROM store_sales\n    JOIN date_dim ON ss_sold_date_sk = d_date_sk\n    WHERE d_month_seq BETWEEN 1192 AND 1192 + 11\n      AND ss_sales_price BETWEEN 0.68 * ss_list_price AND 0.78 * ss_list_price\n    GROUP BY ss_store_sk, ss_item_sk\n)\nSELECT \n    s.s_store_name,\n    i.i_item_desc,\n    sir.revenue,\n    i.i_current_price,\n    i.i_wholesale_cost,\n    i.i_brand\nFROM store_item_revenue sir\nJOIN store s ON sir.ss_store_sk = s.s_store_sk\nJOIN item i ON sir.ss_item_sk = i.i_item_sk\nWHERE sir.revenue <= 0.1 * sir.avg_revenue_per_store\n  AND i.i_manager_id BETWEEN 79 AND 83\n  AND s.s_state IN ('IN', 'NM', 'VA')\nORDER BY s.s_store_name, i.i_item_desc\nLIMIT 100;",
+    "time_cost": 157.34981632232666,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Eliminate redundant subqueries by using a CTE with a window function. The original query calculates the same subquery twice (for sa and sc)."
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Combine the sb and sc subqueries into a single CTE to avoid a merge join between them."
+      },
+      {
+        "group": "Predicate_simplification",
+        "nave_suggestion": "Replace division with multiplication in the filter condition (ss_sales_price / ss_list_price) which is more computationally expensive."
+      }
+    ]
+  }
+]

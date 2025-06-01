@@ -1,1 +1,0 @@
-psql  -h localhost -U postgres -d tpch_01 -XqAt -f test.sql > result.json

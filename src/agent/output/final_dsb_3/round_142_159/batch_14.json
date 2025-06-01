@@ -1,0 +1,26 @@
+[
+  {
+    "id": "155",
+    "original_query": "select  c_customer_sk, c_first_name, c_last_name, count(*) as cnt FROM store_sales, store_returns, web_sales, date_dim d1, date_dim d2, item, customer, customer_address, household_demographics WHERE ss_ticket_number = sr_ticket_number AND ss_customer_sk = ws_bill_customer_sk AND ss_customer_sk = c_customer_sk AND c_current_addr_sk = ca_address_sk AND c_current_hdemo_sk = hd_demo_sk AND ss_item_sk = sr_item_sk AND sr_item_sk = ws_item_sk AND i_item_sk = ss_item_sk AND i_category IN ('Home', 'Men', 'Music') AND sr_returned_date_sk = d1.d_date_sk AND ws_sold_date_sk = d2.d_date_sk AND d2.d_date between d1.d_date AND (d1.d_date + interval '90' day) AND ca_state in ('MS', 'NC', 'NM', 'OK', 'TN') AND d1.d_year = 1999 AND hd_income_band_sk BETWEEN 14 AND 20 AND hd_buy_potential = '5001-10000' AND ss_sales_price / ss_list_price BETWEEN 57 * 0.01 AND 77 * 0.01 GROUP BY c_customer_sk, c_first_name, c_last_name ORDER BY cnt ;",
+    "rewritten_query": "WITH filtered_items AS (\n    SELECT i_item_sk\n    FROM item\n    WHERE i_category IN ('Home', 'Men', 'Music')\n),\nfiltered_addresses AS (\n    SELECT ca_address_sk\n    FROM customer_address\n    WHERE ca_state IN ('MS', 'NC', 'NM', 'OK', 'TN')\n),\nfiltered_households AS (\n    SELECT hd_demo_sk\n    FROM household_demographics\n    WHERE hd_income_band_sk BETWEEN 14 AND 20\n    AND hd_buy_potential = '5001-10000'\n),\nd1_dates AS (\n    SELECT d_date_sk, d_date, (d_date + INTERVAL '90 days') AS end_date\n    FROM date_dim\n    WHERE d_year = 1999\n),\nd2_dates AS (\n    SELECT d_date_sk, d_date\n    FROM date_dim\n    WHERE (d_year = 1999 OR d_year = 2000)\n    AND d_date <= '2000-03-31'::date\n)\nSELECT \n    c.c_customer_sk, \n    c.c_first_name, \n    c.c_last_name, \n    COUNT(*) AS cnt\nFROM customer c\nJOIN filtered_addresses fa ON c.c_current_addr_sk = fa.ca_address_sk\nJOIN filtered_households fh ON c.c_current_hdemo_sk = fh.hd_demo_sk\nJOIN store_sales ss ON c.c_customer_sk = ss.ss_customer_sk\nJOIN filtered_items fi ON ss.ss_item_sk = fi.i_item_sk\nJOIN store_returns sr ON ss.ss_ticket_number = sr.sr_ticket_number \n                      AND ss.ss_item_sk = sr.sr_item_sk\nJOIN d1_dates d1 ON sr.sr_returned_date_sk = d1.d_date_sk\nJOIN web_sales ws ON sr.sr_item_sk = ws.ws_item_sk \n                  AND ss.ss_customer_sk = ws.ws_bill_customer_sk\nJOIN d2_dates d2 ON ws.ws_sold_date_sk = d2.d_date_sk\n                 AND d2.d_date BETWEEN d1.d_date AND d1.end_date\nWHERE (ss.ss_sales_price / ss.ss_list_price) BETWEEN 0.57 AND 0.77\nGROUP BY \n    c.c_customer_sk, \n    c.c_first_name, \n    c.c_last_name\nORDER BY \n    cnt;",
+    "time_cost": 241.27655053138733,
+    "rewrite_suggestion": [
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Convert implicit joins to explicit JOIN syntax for better readability and control over join order."
+      },
+      {
+        "group": "Predicate_simplification",
+        "nave_suggestion": "Move filter conditions into appropriate JOIN clauses for early filtering (i_category, ca_state, hd_income_band_sk, etc.)"
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Create a CTE to precompute date ranges for d1 with end_date to optimize the date range join with d2."
+      },
+      {
+        "group": "Constant_folding",
+        "nave_suggestion": "Convert the ss_sales_price / ss_list_price BETWEEN 57 * 0.01 AND 77 * 0.01 to use direct decimal values (0.57 AND 0.77)"
+      }
+    ]
+  }
+]

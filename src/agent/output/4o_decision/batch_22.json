@@ -1,0 +1,26 @@
+[
+  {
+    "id": "64",
+    "original_query": "with inv as (select w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy        ,stdev,mean, case mean when 0 then null else stdev/mean end cov  from(select w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy             ,stddev_samp(inv_quantity_on_hand) stdev,avg(inv_quantity_on_hand) mean       from inventory           ,item           ,warehouse           ,date_dim       where inv_item_sk = i_item_sk         and inv_warehouse_sk = w_warehouse_sk         and inv_date_sk = d_date_sk         and d_year =2001         and i_category IN ('Shoes', 'Sports')         and i_manager_id BETWEEN 81 and 100         and inv_quantity_on_hand between 30 and 230       group by w_warehouse_name,w_warehouse_sk,i_item_sk,d_moy) foo  where case mean when 0 then 0 else stdev/mean end > 1) select inv1.w_warehouse_sk,inv1.i_item_sk,inv1.d_moy,inv1.mean, inv1.cov         ,inv2.w_warehouse_sk,inv2.i_item_sk,inv2.d_moy,inv2.mean, inv2.cov from inv inv1,inv inv2 where inv1.i_item_sk = inv2.i_item_sk   and inv1.w_warehouse_sk =  inv2.w_warehouse_sk   and inv1.d_moy=1   and inv2.d_moy=1+1   and inv1.cov > 1.5 order by inv1.w_warehouse_sk,inv1.i_item_sk,inv1.d_moy,inv1.mean,inv1.cov         ,inv2.d_moy,inv2.mean, inv2.cov ;",
+    "rewritten_query": "with inv as (\n    select \n        w_warehouse_name,\n        w_warehouse_sk,\n        i_item_sk,\n        d_moy,\n        stddev_samp(inv_quantity_on_hand) as stdev,\n        avg(inv_quantity_on_hand) as mean,\n        stddev_samp(inv_quantity_on_hand) / avg(inv_quantity_on_hand) as cov\n    from \n        inventory\n    join \n        item on inv_item_sk = i_item_sk\n    join \n        warehouse on inv_warehouse_sk = w_warehouse_sk\n    join \n        date_dim on inv_date_sk = d_date_sk\n    where \n        d_year = 2001\n        and d_moy in (1, 2)\n        and i_category IN ('Shoes', 'Sports')\n        and i_manager_id BETWEEN 81 and 100\n        and inv_quantity_on_hand between 30 and 230\n    group by \n        w_warehouse_name,\n        w_warehouse_sk,\n        i_item_sk,\n        d_moy\n    having \n        stddev_samp(inv_quantity_on_hand) / avg(inv_quantity_on_hand) > 1\n)\nselect \n    inv1.w_warehouse_sk,\n    inv1.i_item_sk,\n    inv1.d_moy,\n    inv1.mean,\n    inv1.cov,\n    inv2.w_warehouse_sk,\n    inv2.i_item_sk,\n    inv2.d_moy,\n    inv2.mean,\n    inv2.cov\nfrom \n    inv inv1\njoin \n    inv inv2 on inv1.i_item_sk = inv2.i_item_sk\n    and inv1.w_warehouse_sk = inv2.w_warehouse_sk\nwhere \n    inv1.d_moy = 1\n    and inv2.d_moy = 2\n    and inv1.cov > 1.5\norder by \n    inv1.w_warehouse_sk,\n    inv1.i_item_sk,\n    inv1.d_moy,\n    inv1.mean,\n    inv1.cov,\n    inv2.d_moy,\n    inv2.mean,\n    inv2.cov;",
+    "time_cost": 123.20495533943176,
+    "rewrite_suggestion": [
+      {
+        "group": "Predicate_simplification",
+        "navie_suggestion": "The CASE statement in the covariance calculation is redundant because the mean cannot be zero given the constraints on inv_quantity_on_hand. Simplify the CASE statement to directly calculate stdev/mean."
+      },
+      {
+        "group": "Subquery_optimization",
+        "navie_suggestion": "The subquery 'foo' in the CTE is unnecessary. The condition on covariance can be moved to the HAVING clause of the main aggregation query, eliminating the subquery."
+      },
+      {
+        "group": "Query_optimization",
+        "navie_suggestion": "Filter the CTE to only include d_moy in (1, 2) since the main query only uses these months. This reduces the data processed in the CTE."
+      },
+      {
+        "group": "Join_optimization",
+        "navie_suggestion": "Reorganize the joins to filter date_dim and item early, reducing the size of intermediate results before joining with the large inventory table."
+      }
+    ]
+  }
+]

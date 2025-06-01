@@ -1,0 +1,172 @@
+
+=== 进入推理状态 ===
+DBMS_EXPLAIN_Tool starts...
+DBMS_EXPLAIN_Tool ends...
+['Finalize GroupAggregate  (cost=1667857.32..1670980.71 rows=23399 width=72)', '  Group Key: (SUBSTRING(customer.c_phone FROM 1 FOR 2))', '  InitPlan 1 (returns $1)', '    ->  Finalize Aggregate  (cost=157854.08..157854.09 rows=1 width=32)', '          ->  Gather  (cost=157853.86..157854.07 rows=2 width=32)', '                Workers Planned: 2', '                ->  Partial Aggregate  (cost=156853.86..156853.87 rows=1 width=32)', '                      ->  Parallel Seq Scan on customer customer_1  (cost=0.00..156704.74 rows=59646 width=6)', "                            Filter: ((c_acctbal > 0.00) AND (SUBSTRING(c_phone FROM 1 FOR 2) = ANY ('{24,31,26,34,30,22,14}'::text[])))", '  ->  Gather Merge  (cost=1510003.23..1512522.14 rows=19500 width=72)', '        Workers Planned: 2', '        Params Evaluated: $1', '        ->  Partial GroupAggregate  (cost=1509003.20..1509271.33 rows=9750 width=72)', '              Group Key: (SUBSTRING(customer.c_phone FROM 1 FOR 2))', '              ->  Sort  (cost=1509003.20..1509027.58 rows=9750 width=38)', '                    Sort Key: (SUBSTRING(customer.c_phone FROM 1 FOR 2))', '                    ->  Parallel Hash Anti Join  (cost=1277877.00..1508357.21 rows=9750 width=38)', '                          Hash Cond: (customer.c_custkey = orders.o_custkey)', '                          ->  Parallel Seq Scan on customer  (cost=0.00..156704.74 rows=21875 width=26)', "                                Filter: ((c_acctbal > $1) AND (SUBSTRING(c_phone FROM 1 FOR 2) = ANY ('{24,31,26,34,30,22,14}'::text[])))", '                          ->  Parallel Hash  (cost=970259.00..970259.00 rows=18750000 width=4)', '                                ->  Parallel Seq Scan on orders  (cost=0.00..970259.00 rows=18750000 width=4)', 'JIT:', '  Functions: 26', '  Options: Inlining true, Optimization true, Expressions true, Deforming true']
+Okay, let's take a look at this SQL query and see how to optimize it. The query is selecting customers from certain country codes based on their phone numbers, checking their account balances against an average, and ensuring they have no orders. Then it groups the results by country code.
+
+First, I notice that the subquery in the FROM clause has a lot of repeated conditions. The substring on c_phone is calculated three times: once in the outer query, once in the subquery for the average, and again in the NOT EXISTS clause. Maybe we can compute that once to save processing time.
+
+The subquery for the average might be executed multiple times. Since it's a scalar subquery, the database might run it once, but in some cases, it could be re-evaluated for each row. Making that a CTE or a precomputed value could help. Wait, looking at the explain plan, there's an InitPlan which suggests it's calculated once, so that's good. But the main query still has to filter using that average.
+
+The NOT EXISTS clause is using an anti join. The explain plan shows a Parallel Hash Anti Join, which is using a hash table on orders. Since the orders table is huge (44M rows), building a hash might be expensive. Maybe an index on o_custkey would help here, but the user is asking for query rewriting, not schema changes. However, if there's an index, the database would use it, but without it, the hash anti join is the way it's handled.
+
+Looking at the WHERE clause conditions, the same substring is used multiple times. Maybe extracting that into a CTE could reduce redundant computations. For example, calculating the cntrycode once in a CTE and then using it in the main query and the subquery.
+
+Wait, the current query has the subquery for the average inside the WHERE clause. But since the average is computed once (as per InitPlan), that's okay. The main issue is the repeated substring and the anti join.
+
+Let me check the existing query structure. The inner subquery in FROM calculates cntrycode and c_acctbal, filtering on the substring, c_acctbal > the average, and the NOT EXISTS. Then the outer query groups by cntrycode.
+
+Maybe the query can be rewritten to precompute the cntrycode once, perhaps using a CTE. For example:
+
+WITH cust AS (
+    SELECT 
+        SUBSTRING(c_phone FROM 1 FOR 2) AS cntrycode,
+        c_acctbal,
+        c_custkey
+    FROM customer
+    WHERE SUBSTRING(c_phone FROM 1 FOR 2) IN ('24', '31', '26', '34', '30', '22', '14')
+)
+SELECT cntrycode, COUNT(*) AS numcust, SUM(c_acctbal) AS totacctbal
+FROM cust
+WHERE c_acctbal > (SELECT AVG(c_acctbal) FROM cust WHERE c_acctbal > 0.00)
+AND NOT EXISTS (SELECT 1 FROM orders WHERE o_custkey = cust.c_custkey)
+GROUP BY cntrycode
+ORDER BY cntrycode;
+
+This way, the substring is computed once in the CTE, and reused in the average calculation and the main query. However, the CTE might materialize the data, which could be beneficial if the substring is computed once, but the original query might have pushed down the conditions. Alternatively, the CTE could help with readability and reduce redundancy.
+
+But does the CTE actually help with performance here? Since the customer table is 4.5M rows, the CTE would scan it once, then reuse that data. The original query does a Parallel Seq Scan on customer with the same filter, so the CTE might not change much. But maybe the optimizer can handle it better.
+
+Another point: the anti join on orders is expensive. If there's an index on o_custkey, the NOT EXISTS could be faster. But as per the problem, we can't assume indexes. So, perhaps another approach would be to precompute the list of customers with no orders and join that. For example, using a LEFT JOIN with orders and filtering where o_custkey IS NULL. But that's what the NOT EXISTS is doing, and the explain plan shows a Hash Anti Join, which is the standard approach for NOT EXISTS.
+
+Wait, sometimes using a LEFT JOIN and checking for NULL can be optimized differently, but in this case, the anti join is already a hash anti join. So maybe rewriting to a LEFT JOIN won't help here.
+
+Looking at the current query, the main issues are:
+
+1. Repeated calculation of substring(c_phone...). This could be computed once. In the original query, the inner subquery does this, but the outer query uses it again. Wait, no: the inner subquery in FROM has the substring as cntrycode, and the outer query groups by that. So the inner subquery calculates it once. But the WHERE clause in the inner subquery also uses the same substring condition. So that part is redundant. Wait, the inner subquery's WHERE clause includes the substring condition again. But since we're selecting from the customer table, which is already filtered in the inner subquery, maybe that's redundant. Wait, no: the inner subquery is part of the FROM clause. So the inner subquery is selecting from customer with those conditions, and the outer query just groups by cntrycode, which is from the inner subquery. So the inner subquery's WHERE clause is necessary. However, the subquery for the average also uses the same substring condition. So the average subquery is filtering the same country codes again. That might be redundant. If we can compute the average once based on the same conditions as the main query, maybe that's better.
+
+Wait, the average is computed on customer_1 (as per the explain plan's InitPlan), which is filtered by c_acctbal >0 and the same country codes. The main query then uses that average to filter c_acctbal > $1. So the average is correctly based on the same country codes. That's correct.
+
+So perhaps the original query is okay, but there's redundancy in the subquery's WHERE clause. Let me look again:
+
+The inner subquery in FROM has:
+
+substring(c_phone from 1 for 2) in (...) 
+and c_acctbal > (subquery...)
+and not exists (...).
+
+The subquery for the average has:
+
+substring(c_phone from 1 for 2) in (...).
+
+So the same substring condition is in both the main query and the average subquery. If we can compute the average once based on the same country codes, then maybe the main query's inner subquery could avoid re-checking the substring. But no, the main query's inner subquery is necessary to filter the customers from those country codes. So that part is correct.
+
+Hmm, maybe the main issue is the repeated calculation of the substring. Since it's used in multiple places, calculating it once in a CTE might help. Let's try that.
+
+Rewriting with a CTE to calculate the cntrycode once:
+
+WITH filtered_customers AS (
+    SELECT 
+        SUBSTRING(c_phone FROM 1 FOR 2) AS cntrycode,
+        c_acctbal,
+        c_custkey
+    FROM customer
+    WHERE SUBSTRING(c_phone FROM 1 FOR 2) IN ('24', '31', '26', '34', '30', '22', '14')
+),
+avg_balance AS (
+    SELECT AVG(c_acctbal) AS avg_bal
+    FROM filtered_customers
+    WHERE c_acctbal > 0.00
+)
+SELECT 
+    cntrycode,
+    COUNT(*) AS numcust,
+    SUM(c_acctbal) AS totacctbal
+FROM filtered_customers
+WHERE c_acctbal > (SELECT avg_bal FROM avg_balance)
+AND NOT EXISTS (SELECT 1 FROM orders WHERE o_custkey = filtered_customers.c_custkey)
+GROUP BY cntrycode
+ORDER BY cntrycode;
+
+In this version, the substring is computed once in the filtered_customers CTE. The average is calculated from this CTE, which already has the country code filter. The main query then uses this CTE, applies the avg_balance condition, and the NOT EXISTS.
+
+This could eliminate redundant substring calculations. The original query's inner subquery and the average subquery both calculate the substring. By moving it into a CTE, we compute it once, which might save time.
+
+But does the database optimize this already? The explain plan shows that the InitPlan (average subquery) is using a Parallel Seq Scan on customer_1 with the same filter. Then the main query's scan on customer is also applying the same filter. So, perhaps the CTE approach would make the database scan the customer table once instead of twice. That's a potential optimization.
+
+Another point: the current query uses a correlated subquery for the NOT EXISTS. If orders is a large table, this could be slow. But the explain plan shows a Parallel Hash Anti Join, which implies that the database is hashing the orders table's o_custkey and then probing against the customer data. If the orders table is 44M rows, building a hash on o_custkey in parallel is manageable but still expensive. Without an index, there's not much else to do here.
+
+So, the main optimization here is to reduce redundant computations of the substring and the country code filter by using a CTE. Additionally, the CTE may help the optimizer to scan the customer table once instead of twice for the main query and the average subquery.
+
+Another possible optimization is to precompute the average in the CTE. For example, including the avg_bal in the filtered_customers CTE. But since the average is based on the same filtered customers, it's better to compute it once.
+
+Now, checking the equivalence: the CTE version should return the same results. The original query's inner subquery selects customers with country codes in the list, c_acctbal > average of those customers in the same country codes with c_acctbal >0, and not exists orders. The rewritten version does the same, but with the CTE.
+
+Now, efficiency: by scanning the customer table once instead of twice (once for the average and once for the main query), the rewritten query could be more efficient. However, in the original query's explain plan, the average subquery is an InitPlan, which is executed once, and then the main query uses that value. The main query's scan on customer is done in parallel, applying the filters. The CTE approach might combine these scans into one, which would save I/O.
+
+Readability is improved with the CTE, making the query structure clearer.
+
+Another possible optimization: using a materialized CTE if the database supports it (like WITH MATERIALIZED), but that's syntax-specific and may not be applicable here.
+
+Now, the original query's execution plan shows that the main query and the average subquery are both scanning the customer table. If we can combine that into a single scan via a CTE, that's better.
+
+Therefore, the rewritten query using CTEs for filtered customers and average balance should be more efficient.
+
+But wait, the original query's average is computed from customer_1 (aliased as customer in the subquery), which is also filtered by the same country codes. The main query's customer scan is also filtered by the same country codes. So, combining both into a single scan via CTE would reduce the number of scans from two to one.
+
+Yes, that's a good optimization.
+
+Additionally, the original query's inner subquery in the FROM clause is using the same country code filter as in the WHERE clause. The CTE approach encapsulates that once.
+
+So, the rewritten query would have a higher rewrite score in terms of efficiency.
+
+Another thing to consider: the NOT EXISTS subquery could be rewritten as a LEFT JOIN, but in this case, the anti join is already optimized as a hash anti join, so it's probably as efficient as possible without indexes.
+
+So, the main optimizations are:
+
+1. Eliminate redundant substring computations by using a CTE.
+2. Reduce the number of scans on the customer table.
+
+Now, checking the original query's execution plan: the main query's customer scan is happening once (for the outer query's data), and the average subquery is another scan. By using a CTE, we scan once and reuse the data.
+
+Therefore, the rewritten query should be more efficient.
+
+Let me check if the rewritten query is equivalent. The original query's structure is:
+
+SELECT cntrycode, ... FROM (
+    SELECT substring(...) as cntrycode, c_acctbal
+    FROM customer
+    WHERE substring(...) in (...)
+    AND c_acctbal > (subquery...)
+    AND NOT EXISTS (...)
+) GROUP BY ...
+
+The rewritten query's structure is:
+
+WITH filtered_customers AS (SELECT substring(...) as cntrycode, ... FROM customer WHERE substring(...) in (...)),
+avg_balance AS (SELECT AVG(...) FROM filtered_customers WHERE c_acctbal > 0)
+SELECT ... FROM filtered_customers
+WHERE c_acctbal > avg_balance.avg_bal
+AND NOT EXISTS (...)
+GROUP BY ...
+
+Yes, equivalent.
+
+So the rewrite seems valid. Now, assigning a rewrite score. The main improvements are in reducing redundant computations and scans, so the score would be high.
+
+Now, the answer should include the rewritten query and the reasoning. But wait, the user said if the SQL is already well-optimized, we can TERMINATE. However, in this case, the query can be optimized by reducing redundant computations.
+
+But maybe the original query is already optimized by the database's query planner. The explain plan shows that the average subquery is an InitPlan, which is executed once. The main query's customer scan is using the same filter, but it's possible that the database is scanning the customer table twice. If the CTE allows scanning once, that's better.
+
+Alternatively, the database's planner might merge the scans if it's smart enough. But given that the explain plan shows two separate scans (customer_1 for the average, and customer for the main query), the CTE approach could reduce that to one scan.
+
+Therefore, the rewritten query is better.
+
+Another thing: the original query's inner subquery uses 'substring(c_phone from 1 for 2) in (...)' and the same in the average subquery. The rewritten CTE combines that into one place.
+
+So, the rewritten SQL should be more efficient.
+
+Thus, the final answer is the rewritten query with CTEs, and the explanation.
+This sql is well down or too easy to give a rewrite process, no need to optimize
+

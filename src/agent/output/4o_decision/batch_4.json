@@ -1,0 +1,22 @@
+[
+  {
+    "id": "109",
+    "original_query": "with customer_total_return as  (select cr_returning_customer_sk as ctr_customer_sk         ,ca_state as ctr_state,   \tsum(cr_return_amt_inc_tax) as ctr_total_return  from catalog_returns      ,date_dim      ,customer_address  where cr_returned_date_sk = d_date_sk     and d_year =1998    and cr_returning_addr_sk = ca_address_sk   group by cr_returning_customer_sk          ,ca_state )   select  c_customer_id,c_salutation,c_first_name,c_last_name,ca_street_number,ca_street_name                    ,ca_street_type,ca_suite_number,ca_city,ca_county,ca_state,ca_zip,ca_country,ca_gmt_offset                   ,ca_location_type,ctr_total_return  from customer_total_return ctr1      ,customer_address      ,customer  where ctr1.ctr_total_return > (select avg(ctr_total_return)*1.2  \t\t\t  from customer_total_return ctr2                    \t  where ctr1.ctr_state = ctr2.ctr_state)        and ca_address_sk = c_current_addr_sk        and ca_state = 'IL'        and ctr1.ctr_customer_sk = c_customer_sk  order by c_customer_id,c_salutation,c_first_name,c_last_name,ca_street_number,ca_street_name                    ,ca_street_type,ca_suite_number,ca_city,ca_county,ca_state,ca_zip,ca_country,ca_gmt_offset                   ,ca_location_type,ctr_total_return  limit 100;",
+    "rewritten_query": "WITH filtered_returns AS (\n    SELECT\n        cr_returning_customer_sk,\n        ca_state,\n        SUM(cr_return_amt_inc_tax) AS total_return\n    FROM catalog_returns\n    JOIN date_dim ON cr_returned_date_sk = d_date_sk AND d_year = 1998\n    JOIN customer_address ON cr_returning_addr_sk = ca_address_sk\n    GROUP BY cr_returning_customer_sk, ca_state\n),\nstate_stats AS (\n    SELECT\n        ca_state,\n        AVG(total_return) * 1.2 AS threshold\n    FROM filtered_returns\n    GROUP BY ca_state\n)\nSELECT\n    c.c_customer_id, c.c_salutation, c.c_first_name, c.c_last_name,\n    ca.ca_street_number, ca.ca_street_name, ca.ca_street_type,\n    ca.ca_suite_number, ca.ca_city, ca.ca_county, ca.ca_state,\n    ca.ca_zip, ca.ca_country, ca.ca_gmt_offset, ca.ca_location_type,\n    fr.total_return\nFROM filtered_returns fr\nJOIN state_stats ss ON fr.ca_state = ss.ca_state AND fr.total_return > ss.threshold\nJOIN customer c ON fr.cr_returning_customer_sk = c.c_customer_sk\nJOIN customer_address ca ON c.c_current_addr_sk = ca.ca_address_sk AND ca.ca_state = 'IL'\nORDER BY\n    c.c_customer_id, c.c_salutation, c.c_first_name, c.c_last_name,\n    ca.ca_street_number, ca.ca_street_name, ca.ca_street_type,\n    ca.ca_suite_number, ca.ca_city, ca.ca_county, ca.ca_zip,\n    ca.ca_country, ca.ca_gmt_offset, ca.ca_location_type,\n    fr.total_return\nLIMIT 100;",
+    "time_cost": 264.7532458305359,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "produced_suggestion": "Replaced correlated subquery with a join to precomputed state averages to avoid repeated calculations"
+      },
+      {
+        "group": "Join_optimization",
+        "produced_suggestion": "Restructured joins to be explicit and moved filter conditions into JOIN clauses where appropriate"
+      },
+      {
+        "group": "Query_optimization",
+        "produced_suggestion": "Used CTEs to logically organize the query and improve readability while maintaining performance"
+      }
+    ]
+  }
+]

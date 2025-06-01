@@ -1,0 +1,26 @@
+[
+  {
+    "id": "4",
+    "original_query": "with customer_total_return as (select sr_customer_sk as ctr_customer_sk ,sr_store_sk as ctr_store_sk ,sr_reason_sk as ctr_reason_sk ,sum(SR_REFUNDED_CASH) as ctr_total_return from store_returns ,date_dim where sr_returned_date_sk = d_date_sk and d_year =2001 and sr_return_amt / sr_return_quantity between 236 and 295 group by sr_customer_sk ,sr_store_sk, sr_reason_sk)  select  c_customer_id from customer_total_return ctr1 ,store ,customer ,customer_demographics where ctr1.ctr_total_return > (select avg(ctr_total_return)*1.2 from customer_total_return ctr2 where ctr1.ctr_store_sk = ctr2.ctr_store_sk ) and ctr1.ctr_reason_sk BETWEEN 28 AND 31 and s_store_sk = ctr1.ctr_store_sk and s_state IN ('MI', 'NC', 'WI') and ctr1.ctr_customer_sk = c_customer_sk and c_current_cdemo_sk = cd_demo_sk and cd_marital_status IN ('W', 'W') and cd_education_status IN ('4 yr Degree', 'College') and cd_gender = 'M' and c_birth_month = 5 and c_birth_year BETWEEN 1950 AND 1956 order by c_customer_id limit 100;",
+    "rewritten_query": "WITH filtered_store_returns AS (\n    SELECT sr_customer_sk, sr_store_sk, sr_reason_sk, SR_REFUNDED_CASH\n    FROM store_returns\n    JOIN date_dim ON sr_returned_date_sk = d_date_sk\n    WHERE d_year = 2001\n      AND sr_return_quantity > 0\n      AND sr_return_amt / sr_return_quantity BETWEEN 236 AND 295\n      AND sr_reason_sk BETWEEN 28 AND 31\n),\ncustomer_total_return AS (\n    SELECT sr_customer_sk AS ctr_customer_sk,\n           sr_store_sk AS ctr_store_sk,\n           sr_reason_sk AS ctr_reason_sk,\n           SUM(SR_REFUNDED_CASH) AS ctr_total_return\n    FROM filtered_store_returns\n    GROUP BY sr_customer_sk, sr_store_sk, sr_reason_sk\n),\nstore_averages AS (\n    SELECT ctr_store_sk,\n           AVG(ctr_total_return) * 1.2 AS avg_total\n    FROM customer_total_return\n    GROUP BY ctr_store_sk\n),\nfiltered_customers AS (\n    SELECT c_customer_sk, c_customer_id, c_current_cdemo_sk\n    FROM customer\n    WHERE c_birth_month = 5\n      AND c_birth_year BETWEEN 1950 AND 1956\n)\nSELECT c_customer_id\nFROM customer_total_return ctr1\nJOIN store_averages sa ON ctr1.ctr_store_sk = sa.ctr_store_sk\nJOIN store ON ctr1.ctr_store_sk = store.s_store_sk AND store.s_state IN ('MI', 'NC', 'WI')\nJOIN filtered_customers c ON ctr1.ctr_customer_sk = c.c_customer_sk\nJOIN customer_demographics cd ON c.c_current_cdemo_sk = cd.cd_demo_sk\nWHERE ctr1.ctr_total_return > sa.avg_total\n  AND cd.cd_marital_status = 'W'\n  AND cd.cd_education_status IN ('4 yr Degree', 'College')\n  AND cd.cd_gender = 'M'\nORDER BY c_customer_id\nLIMIT 100;",
+    "time_cost": 195.0526921749115,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "nave_suggestion": "Replace the correlated subquery in the WHERE clause with a precomputed CTE (store_averages) that calculates the average return per store, and then join it with the main query."
+      },
+      {
+        "group": "Query_optimization",
+        "nave_suggestion": "Add sr_return_quantity > 0 condition to avoid division by zero errors in the sr_return_amt / sr_return_quantity calculation."
+      },
+      {
+        "group": "Join_optimization",
+        "nave_suggestion": "Convert implicit joins in the FROM clause to explicit JOIN syntax for better readability and optimization."
+      },
+      {
+        "group": "Predicate_simplification",
+        "nave_suggestion": "Simplify the redundant condition cd_marital_status IN ('W', 'W') to cd_marital_status = 'W'."
+      }
+    ]
+  }
+]

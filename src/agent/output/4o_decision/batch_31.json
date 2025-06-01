@@ -1,0 +1,22 @@
+[
+  {
+    "id": "91",
+    "original_query": "select  \ts_store_name, \ti_item_desc, \tsc.revenue, \ti_current_price, \ti_wholesale_cost, \ti_brand  from store, item,      (select ss_store_sk, avg(revenue) as ave  \tfrom  \t    (select  ss_store_sk, ss_item_sk,  \t\t     sum(ss_sales_price) as revenue  \t\tfrom store_sales, date_dim  \t\twhere ss_sold_date_sk = d_date_sk and d_month_seq between 1215 and 1215+11     and ss_sales_price / ss_list_price BETWEEN 22 * 0.01 AND 32 * 0.01  \t\tgroup by ss_store_sk, ss_item_sk) sa  \tgroup by ss_store_sk) sb,      (select  ss_store_sk, ss_item_sk, sum(ss_sales_price) as revenue  \tfrom store_sales, date_dim  \twhere ss_sold_date_sk = d_date_sk and d_month_seq between 1215 and 1215+11   and ss_sales_price / ss_list_price BETWEEN 22 * 0.01 AND 32 * 0.01  \tgroup by ss_store_sk, ss_item_sk) sc  where sb.ss_store_sk = sc.ss_store_sk and        sc.revenue <= 0.1 * sb.ave and        s_store_sk = sc.ss_store_sk and        i_item_sk = sc.ss_item_sk        and i_manager_id BETWEEN 16 and 20        and s_state in ('GA','IL','TX')  order by s_store_name, i_item_desc limit 100;",
+    "rewritten_query": "WITH store_item_revenue AS (\n    SELECT \n        ss_store_sk, \n        ss_item_sk, \n        SUM(ss_sales_price) AS revenue\n    FROM \n        store_sales\n        JOIN date_dim ON ss_sold_date_sk = d_date_sk\n    WHERE \n        d_month_seq BETWEEN 1215 AND 1215 + 11\n        AND ss_sales_price / ss_list_price BETWEEN 0.22 AND 0.32\n    GROUP BY \n        ss_store_sk, \n        ss_item_sk\n)\nSELECT \n    s_store_name, \n    i_item_desc, \n    sc.revenue, \n    i_current_price, \n    i_wholesale_cost, \n    i_brand  \nFROM \n    store, \n    item, \n    (SELECT \n         ss_store_sk, \n         AVG(revenue) AS ave \n     FROM \n         store_item_revenue \n     GROUP BY \n         ss_store_sk) sb, \n    store_item_revenue sc \nWHERE \n    sb.ss_store_sk = sc.ss_store_sk \n    AND sc.revenue <= 0.1 * sb.ave \n    AND s_store_sk = sc.ss_store_sk \n    AND i_item_sk = sc.ss_item_sk \n    AND i_manager_id BETWEEN 16 AND 20 \n    AND s_state IN ('GA','IL','TX')  \nORDER BY \n    s_store_name, \n    i_item_desc \nLIMIT 100;",
+    "time_cost": 127.01180458068848,
+    "rewrite_suggestion": [
+      {
+        "group": "Subquery_optimization",
+        "navie_suggestion": "The subqueries 'sa' and 'sc' are redundant as they perform the same aggregation on store_sales and date_dim. Combine them into a single CTE to avoid scanning and processing the same data twice."
+      },
+      {
+        "group": "Query_optimization",
+        "navie_suggestion": "The WHERE clause filters (e.g., s_state and i_manager_id) are applied late in the query. Consider pushing these filters earlier in the query execution to reduce the number of rows processed."
+      },
+      {
+        "group": "Constant_folding",
+        "navie_suggestion": "The condition 'ss_sales_price / ss_list_price BETWEEN 22 * 0.01 AND 32 * 0.01' can be simplified to 'ss_sales_price / ss_list_price BETWEEN 0.22 AND 0.32' to avoid unnecessary calculations during query execution."
+      }
+    ]
+  }
+]
