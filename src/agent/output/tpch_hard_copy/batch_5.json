@@ -1,0 +1,22 @@
+[
+    {
+        "id": "5",
+        "original_query": "select s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment from part, supplier, partsupp, nation, region where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = 46 and p_type like '%NICKEL' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = 'ASIA' and ps_supplycost = ( select min(ps_supplycost) from partsupp, supplier, nation, region where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = 'ASIA' ) order by s_acctbal desc, n_name, s_name, p_partkey limit 100;",
+        "rewritten_query": "WITH filtered_parts AS (\n  SELECT p_partkey, p_mfgr\n  FROM part\n  WHERE p_size = 46 AND p_type LIKE '%NICKEL'\n),\nmin_supply_costs AS (\n  SELECT \n    ps_partkey, \n    min(ps_supplycost) AS min_ps_supplycost\n  FROM \n    partsupp\n    JOIN supplier ON ps_suppkey = s_suppkey\n    JOIN nation ON s_nationkey = n_nationkey\n    JOIN region ON n_regionkey = r_regionkey\n    JOIN filtered_parts ON ps_partkey = p_partkey\n  WHERE \n    r_name = 'ASIA'\n  GROUP BY \n    ps_partkey\n)\nSELECT \n  s_acctbal, \n  s_name, \n  n_name, \n  p.p_partkey, \n  p_mfgr, \n  s_address, \n  s_phone, \n  s_comment\nFROM \n  filtered_parts p\n  JOIN partsupp ps ON p.p_partkey = ps.ps_partkey\n  JOIN supplier s ON ps.ps_suppkey = s.s_suppkey\n  JOIN nation n ON s.s_nationkey = n.n_nationkey\n  JOIN region r ON n.n_regionkey = r.r_regionkey\n  JOIN min_supply_costs msc ON \n      p.p_partkey = msc.ps_partkey \n      AND ps.ps_supplycost = msc.min_ps_supplycost\nWHERE \n  r.r_name = 'ASIA'\nORDER BY \n  s_acctbal DESC, \n  n_name, \n  s_name, \n  p.p_partkey\nLIMIT 100;",
+        "time_cost": 455.0948951244354,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Replaced correlated subquery with a CTE that precomputes minimum supply costs for each part in the ASIA region"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Converted implicit joins to explicit JOIN syntax for better readability and performance"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Eliminated repeated execution of the subquery by computing minimum costs once in the CTE"
+            }
+        ]
+    }
+]

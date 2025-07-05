@@ -1,0 +1,26 @@
+[
+    {
+        "id": "57",
+        "original_query": "select s_name, s_address from supplier, nation where s_suppkey in ( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'burlywood%' ) and ps_availqty > ( select 0.5 * sum(l_quantity) from lineitem where l_partkey = ps_partkey and l_suppkey = ps_suppkey and l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) and s_nationkey = n_nationkey and n_name = 'ETHIOPIA' order by s_name;",
+        "rewritten_query": "WITH qualified_suppliers AS (\n    SELECT DISTINCT ps.ps_suppkey\n    FROM partsupp ps\n    JOIN part p ON ps.ps_partkey = p.p_partkey\n    JOIN (\n        SELECT l_partkey, l_suppkey, 0.5 * SUM(l_quantity) AS half_total_quantity\n        FROM lineitem\n        WHERE l_shipdate >= date '1994-01-01'\n          AND l_shipdate < date '1995-01-01'\n        GROUP BY l_partkey, l_suppkey\n    ) l ON ps.ps_partkey = l.l_partkey AND ps.ps_suppkey = l.l_suppkey\n    WHERE p.p_name LIKE 'burlywood%'\n      AND ps.ps_availqty > l.half_total_quantity\n)\nSELECT s_name, s_address\nFROM supplier\nJOIN nation ON supplier.s_nationkey = nation.n_nationkey\nJOIN qualified_suppliers ON supplier.s_suppkey = qualified_suppliers.ps_suppkey\nWHERE n_name = 'ETHIOPIA'\nORDER BY s_name;",
+        "time_cost": 316.9594349861145,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Replaced nested correlated subqueries with a CTE structure that precomputes aggregates once"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Converted IN clauses to explicit JOIN operations for better optimization"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Used DISTINCT to eliminate duplicate supplier keys in the qualified_suppliers CTE"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Simplified the date range filter in the lineitem aggregation"
+            }
+        ]
+    }
+]

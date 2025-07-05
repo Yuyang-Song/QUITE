@@ -40,7 +40,7 @@ import signal
 
 # os.environ['HTTP_PROXY'] = 'socks5h://127.0.0.1:1080'
 # os.environ['HTTPS_PROXY'] = 'socks5h://127.0.0.1:1080'
-load_dotenv(dotenv_path="/root/syy/MARter_5/config_file/.env")
+load_dotenv(dotenv_path="/root/syy/code/QUITE/Hint_injection/config_file/.env")
 
 
 class DBMS:
@@ -593,44 +593,44 @@ async def Knowledge_Pool_Tool(input_sql: str, navie_suggestion_list: str) -> str
     print("Knowledge Pool ends..",final_output)
     return final_output
 
-input_sql = """
-WITH min_supply AS (
-    SELECT ps.ps_partkey, MIN(ps.ps_supplycost) AS min_supplycost
-    FROM partsupp ps
-    JOIN supplier s ON ps.ps_suppkey = s.s_suppkey
-    JOIN nation n ON s.s_nationkey = n.n_nationkey
-    JOIN region r ON n.n_regionkey = r.r_regionkey
-    WHERE r.r_name = 'EUROPE'
-    GROUP BY ps.ps_partkey
-)
-SELECT s.s_acctbal, s.s_name, n.n_name, p.p_partkey, p.p_mfgr, s.s_address, s.s_phone, s.s_comment
-FROM part p
-JOIN partsupp ps ON p.p_partkey = ps.ps_partkey
-JOIN supplier s ON ps.ps_suppkey = s.s_suppkey
-JOIN nation n ON s.s_nationkey = n.n_nationkey
-JOIN min_supply ms ON p.p_partkey = ms.ps_partkey AND ps.ps_supplycost = ms.min_supplycost
-WHERE p.p_size = 6
-  AND p.p_type LIKE '%NICKEL'
-ORDER BY s.s_acctbal DESC, n.n_name, s.s_name, p.p_partkey
-LIMIT 100;
-"""
-navie_suggestion_list = [
-    {
-        "group": "Redundancy_elimination",
-        "navie_suggestion": "Ensure the CTE precomputes the minimum supply cost for parts from European suppliers, thus avoiding repetitive execution."
-    },
-    {
-        "group": "Join_optimization",
-        "navie_suggestion": "Simplify the main query by leveraging this CTE and reducing redundant joins, particularly eliminating unnecessary joins to the `region` table in the main query."
-    },
-    {
-        "group": "Predication_simplification",
-        "navie_suggestion": "Replace the correlated subquery that finds the minimum `ps_supplycost` with a more efficient Common Table Expression (CTE)."
-    }
-]
-import asyncio
-output = asyncio.run(Knowledge_Pool_Tool(input_sql, navie_suggestion_list))
-print(output)
+# input_sql = """
+# WITH min_supply AS (
+#     SELECT ps.ps_partkey, MIN(ps.ps_supplycost) AS min_supplycost
+#     FROM partsupp ps
+#     JOIN supplier s ON ps.ps_suppkey = s.s_suppkey
+#     JOIN nation n ON s.s_nationkey = n.n_nationkey
+#     JOIN region r ON n.n_regionkey = r.r_regionkey
+#     WHERE r.r_name = 'EUROPE'
+#     GROUP BY ps.ps_partkey
+# )
+# SELECT s.s_acctbal, s.s_name, n.n_name, p.p_partkey, p.p_mfgr, s.s_address, s.s_phone, s.s_comment
+# FROM part p
+# JOIN partsupp ps ON p.p_partkey = ps.ps_partkey
+# JOIN supplier s ON ps.ps_suppkey = s.s_suppkey
+# JOIN nation n ON s.s_nationkey = n.n_nationkey
+# JOIN min_supply ms ON p.p_partkey = ms.ps_partkey AND ps.ps_supplycost = ms.min_supplycost
+# WHERE p.p_size = 6
+#   AND p.p_type LIKE '%NICKEL'
+# ORDER BY s.s_acctbal DESC, n.n_name, s.s_name, p.p_partkey
+# LIMIT 100;
+# """
+# navie_suggestion_list = [
+#     {
+#         "group": "Redundancy_elimination",
+#         "navie_suggestion": "Ensure the CTE precomputes the minimum supply cost for parts from European suppliers, thus avoiding repetitive execution."
+#     },
+#     {
+#         "group": "Join_optimization",
+#         "navie_suggestion": "Simplify the main query by leveraging this CTE and reducing redundant joins, particularly eliminating unnecessary joins to the `region` table in the main query."
+#     },
+#     {
+#         "group": "Predication_simplification",
+#         "navie_suggestion": "Replace the correlated subquery that finds the minimum `ps_supplycost` with a more efficient Common Table Expression (CTE)."
+#     }
+# ]
+# import asyncio
+# output = asyncio.run(Knowledge_Pool_Tool(input_sql, navie_suggestion_list))
+# print(output)
 # 默认使用与JSON文件相同目录下的文件存储缓存
 
 

@@ -1,1 +1,1 @@
-LLM-based SQL Rewriter with Heterogeneous knowledge
+QUITE: A Query Rewrite System Beyond Rules with LLM Agents

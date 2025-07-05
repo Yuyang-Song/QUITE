@@ -1,5 +1,5 @@
 
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 from dotenv import load_dotenv
 import json
 import os
@@ -16,7 +16,7 @@ from utils.agent_template import MessageContent, Message, MemoryWindow, MessageQ
 from utils.gpt_request import GPT
 
 from dotenv import load_dotenv
-load_dotenv(dotenv_path='/root/syy/MARter_5/config_file/.env')  # Load environment variables from .env file, here is the running path
+# load_dotenv(dotenv_path='/root/syy/MARter_5_parallel/config_file/.env')  # Load environment variables from .env file, here is the running path
 
 class ReasoningAgent(Agent):
     """SQL重写推理Agent"""
@@ -26,47 +26,16 @@ class ReasoningAgent(Agent):
         
         self.api_key = os.getenv("REASONING_MODEL_API_KEY")  # Get the API key from the environment variable
         self.model = os.getenv("REASONING_MODEL")
-        # self.api_key = api_key # Get the API key from the environment variable
-        # self.model = model
         self.base_url = os.getenv("REASONING_MODEL_URL")
+        self.async_client = AsyncOpenAI(
+            base_url=self.base_url,
+            api_key=self.api_key
+        )
         self.client = OpenAI(
             base_url=self.base_url,
             api_key=self.api_key
         )
 
-    # async def get_answer(self, prompt):
-    #     messages= []
-    #     result_content = ""
-    #     chain_content = ""
-    #     # messages.append({"role": "system", "content": "Initiate your response with '<think>\\n' at the beginning of every output."})
-    #     messages.append(({"role": "user", "content": prompt}))
-
-    #     completion = self.client.chat.completions.create(
-    #         model=self.model,
-    #         messages=messages,
-    #         stream=True,
-    #         # response_format={'type': 'json_object'} if json_format else None,
-    #         temperature=0.0
-    #     )
-    #     # Loop over the streamed chunks
-    #     for chunk in completion:
-    #         if not chunk.choices:
-    #             continue
-            
-    #         # Check if reasoning_content exists
-    #         reasoning_content = getattr(chunk.choices[0].delta, 'reasoning_content', None)
-    #         if reasoning_content:
-    #             chain_content += reasoning_content
-    #             print(reasoning_content, end="")
-            
-    #         # Check if content exists
-    #         content = getattr(chunk.choices[0].delta, 'content', None)
-    #         if content:
-    #             result_content += content
-    #             print(content, end="")
-
-    #     # return completion.choices[0].message.content, completion.choices[0].message.reasoning_content
-    #     return result_content,chain_content
 
     async def get_answer(self, prompt):
         reasoning_content = ""  # 
@@ -77,23 +46,21 @@ class ReasoningAgent(Agent):
         # messages.append({"role": "system", "content": "Initiate your response with '<think>\\n' at the beginning of every output."})
         messages.append(({"role": "user", "content": prompt}))
 
-        completion = self.client.chat.completions.create(
-        model=self.model,
-        messages=messages,
-        stream=True,
-        # response_format={'type': 'json_object'} if json_format else None,
-        temperature=0.0
-    )
+        completion = await self.async_client.chat.completions.create(
+            model=self.model,
+            messages=messages,
+            stream=True,
+            temperature=0.0
+        )
 
-        for chunk in completion:
-            # chunk.choicesusage
+        async for chunk in completion:
             if not chunk.choices:
-                print("\nUsage:")
-                print(chunk.usage)
+                if hasattr(chunk, 'usage') and chunk.usage:
+                    print("\nUsage:")
+                    print(chunk.usage)
             else:
                 delta = chunk.choices[0].delta
-                # 
-                if hasattr(delta, 'reasoning_content') and delta.reasoning_content != None:
+                if hasattr(delta, 'reasoning_content') and delta.reasoning_content is not None:
                     print(delta.reasoning_content, end='', flush=True)
                     reasoning_content += delta.reasoning_content
                 else:
@@ -103,14 +70,15 @@ class ReasoningAgent(Agent):
 
         return reasoning_content
         
-    
+        
     async def analyze_sql(self, sql: str, data_statistics, explain_info : str) -> dict:
 
         prompt = textwrap.dedent(f"""
         <Mission>
         You are an experienced DBA, and your mission is to perform high-quality query rewriting for the user.
         1. Identify potential bottlenecks in the SQL query and propose optimization strategies. For each strategy, assign a rewrite score and determine the most efficient way to optimize the SQL.
-            - Note: Do not always consider creating CTEs, especially when there are numerous WHERE/JOIN conditions or when there are fewer redundant subquery calculations.
+            - Note: Consider creating CTEs when queries have complex WHERE/JOIN conditions or involve redundant subquery calculations, as CTEs can improve readability and performance. 
+                    Avoid overusing CTEs if the query is simple or CTEs do not reduce redundancy, as unnecessary CTEs may add overhead.
         2. Rewrite the SQL query if necessary, ensuring the following standards are met for query rewriting:
             - Executability
             - Equivalence
@@ -119,7 +87,7 @@ class ReasoningAgent(Agent):
 
         IMPORTANT:            
         If you find the SQL query is already well-optimized or too simple to require any changes, 
-        you can simply mention the final version of the SQL query, conclude that it doesn’t need further optimization, and include the word "TERMINATE" at the end of your response.
+        you can simply mention the final version of the SQL query, conclude that it doesn't need further optimization, and include the word "TERMINATE" at the end of your response.
                                  
                                  
         <sql>
@@ -135,10 +103,6 @@ class ReasoningAgent(Agent):
         thought_chain = await self.get_answer(
             prompt=prompt,
         )
-        #         MessageContent(text="需要分析2龄分布"), 
-        #         role="Engineer",
-        #         receiver="DataAnalyst"
-        # 发送消息
         self.send_message(
             MessageContent(text=thought_chain),
             role="ReasoiningAgent",
@@ -146,29 +110,27 @@ class ReasoningAgent(Agent):
         )
 
         return thought_chain
+
     
+
     async def analyze_sql_report(self, sql: str, data_statistics, report: dict, explain_info: str) -> dict: 
 
         prompt = textwrap.dedent(f"""
         <Mission>
         You are an experienced DBA, and your mission is to perform high-quality query rewriting for the user.
         1. Identify potential bottlenecks in the SQL query and propose optimization strategies. For each strategy, assign a rewrite score and determine the most efficient way to optimize the SQL.
-            - Note: Do not always consider creating CTEs, especially when there are numerous WHERE/JOIN conditions or when there are fewer redundant subquery calculations.
+            - Note: Consider creating CTEs when queries have complex WHERE/JOIN conditions or involve redundant subquery calculations, as CTEs can improve readability and performance. 
+                    Avoid overusing CTEs if the query is simple or CTEs do not reduce redundancy, as unnecessary CTEs may add overhead.
         2. Rewrite the SQL query if necessary, ensuring the following standards are met for query rewriting:
             - Executability
             - Equivalence
             - Efficiency
             - Readability
 
-        3. Notably, you have been provided with the preivous rewrite report.
-            - "pre_rewrite_sql": previous rewritten SQL query
-            - "decision": Decisions made in the previous iteration
-            - "corrected_guide_knowledge": revised rewrite guide knowledge
-
-
+        3. Notably, you will be provided with the preivous rewrite report.
+                                 
         IMPORTANT:            
-        If you find the SQL query is already well-optimized or too simple to require any changes, 
-        you can simply mention the final version of the SQL query, conclude that it doesn’t need further optimization, and include the word "TERMINATE" at the end of your response.
+        If you find the SQL query is already well-optimized or too simple to require any changes, you can conclude that it doesn't need further optimization and then include the word "TERMINATE" at the end of your response.
                                  
         <sql>
         {sql}
@@ -187,10 +149,6 @@ class ReasoningAgent(Agent):
         thought_chain = await self.get_answer(
             prompt=prompt,
         )
-        #         MessageContent(text="需要分析2龄分布"), 
-        #         role="Engineer",
-        #         receiver="DataAnalyst"
-        # 发送消息
         self.send_message(
             MessageContent(text=thought_chain),
             role="ReasoiningAgent",
@@ -199,9 +157,7 @@ class ReasoningAgent(Agent):
 
         return thought_chain
 
-
-        # Stage1. If the rewritten SQL is equivalent to the original SQL or not.  If not, try to correct it. (little error like rows name error, predicate value error; big error like non-equivalence to original)           
-        # Stage2. If the rewritten SQL has syntax error or not.  If not, try to correct it. (little error like rows name error, predicate value error; big error like non-equivalence to original)
+    
 class DecisionAgent(Agent):
     """总结优化建议Agent"""
     def __init__(self, mq: MessageQueue):
@@ -212,11 +168,6 @@ class DecisionAgent(Agent):
 ))
         self.watch(["ReasoningAgent", "ExplainAgent"])
     
-        #     2. Then check the "ori_SQL" in two stages:  
-        # Stage1. If the rewritten SQL is equivalent to the original SQL or not. If not, try to correct it. (little error like rows name error, predicate value error; big error like non-equivalence to original)
-        # Stage2. If the rewritten SQL has another little potential rewritten improvement, try to futher improve it meanwhile keep equivalence ( like create CTE, make the CTE structure more efficient, considering constant folding or predicate optmization to make the sql more effcient)
-        # Note that do not make the SQL too complex and redundancy, try to avoid to make to many exchanges.
-        # These message can be outputed of "analysis" and "sql_candidate" in [format]
 
     async def summarize_chain(self, chain: str, original_sql: str, data_statistics) -> dict:
         # print("chain:",chain)
@@ -226,33 +177,33 @@ class DecisionAgent(Agent):
         1. Summarize the rewrite suggestions and the newly rewritten SQL query based on the detailed SQL rewrite report from [chain].
         Each suggestion should be grouped under one of the following categories:
         - Predicate_simplification
+        - Subquery_optimization
         - Query_optimization
         - Join_optimization
         - Constant_folding
-        - Other
                                  
-        These messages should be output with "sql_candidate" and "advice" in the format provided. The original SQL query will be provided in <original_sql>.
+        These messages should be output with "produced_sql" and "advice" in the format provided. The original SQL query will be provided in <original_sql>.
 
-        2. Then check the "sql_candidate", try to find more potential rewritten improvement, try to futher improve it meanwhile keep equivalence ( like Early Filtering Conditions in FROM part as JOIN, make the CTE structure more efficient with maintaining the filter condition in main query, constant folding or calculate the date/num, redundant predicate siplification, etc.) 
+        2. Then check the "produced_sql", try to find more potential rewritten improvement, try to futher improve it meanwhile keep equivalence ( like Early Filtering Conditions in FROM part as JOIN, make the CTE structure more efficient with maintaining the filter condition in main query, constant folding or calculate the date/num, redundant predicate siplification, etc.) 
         
         
         In this stage, you can also consider the data_statistics to make the SQL more efficient. 
-        Especially if you want to need create CTE. 
+        Especially if you want to create CTE. 
                                  
-        Note that you should not always make CTE to make the SQL more complex and redundancy, try to avoid to make too many exchanges especially in plenty of WHERE/JOIN conditions / less redundent subquery calculation situations. 
+        Do not always consider creating CTEs, especially when there are numerous WHERE/JOIN conditions or when there are fewer redundant subquery calculations.
         {data_statistics} 
 
-        These message can be outputed with "analysis" and "enhanced_sql" in [format]. If the SQL is well down or too easy to give a rewrite process, no need to optimize, just put [sql_candidatg] into [enhanced_sql] and [advice] into [analysis].
+        These message can be outputed with "analysis" and "enhanced_sql" in [format]. If the SQL is well down or too easy to give a rewrite process, no need to optimize, just put [produced_sql] into [enhanced_sql] and [advice] into [analysis].
         Note that do not contain annotation in the SQL, and try to avoid to make to many exchanges.
                                  
 
         3. please strictly follow the format provided below:
         [format]
-        </sql_candidate>
+        </produced_sql>
         ```sql
                                  
         ```
-        </sql_candidate>
+        </produced_sql>
         
         </advice>
         [
@@ -288,24 +239,21 @@ class DecisionAgent(Agent):
         )
         return response 
     
+
     async def check_equivalence(self, ori_sql: str, rewritten_sql: str, rewrite_advice) -> dict:
         prompt = textwrap.dedent(f"""
         You are an experienced database administrator. 
-        1. Your mission is to check the equivalence of the original SQL and the rewritten SQL. If you think the rewritten SQL is not equivalent to the original SQL, please provide the corrected SQL.
-        2. And you have the rewritten proposals that describe the rewrite process.         
-        3. If both are not equivalent, do not contain annotation in the corrected SQL, and try to avoid to make to many exchanges.
+        1. Your mission is to check the equivalence of the original SQL and the improved SQL. If you think the improved SQL is not equivalent to the original SQL, please provide the corrected SQL.
+        2. And you have the rewritte idea process to be considered to make the SQL more efficient.         Note that do not contain annotation in the SQL, and try to avoid to make to many exchanges.
 
-        * Note that If the SQL variable contains double quotes, do not ignore them and keep them as they are.
-        <original_sql>: 
+        <original_sql>:
         {ori_sql}
 
         <rewritten_sql>:
         {rewritten_sql}
 
-        <rewrite_idea_process>:
+        <rewritten_idea_process>:
         {rewrite_advice}
-
-
         3. please strictly follow the format provided below:
         [format]
         </analysis>
@@ -317,7 +265,7 @@ class DecisionAgent(Agent):
         </equivalence>
         
         </corrected_sql>
-            // If the rewritten SQL is not equivalent to the original SQL, provide the corrected SQL here. Else, leave it empty.
+          // If not equivalent, insert the corrected SQL here; otherwise leave empty.
         </corrected_sql>
         """)
         
@@ -358,42 +306,38 @@ class DecisionAgent(Agent):
     
     async def evaluate(self, ori_sql: str, enhanced_sql: str, report: str) -> dict:
         prompt = textwrap.dedent(f"""
-            Please base your decision on the following information:
-            Do you want to terminate the process?
-            * Note that the execution time for rewritten sql and original sql is provided by the optimizer of the database, and this value is not very accurate in some cases. Please make decision based on your detailed analysis. 
-            * Please objectively estimate whether the enhanced sql has completed the indicators of query rewrite.
-                                 
-            The TERMINATE condition:
-            [True]: 
-                1. If enhanced_sql execution time cost < ori_sql execution time cost,  and the enhanced_sql is executable without any errors.
-                2. If enhanced_sql execution time >= ori_sql execution time cost as a result of inaccuracy cardinary estimation, but you think the rewritten sql has improvement compared to the original sql.
-                                 
-            [False]: 
-                If the enhanced_sql execution time cost >= ori_sql execution time cost, or the enhanced_sql is not executable without any errors, then you should not terminate the process.
-                                 
+        You are responsible for evaluating whether SQL optimization is up to standard.Please decide whether to terminate the optimization process based on the information below:
+        Do you want to terminate the process?
 
-            * Note that the execution time for enhanced sql and original sql is provided by the optimizer of the database, and this value is not very accurate in some cases.!!!!!!                     
-            Note that you must return the answer in the following format:
-            {{  
-                {{
-                    "terminate":  True/False,
-                    "reason": //Fill the reason 
-                }}
-            }}
-            <original_sql>:
-            {ori_sql}
+        * Note: Execution times for <original_sql> and <enhanced_sql> come from the database optimizer and may be imprecise. Base your decision on a detailed analysis.
+        * Objectively assess whether the enhanced SQL satisfies the key indicators of a successful rewrite.
 
-            <enhanced_sql>:
-            {enhanced_sql}
+        TERMINATION CONDITIONS:
+        [True]:
+            1. enhanced_sql execution time < ori_sql execution time, and enhanced_sql executes without errors.
+            2. enhanced_sql execution time ≥ ori_sql execution time due to cardinality estimation inaccuracies, but you still consider the rewrite an improvement.
 
-            <report>
-            {report}
+        [False]:
+            enhanced_sql execution time ≥ ori_sql execution time, or enhanced_sql fails to execute without errors.
 
+        Return your answer strictly in this JSON format:
+        {{
+            "terminate": True/False,
+            "reason": ""  // Provide your rationale here.
+        }}
+
+        <original_sql>:
+        {ori_sql}
+
+        <enhanced_sql>:
+        {enhanced_sql}
+
+        <report>:
+        {report}
         """)
         
         response = await self.llm.get_GPT_response_async(
             prompt=prompt,
-            system_message="You are responsible for evaluating whether SQL optimization is up to standard",
             json_format=False
         )
         return response
@@ -409,7 +353,7 @@ class DecisionAgent(Agent):
             return json.loads(match.group(1).strip())
         return ""
     
-    async def extract_selected_id_content(self, text: str) -> str:
+    def extract_selected_id_content(self, text: str) -> str:
         """
         提取文本中从 </selected_id> 到 </selected_id> 之间的内容。
         """
@@ -422,22 +366,46 @@ class DecisionAgent(Agent):
 
     def extract_sql_candidate_content(self, text: str) -> str:
         """
-        提取文本中从 </sql_candidate>```sql 到 ```</sql_candidate> 之间的内容。
+        提取文本中从 </sql_candidate> 到 </sql_candidate> 之间的内容。
         """
-        pattern = r'</sql_candidate>\s*```sql\s*(.*?)\s*```\s*</sql_candidate>'
-        match = re.search(pattern, text, re.DOTALL)
-        if match:
-            return match.group(1).strip()
-        return "" 
+        # 首先尝试匹配带```sql的格式
+        pattern1 = r'</sql_candidate>\s*```sql\s*(.*?)\s*```\s*</sql_candidate>'
+        match1 = re.search(pattern1, text, re.DOTALL)
+        if match1:
+            return match1.group(1).strip()
+        
+        # 尝试匹配不带```的格式
+        pattern2 = r'</sql_candidate>\s*(.*?)\s*</sql_candidate>'
+        match2 = re.search(pattern2, text, re.DOTALL)
+        if match2:
+            sql_content = match2.group(1).strip()
+            sql_content = re.sub(r'^```sql\s*', '', sql_content)
+            sql_content = re.sub(r'\s*```$', '', sql_content)
+            return sql_content.strip()
+        
+        print(f"Warning: Could not extract SQL candidate from response")
+        return ""
 
     def extract_enhanced_sql_content(self, text: str) -> str:
         """
-        提取文本中从 </enhanced_sql>```sql 到 ```</enhanced_sql> 之间的内容。
+        提取文本中从 </enhanced_sql> 到 </enhanced_sql> 之间的内容。
         """
-        pattern = r'</enhanced_sql>\s*```sql\s*(.*?)\s*```\s*</enhanced_sql>'
-        match = re.search(pattern, text, re.DOTALL)
-        if match:
-            return match.group(1).strip()
+        # 首先尝试匹配带```sql的格式
+        pattern1 = r'</enhanced_sql>\s*```sql\s*(.*?)\s*```\s*</enhanced_sql>'
+        match1 = re.search(pattern1, text, re.DOTALL)
+        if match1:
+            return match1.group(1).strip()
+        
+        # 尝试匹配不带```的格式
+        pattern2 = r'</enhanced_sql>\s*(.*?)\s*</enhanced_sql>'
+        match2 = re.search(pattern2, text, re.DOTALL)
+        if match2:
+            sql_content = match2.group(1).strip()
+            sql_content = re.sub(r'^```sql\s*', '', sql_content)
+            sql_content = re.sub(r'\s*```$', '', sql_content)
+            return sql_content.strip()
+        
+        print(f"Warning: Could not extract enhanced SQL from response")
         return ""
     
     def extract_equivalence_content(self, text: str) -> str:
@@ -452,12 +420,26 @@ class DecisionAgent(Agent):
     
     def extract_corrected_sql_content(self, text: str) -> str:
         """
-        提取文本中从 </corrected_sql>```sql 到 ```</corrected_sql> 之间的内容。
+        提取文本中从 </corrected_sql> 到 </corrected_sql> 之间的内容。
+        支持多种格式：带```sql的代码块和不带的纯文本
         """
-        pattern = r'</corrected_sql>\s*```sql\s*(.*?)\s*```\s*</corrected_sql>'
-        match = re.search(pattern, text, re.DOTALL)
-        if match:
-            return match.group(1).strip()
+        # 首先尝试匹配带```sql的格式
+        pattern1 = r'</corrected_sql>\s*```sql\s*(.*?)\s*```\s*</corrected_sql>'
+        match1 = re.search(pattern1, text, re.DOTALL)
+        if match1:
+            return match1.group(1).strip()
+        
+        # 如果没有匹配到，尝试匹配不带```的纯文本格式
+        pattern2 = r'</corrected_sql>\s*(.*?)\s*</corrected_sql>'
+        match2 = re.search(pattern2, text, re.DOTALL)
+        if match2:
+            sql_content = match2.group(1).strip()
+            # 移除可能的```sql标记
+            sql_content = re.sub(r'^```sql\s*', '', sql_content)
+            sql_content = re.sub(r'\s*```$', '', sql_content)
+            return sql_content.strip()
+        
+        print(f"Warning: Could not extract corrected SQL from response: {text[:200]}...")
         return ""
 
     async def merge_advice(self, base_sql: str, optimizations: List[str], rag_optimizations: List[str]) -> str:
@@ -467,30 +449,28 @@ class DecisionAgent(Agent):
             for opt in optimizations
         ]
         prompt = textwrap.dedent(f"""
-        You are an experienced database administrator. Your mission is to merge the rag_optmizations from expert knowledge into original optimizations, and return the final rewrite suggestions. 、
-        Carefully condier the ground truth of the original optimization suggestions and rag suggestions and return the answer in the format below.
-        
-        The original SQL statement is provided below:
+        You are an experienced database administrator. Your mission is to merge the RAG optimizations from expert knowledge into the original optimization suggestions and return the final rewrite suggestions.
+        Carefully consider the validity of both the original optimization suggestions and the RAG optimizations, and return the result in the format below.
+
+        The original SQL statement:
         {base_sql}
 
-        The original optimization suggestions:
+        Original optimization suggestions:
         {optimizations_str}
-        
-        The rag_optimizations from expert knowledge:
-        {rag_optimizations}        
-        
-        You must return the json format as bellow:
+
+        RAG optimizations from expert knowledge:
+        {rag_optimizations}
+
+        You must return the JSON in the following format:
         {{
             {{
                 "group": "",
-                "produced_suggestion": ""  //merged suggestions
+                "produced_suggestion": ""  // merged suggestions
             }}
-        }}                         
-        
+        }}
         """)
         response = await self.llm.get_GPT_response_async(
             prompt=prompt,
-            system_message="You are proficient in translating optimization suggestions into actual SQL rewriting",
             json_format=False
         )
         # return self._extract_sql(response)
@@ -508,7 +488,7 @@ class AssistantAgent(Agent):
         super().__init__("AssistantAgent", mq, gpt)
         self.watch(["SummaryAgent"])
     
-    async def extract_corrected_sql_content(self, text: str) -> str:
+    def extract_corrected_sql_content(self, text: str) -> str:
         """
         提取文本中从 </corrected_sql>```sql 到 ```</corrected_sql> 之间的内容。
         """
@@ -521,41 +501,69 @@ class AssistantAgent(Agent):
     async def _correct_sql(self, original_sql: str, rewritten_sql: str, error: str) -> str:
         """修正SQL语法错误"""
         prompt = textwrap.dedent(f"""
-        You are an expert in SQL syntax and are good at fixing SQL syntax errors. 
-        Please help fix the following SQL statement with the error message provided.
+            You are an expert in SQL syntax and excel at correcting SQL syntax errors.
+            Please fix the following SQL statement, using the error message provided.
+
+            * Note: If the SQL contains double quotes, preserve them exactly as they appear.
+            <rewritten_sql>
+            {rewritten_sql}
+
+            Error message:
+            {error}
+
+            Below is the original form of the rewritten SQL for reference to the schema.
+            Only correct the syntax in <rewritten_sql>; do not align it with the original SQL,
+            and do NOT include any "EXPLAIN (FORMAT JSON)" clause!
+
+            <original_sql>
+            {original_sql}
+
+            Please follow the format below exactly:
+            [format]
+            </analysis>
+
+            </analysis>
+
+            </corrected_sql>
+            // Insert the corrected SQL here.
+            </corrected_sql>
+            """)
+        # prompt = textwrap.dedent(f"""
+        # You are an expert in SQL syntax and are good at fixing SQL syntax errors. 
+        # Please help fix the following SQL statement with the error message provided.
                                  
-        * Note that If the SQL variable contains double quotes, do not ignore them and keep them as they are.
-        <rewritten_sql>
-        {rewritten_sql}
+        # * Note that If the SQL variable contains double quotes, do not ignore them and keep them as they are.
+        # <rewritten_sql>
+        # {rewritten_sql}
         
-        error message: {error}
+        # error message: {error}
 
-        and the following sql is the original format of the rewritten SQL, you can read it to know about the original schema info.
-        Notice that you should only correct the rewritten_sql syntax error, do not make it similar to original sql, and DO NOT CONTAIN "EXPLAIN (FORMAT JSON)" PART  !!!
+        # and the following sql is the original format of the rewritten SQL, you can read it to know about the original schema info.
+        # Notice that you should only correct the rewritten_sql syntax error, do not make it similar to original sql, and DO NOT CONTAIN "EXPLAIN (FORMAT JSON)" PART  !!!
         
-        <original_sql>
-        {original_sql}
+        # <original_sql>
+        # {original_sql}
 
-        please strictly follow the format provided below:
-        [format]
-        </analysis>
+        # please strictly follow the format provided below:
+        # [format]
+        # </analysis>
 
-        </analysis>
+        # </analysis>
     
-        </corrected_sql>
-            // Fill in the corrected SQL here.
-        </corrected_sql>
+        # </corrected_sql>
+        #     // Fill in the corrected SQL here.
+        # </corrected_sql>
 
-        """)
+        # """)
         
         response = await self.llm.get_GPT_response_async(
             prompt=prompt
         )
         
-        corrected_sql = await self.extract_corrected_sql_content(response)
+        corrected_sql = self.extract_corrected_sql_content(response)
         return corrected_sql
     
-    async def extract_analysis_content(self, text: str) -> str:
+    def extract_analysis_content(self, text: str) -> str:
         """
         提取文本中从 </analysis> 到 </analysis> 之间的内容。
         """
@@ -570,34 +578,29 @@ class AssistantAgent(Agent):
         return ""
 
     
-    async def  generate_report(self, ori_explain_result: list,  imp_explain_result: list) -> str:
+    async def  generate_report(self, ori_explain_result: list, re_explain_result: list, imp_explain_result: list) -> str:
         prompt = textwrap.dedent(f"""
         <Mission>
-        You are a professional database administrator. Your mission is to generate a detailed report based on the original EXPLAIN analysis, and the rewritten EXPLAIN analysis.
+        You are a professional database administrator. Your mission is to generate a detailed report based on the original EXPLAIN analysis, the rewritten EXPLAIN analysis, and the enhanced EXPLAIN analysis.
         You should consider and compare them with a report that contains these parts:
         
 
-        1. Cost Changes:
-         - Total cost change percentage
-         - Cost change of the most expensive node
+        1. Cost Efficiency:
+            - Overall cost change percentage  
+            - Cost change at the most expensive plan node  
+
+        2. Plan Characteristics:
+            - Scan type transitions (e.g., Seq Scan → Index Scan)  
+            - Join algorithm refinements (e.g., Hash Join → Merge Join)  
+            - Elimination of explicit sorting and reduction of intermediate result sets   
+                                 
+        3. Resource Utilization:
+            - Memory usage (changes in Hash/Buffer nodes)
+            - Worker count adjustment
         
-        2. Execution Strategy Changes:
-         - Scan type improvement (Seq Scan -> Index Scan)
-         - Join algorithm optimization (Hash Join -> Merge Join)
-         - Parallelism adjustment
-        
-        3. Resource Consumption Changes:
-         - Memory usage (changes in Hash/Buffer nodes)
-         - Worker count adjustment
-        
-        4.Improved Filtering Efficiency:
-         - Increased accuracy of post-filter row estimates
-         - Predicate pushdown scenarios
-        
-        5. Key Optimization Indicators:
-         - Elimination of explicit sorting
-         - Reduction of intermediate result sets
-         - Improved parallelism utilization
+        4. Other Improvements:
+                                 
+
         Note that in your report, there is no need to copy the EXPLAIN result one more, just analyze and compare them in NLP.
                                  
         Your answer should follow the format below:
@@ -612,7 +615,10 @@ class AssistantAgent(Agent):
         <ori_explain_result>
         {ori_explain_result}
 
-        <rew_explain_result>
+        <re_explain_result>
+        {re_explain_result}
+
+        <imp_explain_result>
         {imp_explain_result}
 
         """)

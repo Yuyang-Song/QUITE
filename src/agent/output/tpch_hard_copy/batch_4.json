@@ -1,0 +1,22 @@
+[
+    {
+        "id": "4",
+        "original_query": "select s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment from part, supplier, partsupp, nation, region where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = 6 and p_type like '%NICKEL' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = 'EUROPE' and ps_supplycost = ( select min(ps_supplycost) from partsupp, supplier, nation, region where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = 'EUROPE' ) order by s_acctbal desc, n_name, s_name, p_partkey limit 100;",
+        "rewritten_query": "WITH filtered_parts AS (\n  SELECT p_partkey, p_mfgr\n  FROM part\n  WHERE p_size = 6 AND p_type LIKE '%NICKEL'\n),\neuropean_nations AS (\n  SELECT n_nationkey, n_name\n  FROM nation\n  JOIN region ON n_regionkey = r_regionkey\n  WHERE r_name = 'EUROPE'\n),\neuropean_suppliers AS (\n  SELECT s_suppkey, s_name, s_address, s_phone, s_acctbal, s_comment, n_name, s_nationkey\n  FROM supplier\n  JOIN european_nations ON s_nationkey = n_nationkey\n),\nmin_supplycost_per_part AS (\n  SELECT \n    p_partkey, \n    MIN(ps_supplycost) AS min_ps_supplycost\n  FROM partsupp\n  JOIN european_suppliers ON ps_suppkey = s_suppkey\n  JOIN filtered_parts ON ps_partkey = p_partkey\n  GROUP BY p_partkey\n)\nSELECT \n  s.s_acctbal, \n  s.s_name, \n  s.n_name, \n  p.p_partkey, \n  p.p_mfgr, \n  s.s_address, \n  s.s_phone, \n  s.s_comment\nFROM filtered_parts p\nJOIN partsupp ps ON p.p_partkey = ps.ps_partkey\nJOIN european_suppliers s ON ps.ps_suppkey = s.s_suppkey\nJOIN min_supplycost_per_part m ON p.p_partkey = m.p_partkey \n  AND ps.ps_supplycost = m.min_ps_supplycost\nORDER BY \n  s.s_acctbal DESC, \n  s.n_name, \n  s.s_name, \n  p.p_partkey\nLIMIT 100;",
+        "time_cost": 327.1928460597992,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Replaced correlated subquery with CTEs to compute minimum supply cost per part only once"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Pre-filtered European nations and suppliers using CTEs to reduce join sizes"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Used explicit JOIN syntax instead of comma-separated tables in FROM clause"
+            }
+        ]
+    }
+]

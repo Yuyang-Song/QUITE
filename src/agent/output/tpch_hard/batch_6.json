@@ -1,0 +1,26 @@
+[
+    {
+        "id": "6",
+        "original_query": "select s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment from part, supplier, partsupp, nation, region where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = 3 and p_type like '%NICKEL' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = 'AMERICA' and ps_supplycost = ( select min(ps_supplycost) from partsupp, supplier, nation, region where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = 'AMERICA' ) order by s_acctbal desc, n_name, s_name, p_partkey limit 100;",
+        "rewritten_query": "WITH america_suppliers AS (\n    SELECT \n        s_suppkey, \n        s_acctbal, \n        s_name, \n        s_address, \n        s_phone, \n        s_comment, \n        s_nationkey\n    FROM supplier\n    JOIN nation ON supplier.s_nationkey = nation.n_nationkey\n    JOIN region ON nation.n_regionkey = region.r_regionkey\n    WHERE region.r_name = 'AMERICA'\n),\nmin_costs AS (\n    SELECT \n        ps_partkey, \n        MIN(ps_supplycost) AS min_supplycost\n    FROM partsupp\n    JOIN america_suppliers ON partsupp.ps_suppkey = america_suppliers.s_suppkey\n    GROUP BY ps_partkey\n)\nSELECT \n    a.s_acctbal, \n    a.s_name, \n    n.n_name, \n    p.p_partkey, \n    p.p_mfgr, \n    a.s_address, \n    a.s_phone, \n    a.s_comment\nFROM part p\nJOIN partsupp ps ON p.p_partkey = ps.ps_partkey\nJOIN america_suppliers a ON ps.ps_suppkey = a.s_suppkey\nJOIN nation n ON a.s_nationkey = n.n_nationkey\nJOIN min_costs mc ON \n    mc.ps_partkey = p.p_partkey \n    AND ps.ps_supplycost = mc.min_supplycost\nWHERE \n    p.p_size = 3 \n    AND p.p_type LIKE '%NICKEL'\nORDER BY \n    a.s_acctbal DESC, \n    n.n_name, \n    a.s_name, \n    p.p_partkey\nLIMIT 100;",
+        "time_cost": 413.5141067504883,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Replaced correlated subquery with CTEs to avoid repeated execution"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Created america_suppliers CTE to avoid redundant joins to nation and region tables"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Pre-computed minimum supply costs per part with min_costs CTE"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Used table aliases to improve readability and maintainability"
+            }
+        ]
+    }
+]

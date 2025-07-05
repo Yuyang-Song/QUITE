@@ -1,0 +1,26 @@
+[
+    {
+        "id": "56",
+        "original_query": "select s_name, s_address from supplier, nation where s_suppkey in ( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'spring%' ) and ps_availqty > ( select 0.5 * sum(l_quantity) from lineitem where l_partkey = ps_partkey and l_suppkey = ps_suppkey and l_shipdate >= date '1997-01-01' and l_shipdate < date '1997-01-01' + interval '1' year ) ) and s_nationkey = n_nationkey and n_name = 'KENYA' order by s_name;",
+        "rewritten_query": "WITH parts_filtered AS (\n    SELECT p_partkey\n    FROM part\n    WHERE p_name LIKE 'spring%'\n), lineitem_agg AS (\n    SELECT l_partkey, l_suppkey, 0.5 * SUM(l_quantity) AS half_sum_qty\n    FROM lineitem\n    WHERE l_shipdate >= DATE '1997-01-01'\n      AND l_shipdate < DATE '1997-01-01' + INTERVAL '1' YEAR\n    GROUP BY l_partkey, l_suppkey\n)\nSELECT s_name, s_address\nFROM supplier\nJOIN nation ON supplier.s_nationkey = nation.n_nationkey AND n_name = 'KENYA'\nWHERE EXISTS (\n    SELECT 1\n    FROM partsupp\n    INNER JOIN parts_filtered ON partsupp.ps_partkey = parts_filtered.p_partkey\n    INNER JOIN lineitem_agg \n        ON partsupp.ps_partkey = lineitem_agg.l_partkey \n        AND partsupp.ps_suppkey = lineitem_agg.l_suppkey\n    WHERE partsupp.ps_availqty > lineitem_agg.half_sum_qty\n      AND partsupp.ps_suppkey = supplier.s_suppkey\n)\nORDER BY s_name;",
+        "time_cost": 320.62038230895996,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Replaced nested correlated subqueries with CTEs to precompute filtered parts and lineitem aggregates"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Converted implicit joins to explicit JOIN syntax for better readability and optimization"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Changed IN clause to EXISTS for better performance with correlated subqueries"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Moved filtering conditions to appropriate CTEs to reduce the amount of data processed in later stages"
+            }
+        ]
+    }
+]

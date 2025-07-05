@@ -1,0 +1,22 @@
+[
+    {
+        "id": "57",
+        "original_query": "select  sum(cs_ext_discount_amt)  as \"excess discount amount\" from    catalog_sales    ,item    ,date_dim where (i_manufact_id in (295, 363, 372, 688, 719) or i_manager_id BETWEEN 11 and 40) and i_item_sk = cs_item_sk and d_date between '2000-02-27' and         cast('2000-02-27' as date) + interval '90' day and d_date_sk = cs_sold_date_sk and cs_ext_discount_amt      > (          select             1.3 * avg(cs_ext_discount_amt)          from             catalog_sales            ,date_dim          where               cs_item_sk = i_item_sk           and d_date between '2000-02-27' and                              cast('2000-02-27' as date) + interval '90' day           and d_date_sk = cs_sold_date_sk           and cs_list_price between 260 and 289           and cs_sales_price / cs_list_price BETWEEN 75 * 0.01 AND 95 * 0.01       ) order by sum(cs_ext_discount_amt) limit 100;",
+        "rewritten_query": "WITH item_avg_discount AS (\n    SELECT \n        i.i_item_sk,\n        1.3 * AVG(cs.cs_ext_discount_amt) AS threshold_discount\n    FROM \n        catalog_sales cs\n        JOIN date_dim d ON d.d_date_sk = cs.cs_sold_date_sk\n        JOIN item i ON i.i_item_sk = cs.cs_item_sk\n    WHERE \n        d.d_date BETWEEN '2000-02-27' AND cast('2000-02-27' as date) + interval '90' day\n        AND cs.cs_list_price BETWEEN 260 AND 289\n        AND cs.cs_sales_price / cs.cs_list_price BETWEEN 75 * 0.01 AND 95 * 0.01\n    GROUP BY \n        i.i_item_sk\n)\nSELECT \n    SUM(cs.cs_ext_discount_amt) AS \"excess discount amount\"\nFROM \n    catalog_sales cs\n    JOIN item i ON i.i_item_sk = cs.cs_item_sk\n    JOIN date_dim d ON d.d_date_sk = cs.cs_sold_date_sk\n    JOIN item_avg_discount iad ON iad.i_item_sk = i.i_item_sk\nWHERE \n    (i.i_manufact_id IN (295, 363, 372, 688, 719) OR i.i_manager_id BETWEEN 11 AND 40)\n    AND d.d_date BETWEEN '2000-02-27' AND cast('2000-02-27' as date) + interval '90' day\n    AND cs.cs_ext_discount_amt > iad.threshold_discount\nORDER BY \n    SUM(cs.cs_ext_discount_amt)\nLIMIT 100;",
+        "time_cost": 356.5636899471283,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Replaced the correlated subquery with a CTE to avoid executing the subquery for each row of the outer query"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Used explicit JOIN syntax instead of comma-separated tables in the FROM clause"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Pushed the item filtering condition into the CTE to reduce the number of rows processed"
+            }
+        ]
+    }
+]

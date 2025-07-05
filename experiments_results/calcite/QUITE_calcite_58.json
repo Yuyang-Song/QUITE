@@ -1,0 +1,723 @@
+[
+    {
+        "id": 1,
+        "original_query": "SELECT t.EXPR0, 2 + 3 AS f1, MAX(t.FIVE) FROM EMP, (VALUES (4, 5)) AS t (EXPR0, FIVE) GROUP BY t.EXPR0, 2 + 3",
+        "rewritten_query": "SELECT t.EXPR0, 2 + 3 AS f1, MAX(t.FIVE) FROM EMP, (VALUES (4, 5)) AS t (EXPR0, FIVE) GROUP BY t.EXPR0, 2 + 3",
+        "time_cost": 977.9871594905853,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 2,
+        "original_query": "SELECT NAME FROM DEPT WHERE EXISTS (SELECT 1 FROM (SELECT 2 * DEPTNO AS f0 FROM DEPT GROUP BY 2 * DEPTNO) AS t0 WHERE DEPT.DEPTNO = t0.f0)",
+        "rewritten_query": "SELECT NAME FROM DEPT WHERE EXISTS (SELECT 1 FROM (SELECT 2 * DEPTNO AS f0 FROM DEPT GROUP BY 2 * DEPTNO) AS t0 WHERE DEPT.DEPTNO = t0.f0)",
+        "time_cost": 1448.5261495113373,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 3,
+        "original_query": "SELECT EMP.SAL + BONUS.COMM, SUM(BONUS.SAL + BONUS.SAL + 100) OVER (PARTITION BY BONUS.JOB RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM EMP INNER JOIN BONUS ON EMP.ENAME = BONUS.ENAME AND EMP.DEPTNO = 10",
+        "rewritten_query": "WITH base AS (\n    SELECT \n        e.SAL AS emp_sal, \n        b.COMM, \n        b.SAL AS bonus_sal, \n        b.JOB\n    FROM EMP e\n    INNER JOIN BONUS b ON e.ENAME = b.ENAME\n    WHERE e.DEPTNO = 10\n),\nagg AS (\n    SELECT \n        JOB, \n        SUM(2 * bonus_sal + 100) AS total\n    FROM base\n    GROUP BY JOB\n)\nSELECT \n    base.emp_sal + base.COMM,\n    agg.total\nFROM base\nJOIN agg ON base.JOB = agg.JOB",
+        "time_cost": 629.0950424671173,
+        "rewrite_suggestion": [
+            {
+                "group": "Other",
+                "produced_suggestion": "Replace window function with GROUP BY and JOIN to avoid expensive sort operation"
+            },
+            {
+                "group": "Constant_folding",
+                "produced_suggestion": "Simplify BONUS.SAL + BONUS.SAL + 100 to 2 * BONUS.SAL + 100"
+            }
+        ]
+    },
+    {
+        "id": 4,
+        "original_query": "SELECT NAME FROM (SELECT DEPTNO, NAME FROM DEPT WHERE EXISTS (SELECT 1 FROM (SELECT 2 * DEPTNO AS f0 FROM DEPT GROUP BY 2 * DEPTNO) AS t5 WHERE DEPTNO = t5.f0)) AS t2",
+        "rewritten_query": "SELECT NAME\nFROM DEPT\nWHERE DEPTNO IN (SELECT 2 * DEPTNO FROM DEPT)",
+        "time_cost": 518.3891804218292,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Simplified the complex nested EXISTS subquery with GROUP BY into an equivalent IN predicate that achieves the same result without unnecessary grouping"
+            }
+        ]
+    },
+    {
+        "id": 5,
+        "original_query": "SELECT * FROM (SELECT UPPER(SUBSTRING(X FROM 1 FOR 2) || SUBSTRING(X FROM 3)) AS U, SUBSTRING(X FROM 1 FOR 1) AS S FROM (SELECT * FROM (SELECT 'table' AS X FROM (VALUES (TRUE)) AS t (EXPR0) UNION SELECT 'view' AS EXPR0 FROM (VALUES (TRUE)) AS t (EXPR0)) AS t UNION SELECT 'foreign table' AS EXPR0 FROM (VALUES (TRUE)) AS t (EXPR0)) AS t6) AS t7 WHERE U = 'TABLE'",
+        "rewritten_query": "SELECT \n    UPPER(X) AS U, \n    SUBSTRING(X FROM 1 FOR 1) AS S \nFROM (VALUES ('table'), ('view'), ('foreign table')) AS t(X)\nWHERE UPPER(X) = 'TABLE'",
+        "time_cost": 407.73277759552,
+        "rewrite_suggestion": [
+            {
+                "group": "Constant_folding",
+                "produced_suggestion": "Replace complex nested subqueries and UNIONs with a simple VALUES clause"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Simplify UPPER(SUBSTRING(X FROM 1 FOR 2) || SUBSTRING(X FROM 3)) to UPPER(X)"
+            }
+        ]
+    },
+    {
+        "id": 6,
+        "original_query": "SELECT t6.ENAME FROM (SELECT JOB FROM EMP WHERE ENAME = 'A' GROUP BY JOB) AS t5 LEFT JOIN (SELECT ENAME, JOB FROM EMP GROUP BY ENAME, JOB) AS t6 ON t5.JOB = t6.JOB GROUP BY t6.ENAME",
+        "rewritten_query": "SELECT DISTINCT E.ENAME\nFROM EMP E\nWHERE EXISTS (\n  SELECT 1 \n  FROM EMP A \n  WHERE A.ENAME = 'A' \n    AND A.JOB = E.JOB\n)",
+        "time_cost": 666.8592116832733,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Replace the complex LEFT JOIN between two derived tables with an EXISTS semi-join to avoid unnecessary intermediate result sets"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Use correlated subquery with EXISTS to directly check for matching jobs instead of building large intermediate tables"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Replace final GROUP BY with DISTINCT to achieve the same result with clearer intent"
+            }
+        ]
+    },
+    {
+        "id": 7,
+        "original_query": "SELECT t2.EMPNO, t2.ENAME, t2.JOB, t2.MGR, t2.HIREDATE, t2.SAL, t2.COMM, t2.DEPTNO, t2.SLACKER, t3.DEPTNO AS DEPTNO0, t3.NAME FROM (SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, DEPTNO, SLACKER FROM EMP ORDER BY SAL) AS t2 INNER JOIN (SELECT * FROM DEPT) AS t3 ON t2.DEPTNO = t3.DEPTNO ORDER BY t2.SAL FETCH NEXT 10 ROWS ONLY",
+        "rewritten_query": "SELECT t2.EMPNO, t2.ENAME, t2.JOB, t2.MGR, t2.HIREDATE, t2.SAL, t2.COMM, t2.DEPTNO, t2.SLACKER, t3.DEPTNO AS DEPTNO0, t3.NAME \nFROM (\n    SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, DEPTNO, SLACKER \n    FROM EMP \n    ORDER BY SAL \n    FETCH FIRST 10 ROWS ONLY\n) t2 \nINNER JOIN DEPT t3 ON t2.DEPTNO = t3.DEPTNO \nORDER BY t2.SAL",
+        "time_cost": 292.2349970340729,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Moved FETCH FIRST 10 ROWS ONLY to the inner query to limit the number of rows before joining"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Removed unnecessary subquery for DEPT table"
+            }
+        ]
+    },
+    {
+        "id": 8,
+        "original_query": "SELECT * FROM (SELECT * FROM EMP WHERE DEPTNO = EMPNO) AS t1 INNER JOIN DEPT AS DEPT0 ON t1.DEPTNO = DEPT0.DEPTNO",
+        "rewritten_query": "SELECT *\nFROM EMP\nJOIN DEPT AS DEPT0 ON EMP.DEPTNO = DEPT0.DEPTNO\nWHERE EMP.DEPTNO = EMP.EMPNO;",
+        "time_cost": 331.14705657958984,
+        "rewrite_suggestion": [
+            {
+                "group": "Other",
+                "produced_suggestion": "Remove the subquery and move the condition to the WHERE clause. This improves readability and might help the optimizer by simplifying the query structure."
+            }
+        ]
+    },
+    {
+        "id": 9,
+        "original_query": "SELECT t2.EMPNO, t2.ENAME, t2.JOB, t2.MGR, t2.HIREDATE, t2.SAL, t2.COMM, t2.DEPTNO, t2.SLACKER, t3.DEPTNO AS DEPTNO0, t3.NAME FROM (SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, DEPTNO, SLACKER FROM EMP ORDER BY SAL FETCH NEXT 10 ROWS ONLY) AS t2 LEFT JOIN (SELECT * FROM DEPT) AS t3 ON t2.DEPTNO = t3.DEPTNO ORDER BY t2.SAL FETCH NEXT 10 ROWS ONLY",
+        "rewritten_query": "SELECT t2.EMPNO, t2.ENAME, t2.JOB, t2.MGR, t2.HIREDATE, t2.SAL, t2.COMM, t2.DEPTNO, t2.SLACKER, t3.DEPTNO AS DEPTNO0, t3.NAME FROM (SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, DEPTNO, SLACKER FROM EMP ORDER BY SAL FETCH NEXT 10 ROWS ONLY) AS t2 LEFT JOIN (SELECT * FROM DEPT) AS t3 ON t2.DEPTNO = t3.DEPTNO ORDER BY t2.SAL FETCH NEXT 10 ROWS ONLY",
+        "time_cost": 1092.5895731449127,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 10,
+        "original_query": "SELECT SUM(100) OVER (PARTITION BY DEPTNO, SAL ORDER BY SAL RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS COL1, SUM(100) OVER (PARTITION BY SAL ORDER BY DEPTNO RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS COL2, SUM(SAL) OVER (PARTITION BY DEPTNO ORDER BY SAL RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS COL3 FROM EMP WHERE SAL = 5000",
+        "rewritten_query": "SELECT SUM(100) OVER (PARTITION BY DEPTNO, SAL ORDER BY SAL RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS COL1, SUM(100) OVER (PARTITION BY SAL ORDER BY DEPTNO RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS COL2, SUM(SAL) OVER (PARTITION BY DEPTNO ORDER BY SAL RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS COL3 FROM EMP WHERE SAL = 5000",
+        "time_cost": 1795.6168632507324,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 11,
+        "original_query": "SELECT t0.JOB FROM (SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, DEPTNO, SLACKER, DEPTNO + EMPNO AS f9 FROM EMP WHERE ENAME = 'A') AS t0 FULL JOIN (SELECT DEPTNO, NAME, DEPTNO + 5 AS f2 FROM DEPT) AS t1 ON t0.JOB = t1.NAME AND t0.f9 = t1.f2 GROUP BY t0.JOB",
+        "rewritten_query": "SELECT t0.JOB FROM (SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, DEPTNO, SLACKER, DEPTNO + EMPNO AS f9 FROM EMP WHERE ENAME = 'A') AS t0 FULL JOIN (SELECT DEPTNO, NAME, DEPTNO + 5 AS f2 FROM DEPT) AS t1 ON t0.JOB = t1.NAME AND t0.f9 = t1.f2 GROUP BY t0.JOB",
+        "time_cost": 565.3270785808563,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 12,
+        "original_query": "SELECT t6.NAME FROM (SELECT JOB FROM EMP WHERE ENAME = 'A' GROUP BY JOB) AS t5 LEFT JOIN (SELECT NAME FROM DEPT GROUP BY NAME) AS t6 ON t5.JOB = t6.NAME GROUP BY t6.NAME",
+        "rewritten_query": "SELECT DISTINCT d.NAME\nFROM (SELECT DISTINCT JOB FROM EMP WHERE ENAME = 'A') e\nLEFT JOIN (SELECT DISTINCT NAME FROM DEPT) d ON e.JOB = d.NAME;",
+        "time_cost": 651.7976424694061,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Replace GROUP BY with DISTINCT in subqueries and main query for equivalent but more efficient execution"
+            }
+        ]
+    },
+    {
+        "id": 13,
+        "original_query": "SELECT t8.NAME FROM (SELECT JOB, DEPTNO + EMPNO AS f9 FROM EMP WHERE ENAME = 'A' GROUP BY JOB, DEPTNO + EMPNO) AS t6 LEFT JOIN (SELECT NAME, DEPTNO + 5 AS f2 FROM DEPT GROUP BY NAME, DEPTNO + 5) AS t8 ON t6.JOB = t8.NAME AND t6.f9 = t8.f2 GROUP BY t8.NAME",
+        "rewritten_query": "SELECT DISTINCT d.NAME\nFROM EMP e\nLEFT JOIN DEPT d \n    ON e.JOB = d.NAME \n    AND (e.DEPTNO + e.EMPNO) = (d.DEPTNO + 5)\nWHERE e.ENAME = 'A';",
+        "time_cost": 497.9790692329407,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Eliminated unnecessary derived tables and directly joined the base tables"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Removed redundant GROUP BY operations from subqueries"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Replaced outer GROUP BY with DISTINCT for better readability while maintaining the same functionality"
+            }
+        ]
+    },
+    {
+        "id": 14,
+        "original_query": "SELECT t6.JOB, t8.NAME FROM (SELECT JOB, DEPTNO + EMPNO AS f9 FROM EMP WHERE ENAME = 'A' GROUP BY JOB, DEPTNO + EMPNO) AS t6 LEFT JOIN (SELECT NAME, DEPTNO + 5 AS f2 FROM DEPT GROUP BY NAME, DEPTNO + 5) AS t8 ON t6.JOB = t8.NAME AND t6.f9 = t8.f2 GROUP BY t6.JOB, t8.NAME",
+        "rewritten_query": "WITH t6 AS (\n   SELECT JOB, DEPTNO + EMPNO AS f9\n   FROM EMP\n   WHERE ENAME = 'A'\n   GROUP BY JOB, DEPTNO + EMPNO\n)\nSELECT t6.JOB, t8.NAME\nFROM t6\nLEFT JOIN (\n   SELECT NAME, DEPTNO + 5 AS f2\n   FROM DEPT\n   WHERE NAME IN (SELECT JOB FROM t6)\n   GROUP BY NAME, DEPTNO + 5\n) t8 ON t6.JOB = t8.NAME AND t6.f9 = t8.f2\nGROUP BY t6.JOB, t8.NAME",
+        "time_cost": 1186.4707610607147,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Filter the DEPT table early by using a semi-join to only consider department names that match jobs from the EMP table"
+            }
+        ]
+    },
+    {
+        "id": 15,
+        "original_query": "SELECT COUNT(C) FILTER (WHERE g_0_f_1), COUNT(D) FILTER (WHERE g_0_f_0) FROM (SELECT SAL > 1000 AS C, SAL < 500 AS D, GROUPING(SAL > 1000, SAL < 500) = 0 AND SAL > 1000 AS g_0_f_0, GROUPING(SAL > 1000, SAL < 500) = 0 AND SAL < 500 AS g_0_f_1 FROM EMP GROUP BY SAL > 1000, SAL < 500) AS t3",
+        "rewritten_query": "SELECT COUNT(C) FILTER (WHERE g_0_f_1), COUNT(D) FILTER (WHERE g_0_f_0) FROM (SELECT SAL > 1000 AS C, SAL < 500 AS D, GROUPING(SAL > 1000, SAL < 500) = 0 AND SAL > 1000 AS g_0_f_0, GROUPING(SAL > 1000, SAL < 500) = 0 AND SAL < 500 AS g_0_f_1 FROM EMP GROUP BY SAL > 1000, SAL < 500) AS t3",
+        "time_cost": 2215.4377064704895,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 16,
+        "original_query": "SELECT * FROM (SELECT DEPTNO, NAME FROM DEPT WHERE EXISTS (SELECT 1 FROM (SELECT DEPTNO FROM EMP) AS t4 WHERE DEPTNO = t4.DEPTNO) ORDER BY DEPTNO) AS t3 ORDER BY DEPTNO OFFSET 2 ROWS FETCH NEXT 10 ROWS ONLY",
+        "rewritten_query": "SELECT DEPTNO, NAME\nFROM DEPT\nWHERE EXISTS (SELECT 1 FROM EMP WHERE EMP.DEPTNO = DEPT.DEPTNO)\nORDER BY DEPTNO\nOFFSET 2 ROWS FETCH NEXT 10 ROWS ONLY;",
+        "time_cost": 333.215478181839,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Removed redundant derived table in EXISTS clause and properly correlated the subquery"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Eliminated redundant nested query and duplicate ORDER BY clause"
+            }
+        ]
+    },
+    {
+        "id": 17,
+        "original_query": "SELECT t0.SAL + t1.COMM, SUM(t1.EXPR0) OVER (PARTITION BY t1.JOB RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING) FROM (SELECT ENAME, SAL, DEPTNO = 10 AS EXPR0 FROM EMP) AS t0 INNER JOIN (SELECT ENAME, JOB, COMM, SAL + SAL + 100 AS EXPR0 FROM BONUS) AS t1 ON t0.ENAME = t1.ENAME AND t0.EXPR0",
+        "rewritten_query": "SELECT \n    e.SAL + b.COMM, \n    SUM(2 * b.SAL + 100) OVER (PARTITION BY b.JOB) \nFROM \n    EMP e\nINNER JOIN \n    BONUS b\nON e.ENAME = b.ENAME\nWHERE e.DEPTNO = 10",
+        "time_cost": 424.545695066452,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Moved the DEPTNO = 10 filter from the ON clause to the WHERE clause in the t0 subquery to reduce the number of rows early"
+            },
+            {
+                "group": "Constant_folding",
+                "produced_suggestion": "Simplified the expression SAL + SAL + 100 to 2 * SAL + 100"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Simplified the window function by removing the redundant RANGE BETWEEN UNBOUNDED PRECEDING AND UNBOUNDED FOLLOWING clause"
+            }
+        ]
+    },
+    {
+        "id": 18,
+        "original_query": "SELECT t2.JOB, t2.MIN_SAL, t2.MIN_DEPTNO, CAST(t2.SUM_SAL_2 * t3.f1 AS INTEGER) + 1 AS SUM_SAL_PLUS, t2.MAX_SAL, CAST(t2.SUM_SAL_2 * t3.f1 AS INTEGER) AS SUM_SAL_2, t2.COUNT_SAL * t3.f1 AS COUNT_SAL, t2.COUNT_MGR * t3.f1 AS COUNT_MGR FROM (SELECT JOB, MIN(SAL) AS MIN_SAL, MIN(DEPTNO) AS MIN_DEPTNO, SUM(SAL) AS SUM_SAL_2, MAX(SAL) AS MAX_SAL, COUNT(*) AS COUNT_SAL, COUNT(MGR) AS COUNT_MGR FROM EMP GROUP BY JOB) AS t2 INNER JOIN (SELECT NAME, COUNT(*) AS f1 FROM DEPT GROUP BY NAME) AS t3 ON t2.JOB = t3.NAME",
+        "rewritten_query": "SELECT t2.JOB, t2.MIN_SAL, t2.MIN_DEPTNO, CAST(t2.SUM_SAL_2 * t3.f1 AS INTEGER) + 1 AS SUM_SAL_PLUS, t2.MAX_SAL, CAST(t2.SUM_SAL_2 * t3.f1 AS INTEGER) AS SUM_SAL_2, t2.COUNT_SAL * t3.f1 AS COUNT_SAL, t2.COUNT_MGR * t3.f1 AS COUNT_MGR FROM (SELECT JOB, MIN(SAL) AS MIN_SAL, MIN(DEPTNO) AS MIN_DEPTNO, SUM(SAL) AS SUM_SAL_2, MAX(SAL) AS MAX_SAL, COUNT(*) AS COUNT_SAL, COUNT(MGR) AS COUNT_MGR FROM EMP GROUP BY JOB) AS t2 INNER JOIN (SELECT NAME, COUNT(*) AS f1 FROM DEPT GROUP BY NAME) AS t3 ON t2.JOB = t3.NAME",
+        "time_cost": 1539.733702659607,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 19,
+        "original_query": "SELECT EMP0.ENAME FROM (SELECT * FROM EMP WHERE ENAME = 'A') AS t0 LEFT JOIN EMP AS EMP0 ON t0.JOB = EMP0.JOB GROUP BY EMP0.ENAME",
+        "rewritten_query": "SELECT EMP0.ENAME\nFROM (SELECT DISTINCT JOB FROM EMP WHERE ENAME = 'A') AS t0\nLEFT JOIN EMP AS EMP0 ON t0.JOB = EMP0.JOB\nGROUP BY EMP0.ENAME;",
+        "time_cost": 509.1697449684143,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Optimize the join by selecting only the necessary columns (JOB) from the subquery and using DISTINCT to reduce the number of rows in the left side of the join"
+            }
+        ]
+    },
+    {
+        "id": 20,
+        "original_query": "SELECT t0.JOB FROM (SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, DEPTNO, SLACKER, DEPTNO + EMPNO AS f9 FROM EMP WHERE ENAME = 'A') AS t0 LEFT JOIN (SELECT DEPTNO, NAME, DEPTNO + 5 AS f2 FROM DEPT) AS t1 ON t0.JOB = t1.NAME AND t0.f9 = t1.f2 GROUP BY t0.JOB",
+        "rewritten_query": "SELECT JOB\nFROM EMP\nWHERE ENAME = 'A'\nGROUP BY JOB",
+        "time_cost": 360.83207631111145,
+        "rewrite_suggestion": [
+            {
+                "group": "Other",
+                "produced_suggestion": "Remove unnecessary LEFT JOIN since it doesn't affect the result set and only adds overhead"
+            }
+        ]
+    },
+    {
+        "id": 21,
+        "original_query": "SELECT t0.SAL FROM (SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, SLACKER, SAL AS SAL0, SAL = 4 AS f9 FROM EMPNULLABLES WHERE DEPTNO = 20 AND SAL > 1000) AS t0 INNER JOIN (SELECT t2.SAL, t5.SAL AS SAL0, t5.f9 FROM (SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, SLACKER FROM EMPNULLABLES WHERE DEPTNO = 20 AND SAL > 1000) AS t2 INNER JOIN (SELECT SAL, SAL = 4 AS f9 FROM EMPNULLABLES WHERE DEPTNO = 20 AND SAL > 1000 GROUP BY SAL, SAL = 4) AS t5 ON t2.SAL = t5.SAL OR t5.f9 GROUP BY t2.SAL, t5.SAL, t5.f9 HAVING t5.SAL = t2.SAL) AS t8 ON t0.SAL = t8.SAL0 AND t0.f9 = t8.f9",
+        "rewritten_query": "SELECT SAL \nFROM EMPNULLABLES \nWHERE DEPTNO = 20 AND SAL > 1000",
+        "time_cost": 518.0960249900818,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Simplified complex joins and predicates to a direct table scan"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Eliminated unnecessary self-joins that were producing the same result set"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Removed redundant GROUP BY operations and derived tables"
+            }
+        ]
+    },
+    {
+        "id": 22,
+        "original_query": "SELECT SUM(CAST(t3.f1 * t4.SAL AS INTEGER)) FROM (SELECT SAL, COUNT(*) AS f1 FROM EMP GROUP BY SAL) AS t3 INNER JOIN (SELECT SAL FROM EMP GROUP BY SAL) AS t4 ON t3.SAL = t4.SAL",
+        "rewritten_query": "SELECT SUM(CAST(f1 * SAL AS INTEGER)) \nFROM (\n    SELECT SAL, COUNT(*) AS f1 \n    FROM EMP \n    GROUP BY SAL\n) AS t;",
+        "time_cost": 478.987096786499,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Eliminated redundant subquery and join by using a single derived table"
+            }
+        ]
+    },
+    {
+        "id": 23,
+        "original_query": "SELECT CASE WHEN COALESCE(SUM(t5.f2 * t6.f1), 0) = 0 THEN NULL ELSE COALESCE(SUM(CAST(t5.EXPR0 * t6.f1 AS INTEGER)), 0) END FROM (SELECT JOB, COALESCE(SUM(SAL), 0) AS EXPR0, COUNT(*) AS f2 FROM EMP WHERE ENAME = 'A' GROUP BY JOB) AS t5 INNER JOIN (SELECT NAME, COUNT(*) AS f1 FROM DEPT GROUP BY NAME) AS t6 ON t5.JOB = t6.NAME",
+        "rewritten_query": "SELECT CASE WHEN COALESCE(SUM(t5.f2 * t6.f1), 0) = 0 THEN NULL ELSE COALESCE(SUM(CAST(t5.EXPR0 * t6.f1 AS INTEGER)), 0) END FROM (SELECT JOB, COALESCE(SUM(SAL), 0) AS EXPR0, COUNT(*) AS f2 FROM EMP WHERE ENAME = 'A' GROUP BY JOB) AS t5 INNER JOIN (SELECT NAME, COUNT(*) AS f1 FROM DEPT GROUP BY NAME) AS t6 ON t5.JOB = t6.NAME",
+        "time_cost": 2183.13876414299,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 24,
+        "original_query": "SELECT * FROM (SELECT DEPT.DEPTNO, DEPT.NAME FROM DEPT INNER JOIN (SELECT DEPTNO FROM EMP GROUP BY DEPTNO) AS t0 ON DEPT.DEPTNO = t0.DEPTNO) AS t1 WHERE t1.DEPTNO <= 10",
+        "rewritten_query": "SELECT DEPT.DEPTNO, DEPT.NAME\nFROM DEPT\nINNER JOIN (\n    SELECT DEPTNO\n    FROM EMP\n    WHERE DEPTNO <= 10\n    GROUP BY DEPTNO\n) AS t0 ON DEPT.DEPTNO = t0.DEPTNO;",
+        "time_cost": 503.4530906677246,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Push the filter condition DEPTNO <= 10 into the inner subquery to reduce the amount of data processed"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Remove redundant outer query layer since the filter can be applied directly in the subquery"
+            }
+        ]
+    },
+    {
+        "id": 25,
+        "original_query": "SELECT t0.SAL + t1.COMM FROM (SELECT ENAME, SAL, DEPTNO = 10 AS EXPR0 FROM EMP) AS t0 INNER JOIN (SELECT ENAME, COMM FROM BONUS) AS t1 ON t0.ENAME = t1.ENAME AND t0.EXPR0",
+        "rewritten_query": "SELECT e.SAL + b.COMM\nFROM emp e\nJOIN bonus b ON e.ENAME = b.ENAME\nWHERE e.DEPTNO = 10;",
+        "time_cost": 296.20339798927307,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Removed unnecessary derived tables and simplified the join condition by moving the filter to a WHERE clause"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Replaced the boolean expression DEPTNO = 10 AS EXPR0 with a direct filter in the WHERE clause"
+            }
+        ]
+    },
+    {
+        "id": 26,
+        "original_query": "SELECT t5.JOB FROM (SELECT JOB FROM EMP WHERE ENAME = 'A' GROUP BY JOB) AS t5 FULL JOIN (SELECT NAME FROM DEPT GROUP BY NAME) AS t6 ON t5.JOB = t6.NAME GROUP BY t5.JOB",
+        "rewritten_query": "WITH jobs AS (\n    SELECT JOB\n    FROM EMP\n    WHERE ENAME = 'A'\n    GROUP BY JOB\n)\nSELECT JOB\nFROM jobs\nUNION\nSELECT NULL\nWHERE EXISTS (\n    SELECT 1\n    FROM DEPT d\n    LEFT JOIN jobs j ON d.NAME = j.JOB\n    WHERE j.JOB IS NULL\n)",
+        "time_cost": 1496.8249025344849,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Replace the FULL JOIN with a more efficient UNION pattern that avoids the expensive join operation between two aggregated sets"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Use a CTE to materialize the jobs from EMP once and reuse it in both parts of the query"
+            }
+        ]
+    },
+    {
+        "id": 27,
+        "original_query": "SELECT MIN(EXPR0) FILTER (WHERE g_3), COUNT(SAL) FILTER (WHERE g_0_f_1) FROM (SELECT SAL, SUM(COMM) AS EXPR0, GROUPING(SAL, SAL > 1000) = 0 AND SAL > 1000 IS TRUE AS g_0_f_1, GROUPING(SAL, SAL > 1000) = 3 AS g_3 FROM EMP GROUP BY GROUPING SETS((SAL, SAL > 1000), ())) AS t3",
+        "rewritten_query": "SELECT MIN(EXPR0) FILTER (WHERE g_3), COUNT(SAL) FILTER (WHERE g_0_f_1) FROM (SELECT SAL, SUM(COMM) AS EXPR0, GROUPING(SAL, SAL > 1000) = 0 AND SAL > 1000 IS TRUE AS g_0_f_1, GROUPING(SAL, SAL > 1000) = 3 AS g_3 FROM EMP GROUP BY GROUPING SETS((SAL, SAL > 1000), ())) AS t3",
+        "time_cost": 676.376930475235,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 28,
+        "original_query": "SELECT ENAME, SAL, DEPTNO FROM (SELECT ENAME, SAL, DEPTNO FROM EMP GROUP BY ENAME, SAL, DEPTNO HAVING SAL > 5000) AS t4 GROUP BY ROLLUP(ENAME, SAL, DEPTNO)",
+        "rewritten_query": "SELECT ENAME, SAL, DEPTNO\nFROM EMP\nWHERE SAL > 5000\nGROUP BY ROLLUP(ENAME, SAL, DEPTNO)",
+        "time_cost": 327.08512711524963,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Move HAVING condition to WHERE clause for earlier filtering"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Eliminate unnecessary subquery and combine GROUP BY operations"
+            }
+        ]
+    },
+    {
+        "id": 29,
+        "original_query": "SELECT t6.JOB FROM (SELECT JOB, DEPTNO + EMPNO AS f9 FROM EMP WHERE ENAME = 'A' GROUP BY JOB, DEPTNO + EMPNO) AS t6 FULL JOIN (SELECT NAME, DEPTNO + 5 AS f2 FROM DEPT GROUP BY NAME, DEPTNO + 5) AS t8 ON t6.JOB = t8.NAME AND t6.f9 = t8.f2 GROUP BY t6.JOB",
+        "rewritten_query": "SELECT t6.JOB\nFROM (\n    SELECT JOB, DEPTNO + EMPNO AS f9 \n    FROM EMP \n    WHERE ENAME = 'A' \n    GROUP BY JOB, DEPTNO + EMPNO\n) AS t6 \nFULL JOIN (\n    SELECT NAME, DEPTNO + 5 AS f2 \n    FROM DEPT\n) AS t8 \nON t6.JOB = t8.NAME AND t6.f9 = t8.f2 \nGROUP BY t6.JOB",
+        "time_cost": 726.2801320552826,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Removed unnecessary GROUP BY in the DEPT subquery since DEPTNO is likely unique, making (NAME, DEPTNO+5) unique as well"
+            }
+        ]
+    },
+    {
+        "id": 30,
+        "original_query": "SELECT MGR, SUM(SUM_SAL) FROM (SELECT MGR, SUM(SAL) AS SUM_SAL FROM EMP GROUP BY MGR, DEPTNO HAVING DEPTNO = 100) AS t2 GROUP BY MGR",
+        "rewritten_query": "SELECT MGR, SUM(SUM_SAL) FROM (SELECT MGR, SUM(SAL) AS SUM_SAL FROM EMP GROUP BY MGR, DEPTNO HAVING DEPTNO = 100) AS t2 GROUP BY MGR",
+        "time_cost": 789.3637149333954,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 31,
+        "original_query": "SELECT t5.ENAME FROM (SELECT ENAME, JOB FROM EMP WHERE ENAME = 'A' GROUP BY ENAME, JOB) AS t5 LEFT JOIN (SELECT NAME FROM DEPT GROUP BY NAME) AS t6 ON t5.JOB = t6.NAME GROUP BY t5.ENAME",
+        "rewritten_query": "SELECT t5.ENAME FROM (SELECT ENAME, JOB FROM EMP WHERE ENAME = 'A' GROUP BY ENAME, JOB) AS t5 LEFT JOIN (SELECT NAME FROM DEPT GROUP BY NAME) AS t6 ON t5.JOB = t6.NAME GROUP BY t5.ENAME",
+        "time_cost": 1060.4419975280762,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 32,
+        "original_query": "SELECT COALESCE(SUM(t1.EXPR0 * t2.EXPR0), 0) FROM (SELECT JOB, COUNT(*) AS EXPR0 FROM EMP GROUP BY JOB) AS t1 INNER JOIN (SELECT NAME, COUNT(*) AS EXPR0 FROM DEPT GROUP BY NAME) AS t2 ON t1.JOB = t2.NAME",
+        "rewritten_query": "SELECT COALESCE(SUM(t1.EXPR0 * t2.EXPR0), 0) FROM (SELECT JOB, COUNT(*) AS EXPR0 FROM EMP GROUP BY JOB) AS t1 INNER JOIN (SELECT NAME, COUNT(*) AS EXPR0 FROM DEPT GROUP BY NAME) AS t2 ON t1.JOB = t2.NAME",
+        "time_cost": 1261.318140745163,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 33,
+        "original_query": "SELECT t6.JOB, CAST(t6.EXPR1 * t7.f1 AS INTEGER) FROM (SELECT JOB, SUM(SAL) AS EXPR1 FROM EMP WHERE ENAME = 'A' GROUP BY JOB) AS t6 INNER JOIN (SELECT NAME, COUNT(*) AS f1 FROM DEPT GROUP BY NAME) AS t7 ON t6.JOB = t7.NAME",
+        "rewritten_query": "WITH filtered_emp AS (\n    SELECT JOB, SUM(SAL) AS EXPR1 \n    FROM EMP \n    WHERE ENAME = 'A' \n    GROUP BY JOB\n)\nSELECT \n    fe.JOB, \n    CAST(fe.EXPR1 * t7.f1 AS INTEGER) \nFROM filtered_emp fe\nINNER JOIN (\n    SELECT NAME, COUNT(*) AS f1 \n    FROM DEPT \n    WHERE NAME IN (SELECT JOB FROM filtered_emp)\n    GROUP BY NAME\n) AS t7 ON fe.JOB = t7.NAME;",
+        "time_cost": 482.3700861930847,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Use a CTE for the filtered EMP data and filter the DEPT table to only include names that match jobs from the filtered EMP data before aggregation"
+            }
+        ]
+    },
+    {
+        "id": 34,
+        "original_query": "SELECT NAME, CAST(SUM(CN) FILTER (WHERE g_1) AS BIGINT), CAST(SUM(SM) FILTER (WHERE g_2) AS INTEGER) FROM (SELECT NAME, CN, SM, GROUPING(NAME, CN, SM) = 1 AS g_1, GROUPING(NAME, CN, SM) = 2 AS g_2 FROM (SELECT NAME, COUNT(*) AS CN, SUM(DEPTNO) AS SM FROM DEPT GROUP BY NAME) AS t3 GROUP BY GROUPING SETS((NAME, CN), (NAME, SM))) AS t5 GROUP BY NAME",
+        "rewritten_query": "SELECT \n    NAME, \n    CAST(COUNT(*) AS BIGINT), \n    CAST(SUM(DEPTNO) AS INTEGER) \nFROM DEPT \nGROUP BY NAME;",
+        "time_cost": 445.236985206604,
+        "rewrite_suggestion": [
+            {
+                "group": "Other",
+                "produced_suggestion": "Simplified complex query structure by removing unnecessary grouping sets and conditional aggregation that was equivalent to a simple GROUP BY"
+            }
+        ]
+    },
+    {
+        "id": 35,
+        "original_query": "SELECT SUM(SAL) AS SUM_SAL, COUNT(DISTINCT CASE WHEN JOB = 'CLERK' THEN DEPTNO ELSE NULL END) AS COUNT_DISTINCT_CLERK, SUM(CASE WHEN DEPTNO = 10 THEN SAL ELSE NULL END) AS SUM_SAL_D10, SUM(CASE WHEN DEPTNO = 20 THEN SAL ELSE 0 END) AS SUM_SAL_D20, SUM(CASE WHEN DEPTNO = 30 THEN 1 ELSE 0 END) AS COUNT_D30, COUNT(CASE WHEN DEPTNO = 40 THEN 'x' ELSE NULL END) AS COUNT_D40, SUM(CASE WHEN DEPTNO = 45 THEN 1 ELSE NULL END) AS COUNT_D45, SUM(CASE WHEN DEPTNO = 50 THEN 1 ELSE NULL END) AS COUNT_D50, SUM(CAST(NULL AS DECIMAL(19, 9))) AS SUM_NULL_D60, SUM(CASE WHEN DEPTNO = 70 THEN NULL ELSE 1 END) AS SUM_NULL_D70, COUNT(CASE WHEN DEPTNO = 20 THEN 1 ELSE NULL END) AS COUNT_D20 FROM EMP",
+        "rewritten_query": "SELECT SUM(SAL) AS SUM_SAL, COUNT(DISTINCT CASE WHEN JOB = 'CLERK' THEN DEPTNO ELSE NULL END) AS COUNT_DISTINCT_CLERK, SUM(CASE WHEN DEPTNO = 10 THEN SAL ELSE NULL END) AS SUM_SAL_D10, SUM(CASE WHEN DEPTNO = 20 THEN SAL ELSE 0 END) AS SUM_SAL_D20, SUM(CASE WHEN DEPTNO = 30 THEN 1 ELSE 0 END) AS COUNT_D30, COUNT(CASE WHEN DEPTNO = 40 THEN 'x' ELSE NULL END) AS COUNT_D40, SUM(CASE WHEN DEPTNO = 45 THEN 1 ELSE NULL END) AS COUNT_D45, SUM(CASE WHEN DEPTNO = 50 THEN 1 ELSE NULL END) AS COUNT_D50, SUM(CAST(NULL AS DECIMAL(19, 9))) AS SUM_NULL_D60, SUM(CASE WHEN DEPTNO = 70 THEN NULL ELSE 1 END) AS SUM_NULL_D70, COUNT(CASE WHEN DEPTNO = 20 THEN 1 ELSE NULL END) AS COUNT_D20 FROM EMP",
+        "time_cost": 938.9537560939789,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Removed redundant ELSE NULL clauses from CASE expressions where NULL is the default"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Changed SUM(CASE WHEN DEPTNO = 30 THEN 1 ELSE 0 END) to COUNT(CASE WHEN DEPTNO = 30 THEN 1 END) for better performance"
+            },
+            {
+                "group": "Constant_folding",
+                "produced_suggestion": "Replaced SUM(CAST(NULL AS DECIMAL(19,9))) with MIN(CAST(NULL AS DECIMAL(19,9))) to avoid per-row computation"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Rewrote SUM(CASE WHEN DEPTNO = 70 THEN NULL ELSE 1 END) as COUNT(CASE WHEN DEPTNO <> 70 THEN 1 END) for clarity and efficiency"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Standardized all conditional counting expressions to use COUNT(CASE WHEN condition THEN 1 END) pattern"
+            }
+        ]
+    },
+    {
+        "id": 36,
+        "original_query": "SELECT t6.JOB FROM (SELECT JOB, DEPTNO + EMPNO AS f9 FROM EMP WHERE ENAME = 'A' GROUP BY JOB, DEPTNO + EMPNO) AS t6 LEFT JOIN (SELECT NAME, DEPTNO + 5 AS f2 FROM DEPT GROUP BY NAME, DEPTNO + 5) AS t8 ON t6.JOB = t8.NAME AND t6.f9 = t8.f2 GROUP BY t6.JOB",
+        "rewritten_query": "SELECT JOB\nFROM EMP\nWHERE ENAME = 'A'\nGROUP BY JOB",
+        "time_cost": 356.5224747657776,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Removed unnecessary LEFT JOIN with DEPT table since it doesn't affect the final result set"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Eliminated redundant subqueries and simplified the query structure"
+            }
+        ]
+    },
+    {
+        "id": 37,
+        "original_query": "SELECT t12.SAL FROM (SELECT * FROM (SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, SLACKER, SAL AS SAL0, SAL = 4 AS f9 FROM EMPNULLABLES WHERE DEPTNO = 20 AND SAL > 1000) AS t11 WHERE SAL > 1000) AS t12 INNER JOIN (SELECT t14.SAL, t17.SAL AS SAL0, t17.f9 FROM (SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, SLACKER FROM EMPNULLABLES WHERE DEPTNO = 20 AND SAL > 1000) AS t14 INNER JOIN (SELECT SAL, SAL = 4 AS f9 FROM EMPNULLABLES WHERE DEPTNO = 20 AND SAL > 1000 GROUP BY SAL, SAL = 4) AS t17 ON t14.SAL = t17.SAL OR t17.f9 GROUP BY t14.SAL, t17.SAL, t17.f9 HAVING t17.SAL = t14.SAL) AS t20 ON t12.SAL = t20.SAL0 AND t12.f9 = t20.f9",
+        "rewritten_query": "SELECT SAL \nFROM EMPNULLABLES \nWHERE DEPTNO = 20 AND SAL > 1000",
+        "time_cost": 368.1042091846466,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Eliminated redundant predicates and simplified the query by removing unnecessary filtering conditions"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Removed unnecessary joins that were effectively self-joins on the same filtered dataset"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Eliminated unnecessary subqueries and nested structures that were adding complexity without changing results"
+            }
+        ]
+    },
+    {
+        "id": 38,
+        "original_query": "SELECT * FROM (SELECT DEPTNO FROM EMP WHERE DEPTNO < 4) AS t7 INNER JOIN (SELECT * FROM (SELECT DEPTNO FROM EMP WHERE DEPTNO > 7 UNION ALL SELECT DEPTNO FROM EMP) AS t11 WHERE DEPTNO < 4) AS t12 ON t7.DEPTNO = t12.DEPTNO",
+        "rewritten_query": "WITH dept_less_4 AS (\n    SELECT DEPTNO FROM EMP WHERE DEPTNO < 4\n)\nSELECT t7.DEPTNO, t12.DEPTNO\nFROM dept_less_4 t7\nJOIN dept_less_4 t12 ON t7.DEPTNO = t12.DEPTNO",
+        "time_cost": 510.4171390533447,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Remove the redundant branch in the UNION ALL where DEPTNO > 7 is later filtered by DEPTNO < 4, which always yields zero rows"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Use a CTE to avoid scanning the same table twice with identical filters"
+            }
+        ]
+    },
+    {
+        "id": 39,
+        "original_query": "SELECT COALESCE(SUM(EXPR0), 0), T2 FROM (SELECT t5.T2, COUNT(CASE WHEN EMP1.DEPTNO = 0 THEN 1 ELSE NULL END) AS EXPR0 FROM EMP AS EMP1, (VALUES (1)) AS t5 (T2) GROUP BY t5.T2 UNION ALL SELECT t8.T2, COUNT(CASE WHEN EMP2.DEPTNO = 0 THEN 1 ELSE NULL END) AS EXPR0 FROM EMP AS EMP2, (VALUES (2)) AS t8 (T2) GROUP BY t8.T2) AS t11 GROUP BY T2",
+        "rewritten_query": "WITH counts AS (\n    SELECT COUNT(*) AS cnt \n    FROM EMP \n    WHERE DEPTNO = 0\n)\nSELECT counts.cnt, t.T2\nFROM (VALUES (1), (2)) AS t(T2)\nCROSS JOIN counts;",
+        "time_cost": 395.72283840179443,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Avoid duplicate full table scans by computing the count once and then generating the two rows with a cross join"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Replace COUNT(CASE WHEN EMP.DEPTNO = 0 THEN 1 ELSE NULL END) with simpler COUNT(*) WHERE DEPTNO = 0"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Eliminate redundant outer GROUP BY since each T2 value already has exactly one row"
+            }
+        ]
+    },
+    {
+        "id": 40,
+        "original_query": "SELECT t4.NAME FROM (SELECT NAME, DEPTNO, DEPTNO - 10 AS DEPTNOMINUS FROM DEPT) AS t4 INNER JOIN (SELECT DEPTNO, SAL + 1 AS f9 FROM EMP GROUP BY DEPTNO, SAL + 1) AS t6 ON t4.DEPTNOMINUS = t6.f9 AND t4.DEPTNO = t6.DEPTNO",
+        "rewritten_query": "SELECT d.NAME\nFROM DEPT d\nINNER JOIN (\n    SELECT DISTINCT DEPTNO\n    FROM EMP\n    WHERE SAL = DEPTNO - 11\n) e ON d.DEPTNO = e.DEPTNO",
+        "time_cost": 667.1864249706268,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Simplified the complex join condition by transforming t4.DEPTNOMINUS = t6.f9 AND t4.DEPTNO = t6.DEPTNO into the equivalent WHERE SAL = DEPTNO - 11"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Eliminated unnecessary derived tables by directly joining DEPT with a filtered subquery"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Replaced GROUP BY with DISTINCT on DEPTNO to reduce the number of groups from 3 million to at most 300K"
+            }
+        ]
+    },
+    {
+        "id": 41,
+        "original_query": "SELECT t0.JOB, t1.NAME FROM (SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, DEPTNO, SLACKER, DEPTNO + EMPNO AS f9 FROM EMP WHERE ENAME = 'A') AS t0 LEFT JOIN (SELECT DEPTNO, NAME, DEPTNO + 5 AS f2 FROM DEPT) AS t1 ON t0.JOB = t1.NAME AND t0.f9 = t1.f2 GROUP BY t0.JOB, t1.NAME",
+        "rewritten_query": "SELECT t0.JOB, t1.NAME FROM (SELECT EMPNO, ENAME, JOB, MGR, HIREDATE, SAL, COMM, DEPTNO, SLACKER, DEPTNO + EMPNO AS f9 FROM EMP WHERE ENAME = 'A') AS t0 LEFT JOIN (SELECT DEPTNO, NAME, DEPTNO + 5 AS f2 FROM DEPT) AS t1 ON t0.JOB = t1.NAME AND t0.f9 = t1.f2 GROUP BY t0.JOB, t1.NAME",
+        "time_cost": 1664.4870529174805,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 42,
+        "original_query": "SELECT CAST(1 AS INTEGER) AS DEPTNO, ENAME FROM (SELECT ENAME FROM (SELECT ENAME, DEPTNO FROM EMPNULLABLES) AS t6 WHERE DEPTNO = 1 UNION ALL SELECT ENAME FROM (SELECT ENAME, DEPTNO FROM EMPNULLABLES) AS t9 WHERE DEPTNO = 1) AS t12",
+        "rewritten_query": "SELECT CAST(1 AS INTEGER) AS DEPTNO, ENAME FROM (SELECT ENAME FROM (SELECT ENAME, DEPTNO FROM EMPNULLABLES) AS t6 WHERE DEPTNO = 1 UNION ALL SELECT ENAME FROM (SELECT ENAME, DEPTNO FROM EMPNULLABLES) AS t9 WHERE DEPTNO = 1) AS t12",
+        "time_cost": 607.2657308578491,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 43,
+        "original_query": "SELECT NAME, DDEPTNO, COUNT(*) AS C FROM (SELECT NAME AS NAME, DEPTNO AS DDEPTNO FROM DEPT) AS t3 WHERE NAME = 'Charlie' GROUP BY GROUPING SETS((NAME, DDEPTNO), NAME)",
+        "rewritten_query": "SELECT \n    NAME, \n    DEPTNO AS DDEPTNO, \n    COUNT(*) AS C \nFROM DEPT\nWHERE NAME = 'Charlie'\nGROUP BY GROUPING SETS ((NAME, DEPTNO), (NAME));",
+        "time_cost": 337.1786482334137,
+        "rewrite_suggestion": [
+            {
+                "group": "Other",
+                "produced_suggestion": "Remove unnecessary derived table and simplify query structure"
+            }
+        ]
+    },
+    {
+        "id": 44,
+        "original_query": "SELECT NAME AS NAME, DEPTNO AS DDEPTNO, COUNT(*) AS C FROM DEPT GROUP BY GROUPING SETS((NAME, DEPTNO), NAME) HAVING NAME = 'Charlie'",
+        "rewritten_query": "SELECT NAME AS NAME, DEPTNO AS DDEPTNO, COUNT(*) AS C \nFROM DEPT \nWHERE NAME = 'Charlie'\nGROUP BY GROUPING SETS((NAME, DEPTNO), NAME)",
+        "time_cost": 178.86809754371643,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Move the HAVING condition to WHERE clause since it filters on a non-aggregated column that is part of the grouping"
+            }
+        ]
+    },
+    {
+        "id": 45,
+        "original_query": "SELECT t5.JOB FROM (SELECT JOB FROM EMP WHERE ENAME = 'A' GROUP BY JOB) AS t5 RIGHT JOIN (SELECT NAME FROM DEPT GROUP BY NAME) AS t6 ON t5.JOB = t6.NAME GROUP BY t5.JOB",
+        "rewritten_query": "SELECT t5.JOB FROM (SELECT JOB FROM EMP WHERE ENAME = 'A' GROUP BY JOB) AS t5 RIGHT JOIN (SELECT NAME FROM DEPT GROUP BY NAME) AS t6 ON t5.JOB = t6.NAME GROUP BY t5.JOB",
+        "time_cost": 844.0891590118408,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 46,
+        "original_query": "SELECT t2.SAL, t2.EXPR1, t5.EXPR2, t9.EXPR3 FROM (SELECT SAL, SUM(COMM) AS EXPR1 FROM EMP GROUP BY SAL) AS t2 INNER JOIN (SELECT SAL, AVG(COMM) AS EXPR2 FROM (SELECT SAL, COMM FROM EMP GROUP BY SAL, COMM) AS t4 GROUP BY SAL) AS t5 ON t2.SAL IS NOT DISTINCT FROM t5.SAL INNER JOIN (SELECT SAL, SUM(SAL) AS EXPR3 FROM (SELECT SAL FROM EMP GROUP BY SAL) AS t8 GROUP BY SAL) AS t9 ON t2.SAL IS NOT DISTINCT FROM t9.SAL",
+        "rewritten_query": "SELECT t2.SAL, t2.EXPR1, t5.EXPR2, t9.EXPR3 FROM (SELECT SAL, SUM(COMM) AS EXPR1 FROM EMP GROUP BY SAL) AS t2 INNER JOIN (SELECT SAL, AVG(COMM) AS EXPR2 FROM (SELECT SAL, COMM FROM EMP GROUP BY SAL, COMM) AS t4 GROUP BY SAL) AS t5 ON t2.SAL IS NOT DISTINCT FROM t5.SAL INNER JOIN (SELECT SAL, SUM(SAL) AS EXPR3 FROM (SELECT SAL FROM EMP GROUP BY SAL) AS t8 GROUP BY SAL) AS t9 ON t2.SAL IS NOT DISTINCT FROM t9.SAL",
+        "time_cost": 444.7117578983307,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Eliminated multiple joins by consolidating the query into a single GROUP BY operation"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Simplified nested subqueries by using AVG(DISTINCT COMM) instead of double grouping"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Removed redundant calculations by recognizing that SUM(SAL) over distinct SAL groups is equivalent to SAL itself"
+            }
+        ]
+    },
+    {
+        "id": 47,
+        "original_query": "SELECT * FROM EMP LEFT JOIN (SELECT * FROM DEPT) AS t ON EMP.DEPTNO = t.DEPTNO ORDER BY EMP.SAL FETCH NEXT 10 ROWS ONLY",
+        "rewritten_query": "SELECT e.*, t.*\nFROM \n    (SELECT * FROM EMP ORDER BY SAL FETCH FIRST 10 ROWS ONLY) e\nLEFT JOIN \n    DEPT t \nON e.DEPTNO = t.DEPTNO\nORDER BY e.SAL;",
+        "time_cost": 379.9104814529419,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Reordered operations to first filter EMP table to 10 rows before performing the LEFT JOIN"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Simplified the unnecessary subquery on DEPT table"
+            }
+        ]
+    },
+    {
+        "id": 48,
+        "original_query": "SELECT sal, SUM(comm), MIN(comm), SUM(DISTINCT sal) FROM emp GROUP BY sal",
+        "rewritten_query": "SELECT sal, SUM(comm), MIN(comm), SUM(DISTINCT sal) FROM emp GROUP BY sal",
+        "time_cost": 492.80370235443115,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 49,
+        "original_query": "select e.mgr, d.mgr from emp as e full outer join emp as d on e.mgr = d.mgr group by d.mgr, e.mgr",
+        "rewritten_query": "SELECT DISTINCT mgr, mgr FROM emp;",
+        "time_cost": 489.4563853740692,
+        "rewrite_suggestion": [
+            {
+                "group": "Other",
+                "produced_suggestion": "Replace the FULL OUTER JOIN with GROUP BY using a simpler DISTINCT operation, as both operations are returning the same set of unique manager values."
+            }
+        ]
+    },
+    {
+        "id": 50,
+        "original_query": "select dname, ddeptno, c from              (select name dname, deptno ddeptno, count(*) as c              from dept group by grouping sets ((name,deptno),(name))) t               where dname = 'Charlie'",
+        "rewritten_query": "select name as dname, deptno as ddeptno, count(*) as c\nfrom dept\nwhere name = 'Charlie'\ngroup by grouping sets ((name, deptno), (name));",
+        "time_cost": 248.61458683013916,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Push the filter condition 'dname = 'Charlie'' into the subquery to reduce the amount of data processed in the aggregation"
+            },
+            {
+                "group": "Other",
+                "produced_suggestion": "Eliminate the unnecessary subquery since the filter can be applied directly"
+            }
+        ]
+    },
+    {
+        "id": 51,
+        "original_query": "select distinct d.deptno from emp e right outer join dept d on e.deptno = d.deptno",
+        "rewritten_query": "select distinct d.deptno from emp e right outer join dept d on e.deptno = d.deptno",
+        "time_cost": 423.1147437095642,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 52,
+        "original_query": "with e2 as (   select empno, case when true then deptno else null end as deptno   from emp) select empno,   deptno in (select deptno from e2 where empno < 20) as d from e2",
+        "rewritten_query": "WITH deptno_set AS (\n    SELECT deptno\n    FROM emp\n    WHERE empno < 20\n)\nSELECT e.empno,\n       e.deptno IN (SELECT deptno FROM deptno_set) AS d\nFROM emp AS e;",
+        "time_cost": 1015.29212641716,
+        "rewrite_suggestion": [
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Precompute the filtered set of department numbers for rows where empno < 20 to avoid scanning the entire CTE twice"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Replace the double scan of the CTE with a more efficient approach that only materializes the necessary subset of data"
+            }
+        ]
+    },
+    {
+        "id": 53,
+        "original_query": "select empno, sum(sal), min(sal), max(sal),  bit_and(distinct sal), bit_or(sal), count(distinct sal),  grouping(deptno) from emp group by empno, deptno",
+        "rewritten_query": "select empno, sum(sal), min(sal), max(sal),  bit_and(distinct sal), bit_or(sal), count(distinct sal),  grouping(deptno) from emp group by empno, deptno",
+        "time_cost": 1271.2241516113281,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 54,
+        "original_query": "select empno, count(mgr) from emp group by empno, deptno",
+        "rewritten_query": "select empno, count(mgr) from emp group by empno, deptno",
+        "time_cost": 1178.705664396286,
+        "rewrite_suggestion": "No need to optimize"
+    },
+    {
+        "id": 55,
+        "original_query": "select * from emp where empno > ANY (  select deptno from dept where emp.job = dept.name);",
+        "rewritten_query": "SELECT e.*\nFROM emp e\nJOIN (\n    SELECT name, MIN(deptno) AS min_deptno\n    FROM dept\n    GROUP BY name\n) d_min ON e.job = d_min.name\nWHERE e.empno > d_min.min_deptno;",
+        "time_cost": 356.5145192146301,
+        "rewrite_suggestion": [
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Convert correlated subquery with ANY operator to a join with aggregation"
+            }
+        ]
+    },
+    {
+        "id": 56,
+        "original_query": "select deptno c, min(y), max(z) z, sum(r), sum(m) n, sum(x) sal from (    select deptno, ename, sum(sal) x, max(sal) z,       min(sal) y, count(hiredate) m, count(mgr) r    from emp group by deptno, ename) t group by deptno",
+        "rewritten_query": "select deptno c, min(y), max(z) z, sum(r), sum(m) n, sum(x) sal from (    select deptno, ename, sum(sal) x, max(sal) z,       min(sal) y, count(hiredate) m, count(mgr) r    from emp group by deptno, ename) t group by deptno",
+        "time_cost": 448.52150559425354,
+        "rewrite_suggestion": [
+            {
+                "group": "Other",
+                "produced_suggestion": "Eliminate nested aggregation by collapsing two GROUP BY operations into a single GROUP BY operation"
+            }
+        ]
+    },
+    {
+        "id": 57,
+        "original_query": "select coalesce(sum(count_comm), 0) from (   select deptno, count(comm) as count_comm   from emp   group by deptno, mgr) t",
+        "rewritten_query": "SELECT COALESCE(SUM(count_comm), 0) \nFROM (\n    SELECT count(comm) as count_comm \n    FROM emp \n    GROUP BY deptno, mgr\n) t",
+        "time_cost": 742.3305172920227,
+        "rewrite_suggestion": [
+            {
+                "group": "Other",
+                "produced_suggestion": "Remove unnecessary columns from the subquery projection to reduce data transfer between query stages"
+            }
+        ]
+    }
+]

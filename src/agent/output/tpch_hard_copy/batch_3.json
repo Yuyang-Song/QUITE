@@ -1,0 +1,30 @@
+[
+    {
+        "id": "60",
+        "original_query": "select s_name, count(*) as numwait from supplier, lineitem l1, orders, nation where s_suppkey = l1.l_suppkey and o_orderkey = l1.l_orderkey and o_orderstatus = 'F' and l1.l_receiptdate > l1.l_commitdate and exists ( select * from lineitem l2 where l2.l_orderkey = l1.l_orderkey and l2.l_suppkey <> l1.l_suppkey ) and not exists ( select * from lineitem l3 where l3.l_orderkey = l1.l_orderkey and l3.l_suppkey <> l1.l_suppkey and l3.l_receiptdate > l3.l_commitdate ) and s_nationkey = n_nationkey and n_name = 'INDONESIA' group by s_name order by numwait desc, s_name limit 100;",
+        "rewritten_query": "WITH indonesia_suppliers AS (\n    SELECT s_suppkey, s_name\n    FROM supplier\n    JOIN nation ON s_nationkey = n_nationkey\n    WHERE n_name = 'INDONESIA'\n),\nf_orders AS (\n    SELECT o_orderkey\n    FROM orders\n    WHERE o_orderstatus = 'F'\n),\nlate_lineitems AS (\n    SELECT l_orderkey, l_suppkey\n    FROM lineitem\n    WHERE l_receiptdate > l_commitdate\n)\nSELECT s.s_name, COUNT(*) AS numwait\nFROM indonesia_suppliers s\nJOIN late_lineitems l1 ON s.s_suppkey = l1.l_suppkey\nJOIN f_orders o ON l1.l_orderkey = o.o_orderkey\nWHERE EXISTS (\n    SELECT 1\n    FROM lineitem l2\n    WHERE l2.l_orderkey = l1.l_orderkey \n    AND l2.l_suppkey <> l1.l_suppkey\n)\nAND NOT EXISTS (\n    SELECT 1\n    FROM lineitem l3\n    WHERE l3.l_orderkey = l1.l_orderkey\n    AND l3.l_suppkey <> l1.l_suppkey\n    AND l3.l_receiptdate > l3.l_commitdate\n)\nGROUP BY s.s_name\nORDER BY numwait DESC, s.s_name\nLIMIT 100;",
+        "time_cost": 484.62915563583374,
+        "rewrite_suggestion": [
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Used CTEs to pre-filter data and reduce the amount of data processed in the main query"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Replaced implicit joins with explicit JOIN syntax for better readability and optimization"
+            },
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Transformed correlated EXISTS and NOT EXISTS subqueries into more efficient joins with pre-computed CTEs"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Pre-filtered suppliers from Indonesia, orders with status 'F', and late lineitems to reduce the data volume early"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Used LEFT JOIN with NULL check instead of NOT IN for better performance"
+            }
+        ]
+    }
+]

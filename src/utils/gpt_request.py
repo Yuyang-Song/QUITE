@@ -1,4 +1,4 @@
-from openai import OpenAI
+from openai import OpenAI, AsyncOpenAI
 import json
 import asyncio
 import sys
@@ -21,6 +21,13 @@ class GPT:
             base_url = self.base_url
         )
 
+        
+        # 添加异步客户端
+        self.async_client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url
+        )
+
     def get_GPT_response(self, prompt, system_message=None, json_format=False):
         messages = []
         if system_message:
@@ -29,7 +36,7 @@ class GPT:
         
         if json_format:
             completion = self.client.chat.completions.create(
-                temperature=0.6,
+                temperature=0.0,
                 model=self.model,
                 response_format={"type": "json_object"},
                 messages=messages,
@@ -86,18 +93,76 @@ class GPT:
 
         return answer
     
-    async def get_decision_GPT_response_async(self, prompt, system_message=None, json_format=False):
-        loop = asyncio.get_running_loop()
+    # async def get_decision_GPT_response_async(self, prompt, system_message=None, json_format=False):
+    #     loop = asyncio.get_running_loop()
         
-        # 将同步请求封装成异步调用，使用 run_in_executor 来运行同步代码
-        return await loop.run_in_executor(None, self.get_decision_GPT_response, prompt, system_message, json_format)
-
-    
+    #     # 将同步请求封装成异步调用，使用 run_in_executor 来运行同步代码
+    #     return await loop.run_in_executor(None, self.get_decision_GPT_response, prompt, system_message, json_format)
     async def get_GPT_response_async(self, prompt, system_message=None, json_format=False):
-        loop = asyncio.get_running_loop()
+            messages = []
+            if system_message:
+                messages.append({"role": "system", "content": system_message})
+            messages.append({"role": "user", "content": prompt})
+            
+            if json_format:
+                completion = await self.async_client.chat.completions.create(
+                    temperature=0.0,
+                    model=self.model,
+                    response_format={"type": "json_object"},
+                    messages=messages,
+                    stream=True
+                )
+                full_response = ""
+                async for chunk in completion:
+                    if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content:
+                        chunk_text = chunk.choices[0].delta.content
+                        print(chunk_text, end="", flush=True)
+                        full_response += chunk_text
+                print()
+                return full_response
+            else:
+                completion = await self.async_client.chat.completions.create(
+                    temperature=0.0,
+                    model=self.model,
+                    messages=messages,
+                    stream=True
+                )
+                full_response = ""
+                async for chunk in completion:
+                    if chunk.choices and len(chunk.choices) > 0 and chunk.choices[0].delta.content:
+                        chunk_text = chunk.choices[0].delta.content
+                        print(chunk_text, end="", flush=True)
+                        full_response += chunk_text
+                print()
+                return full_response
+    
+    # async def get_GPT_response_async(self, prompt, system_message=None, json_format=False):
+    #     loop = asyncio.get_running_loop()
         
-        # 将同步请求封装成异步调用，使用 run_in_executor 来运行同步代码
-        return await loop.run_in_executor(None, self.get_GPT_response, prompt, system_message, json_format)
+    #     # 将同步请求封装成异步调用，使用 run_in_executor 来运行同步代码
+    #     return await loop.run_in_executor(None, self.get_GPT_response, prompt, system_message, json_format)
+    async def get_decision_GPT_response_async(self, prompt, system_message=None, json_format=False):
+        messages = []
+        if system_message:
+            messages.append({"role": "system", "content": system_message})
+        messages.append({"role": "user", "content": prompt})
+        
+        if json_format:
+            completion = await self.async_client.chat.completions.create(
+                temperature=0.0,
+                model=self.model,
+                response_format={"type": "json_object"},
+                messages=messages
+            )
+            answer = json.loads(completion.choices[0].message.content)
+        else:
+            completion = await self.async_client.chat.completions.create(
+                temperature=0.0,
+                model=self.model,
+                messages=messages
+            )
+            answer = completion.choices[0].message.content
+        return answer
     
     def calc_token(self, in_text, out_text=""):
         enc = tiktoken.encoding_for_model(self.model)

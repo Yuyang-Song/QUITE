@@ -1,0 +1,22 @@
+[
+    {
+        "id": "56",
+        "original_query": "select  sum(cs_ext_discount_amt)  as \"excess discount amount\" from    catalog_sales    ,item    ,date_dim where (i_manufact_id in (291, 335, 604, 696, 887) or i_manager_id BETWEEN 35 and 64) and i_item_sk = cs_item_sk and d_date between '1998-03-22' and         cast('1998-03-22' as date) + interval '90' day and d_date_sk = cs_sold_date_sk and cs_ext_discount_amt      > (          select             1.3 * avg(cs_ext_discount_amt)          from             catalog_sales            ,date_dim          where               cs_item_sk = i_item_sk           and d_date between '1998-03-22' and                              cast('1998-03-22' as date) + interval '90' day           and d_date_sk = cs_sold_date_sk           and cs_list_price between 119 and 148           and cs_sales_price / cs_list_price BETWEEN 58 * 0.01 AND 78 * 0.01       ) order by sum(cs_ext_discount_amt) limit 100;",
+        "rewritten_query": "WITH date_range AS (\n    SELECT d_date_sk\n    FROM date_dim\n    WHERE d_date BETWEEN '1998-03-22' AND (cast('1998-03-22' as date) + interval '90' day)\n),\nsubq AS (\n    SELECT \n        cs_item_sk,\n        1.3 * AVG(cs_ext_discount_amt) AS threshold\n    FROM \n        catalog_sales\n        JOIN date_range ON (catalog_sales.cs_sold_date_sk = date_range.d_date_sk)\n    WHERE \n        catalog_sales.cs_list_price BETWEEN 119 AND 148\n        AND catalog_sales.cs_sales_price / catalog_sales.cs_list_price BETWEEN 0.58 AND 0.78\n    GROUP BY cs_item_sk\n)\nSELECT \n    SUM(catalog_sales.cs_ext_discount_amt) AS \"excess discount amount\"\nFROM \n    catalog_sales\n    JOIN item ON (item.i_item_sk = catalog_sales.cs_item_sk)\n    JOIN date_range ON (catalog_sales.cs_sold_date_sk = date_range.d_date_sk)\n    JOIN subq ON (catalog_sales.cs_item_sk = subq.cs_item_sk)\nWHERE \n    (item.i_manufact_id IN (291, 335, 604, 696, 887) OR item.i_manager_id BETWEEN 35 AND 64)\n    AND catalog_sales.cs_ext_discount_amt > subq.threshold\nORDER BY SUM(catalog_sales.cs_ext_discount_amt)\nLIMIT 100;",
+        "time_cost": 641.6235525608063,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Converted correlated subquery into a CTE to avoid repeated execution"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Created date_range CTE to avoid scanning date_dim multiple times"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Qualified all column references to avoid ambiguity in joins"
+            }
+        ]
+    }
+]

@@ -1,0 +1,26 @@
+[
+    {
+        "id": "47",
+        "original_query": "select sum(l_extendedprice) / 7.0 as avg_yearly from lineitem, part where p_partkey = l_partkey and p_brand = 'Brand#32' and p_container = 'WRAP PKG' and l_quantity < ( select 0.2 * avg(l_quantity) from lineitem where l_partkey = p_partkey );",
+        "rewritten_query": "with part_filtered as (\n    select p_partkey\n    from part\n    where p_brand = 'Brand#32' \n      and p_container = 'WRAP PKG'\n),\navg_lineitem as (\n    select l.l_partkey, 0.2 * avg(l.l_quantity) as avg_quantity\n    from lineitem l\n    join part_filtered p on l.l_partkey = p.p_partkey\n    group by l.l_partkey\n)\nselect sum(l.l_extendedprice) / 7.0 as avg_yearly\nfrom lineitem l\njoin part_filtered p on l.l_partkey = p.p_partkey\njoin avg_lineitem a on l.l_partkey = a.l_partkey\nwhere l.l_quantity < a.avg_quantity;",
+        "time_cost": 335.2641520500183,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Eliminated the correlated subquery by pre-computing the average quantity for each part in a CTE"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Created a filtered part CTE to reduce the number of rows processed from 2 million to approximately 2,127"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Used the filtered part CTE to join with lineitem early, reducing the number of rows processed from 60 million to approximately 63,810"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Selected only necessary columns (l_partkey, l_quantity, l_extendedprice) in the lineitem_filtered CTE to reduce memory usage"
+            }
+        ]
+    }
+]

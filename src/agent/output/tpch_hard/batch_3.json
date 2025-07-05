@@ -1,0 +1,26 @@
+[
+    {
+        "id": "60",
+        "original_query": "select s_name, count(*) as numwait from supplier, lineitem l1, orders, nation where s_suppkey = l1.l_suppkey and o_orderkey = l1.l_orderkey and o_orderstatus = 'F' and l1.l_receiptdate > l1.l_commitdate and exists ( select * from lineitem l2 where l2.l_orderkey = l1.l_orderkey and l2.l_suppkey <> l1.l_suppkey ) and not exists ( select * from lineitem l3 where l3.l_orderkey = l1.l_orderkey and l3.l_suppkey <> l1.l_suppkey and l3.l_receiptdate > l3.l_commitdate ) and s_nationkey = n_nationkey and n_name = 'INDONESIA' group by s_name order by numwait desc, s_name limit 100;",
+        "rewritten_query": "WITH order_aggregates AS (\n    SELECT \n        l.l_orderkey,\n        COUNT(DISTINCT l.l_suppkey) AS total_suppliers,\n        COUNT(DISTINCT CASE WHEN l.l_receiptdate > l.l_commitdate THEN l.l_suppkey END) AS delayed_suppliers_count\n    FROM lineitem l\n    JOIN orders o ON l.l_orderkey = o.o_orderkey AND o.o_orderstatus = 'F'\n    GROUP BY l.l_orderkey\n    HAVING COUNT(DISTINCT l.l_suppkey) >= 2 \n        AND COUNT(DISTINCT CASE WHEN l.l_receiptdate > l.l_commitdate THEN l.l_suppkey END) = 1\n),\ndelayed_lineitems AS (\n    SELECT l.l_orderkey, l.l_suppkey\n    FROM lineitem l\n    JOIN order_aggregates oa ON l.l_orderkey = oa.l_orderkey\n    WHERE l.l_receiptdate > l.l_commitdate\n)\nSELECT s.s_name, COUNT(*) AS numwait\nFROM supplier s\nJOIN nation n ON s.s_nationkey = n.n_nationkey AND n.n_name = 'INDONESIA'\nJOIN delayed_lineitems dl ON s.s_suppkey = dl.l_suppkey\nGROUP BY s.s_name\nORDER BY numwait DESC, s.s_name\nLIMIT 100;",
+        "time_cost": 480.8082206249237,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Replace correlated EXISTS and NOT EXISTS subqueries with CTEs that precompute aggregated conditions"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Use CTEs to avoid multiple scans of the large lineitem table"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Filter orders early by joining with orders table in the CTE and applying the o_orderstatus = 'F' condition"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Limit the delayed_lineitems CTE to only scan lineitems for orders that meet the aggregation conditions"
+            }
+        ]
+    }
+]

@@ -1,0 +1,26 @@
+[
+    {
+        "id": "57",
+        "original_query": "select s_name, s_address from supplier, nation where s_suppkey in ( select ps_suppkey from partsupp where ps_partkey in ( select p_partkey from part where p_name like 'burlywood%' ) and ps_availqty > ( select 0.5 * sum(l_quantity) from lineitem where l_partkey = ps_partkey and l_suppkey = ps_suppkey and l_shipdate >= date '1994-01-01' and l_shipdate < date '1994-01-01' + interval '1' year ) ) and s_nationkey = n_nationkey and n_name = 'ETHIOPIA' order by s_name;",
+        "rewritten_query": "WITH part_filtered AS (\n    SELECT p_partkey\n    FROM part\n    WHERE p_name LIKE 'burlywood%'\n), \nlineitem_agg AS (\n    SELECT l_partkey, l_suppkey, 0.5 * SUM(l_quantity) AS half_total_quantity\n    FROM lineitem\n    WHERE l_shipdate >= DATE '1994-01-01'\n      AND l_shipdate < DATE '1995-01-01'\n    GROUP BY l_partkey, l_suppkey\n)\nSELECT s_name, s_address\nFROM supplier\nJOIN nation ON supplier.s_nationkey = nation.n_nationkey\nWHERE n_name = 'ETHIOPIA'\n  AND EXISTS (\n    SELECT 1\n    FROM partsupp\n    INNER JOIN part_filtered ON partsupp.ps_partkey = part_filtered.p_partkey\n    INNER JOIN lineitem_agg \n        ON partsupp.ps_partkey = lineitem_agg.l_partkey \n        AND partsupp.ps_suppkey = lineitem_agg.l_suppkey\n    WHERE partsupp.ps_suppkey = supplier.s_suppkey\n      AND partsupp.ps_availqty > lineitem_agg.half_total_quantity\n  )\nORDER BY s_name;",
+        "time_cost": 314.61335039138794,
+        "rewrite_suggestion": [
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Replaced nested correlated subqueries with CTEs to precompute filtered parts and aggregated lineitem quantities"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Converted implicit joins to explicit JOIN syntax and replaced IN clauses with EXISTS and JOINs"
+            },
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Precomputed the aggregation on lineitem to avoid repeated calculations for each partsupp row"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Moved the date range filter to the CTE to reduce the number of rows before aggregation"
+            }
+        ]
+    }
+]

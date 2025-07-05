@@ -1,0 +1,26 @@
+[
+    {
+        "id": "58",
+        "original_query": "select s_name, count(*) as numwait from supplier, lineitem l1, orders, nation where s_suppkey = l1.l_suppkey and o_orderkey = l1.l_orderkey and o_orderstatus = 'F' and l1.l_receiptdate > l1.l_commitdate and exists ( select * from lineitem l2 where l2.l_orderkey = l1.l_orderkey and l2.l_suppkey <> l1.l_suppkey ) and not exists ( select * from lineitem l3 where l3.l_orderkey = l1.l_orderkey and l3.l_suppkey <> l1.l_suppkey and l3.l_receiptdate > l3.l_commitdate ) and s_nationkey = n_nationkey and n_name = 'MOZAMBIQUE' group by s_name order by numwait desc, s_name limit 100;",
+        "rewritten_query": "WITH late_lineitems AS (\n    SELECT l_orderkey, l_suppkey\n    FROM lineitem\n    WHERE l_receiptdate > l_commitdate\n),\nmozambique_suppliers AS (\n    SELECT s_suppkey, s_name\n    FROM supplier\n    JOIN nation ON supplier.s_nationkey = nation.n_nationkey\n    WHERE n_name = 'MOZAMBIQUE'\n),\norders_F AS (\n    SELECT o_orderkey\n    FROM orders\n    WHERE o_orderstatus = 'F'\n)\nSELECT mozambique_suppliers.s_name, COUNT(*) AS numwait\nFROM late_lineitems l1\nJOIN orders_F ON l1.l_orderkey = orders_F.o_orderkey\nJOIN mozambique_suppliers ON l1.l_suppkey = mozambique_suppliers.s_suppkey\nWHERE EXISTS (\n    SELECT 1\n    FROM lineitem l2\n    WHERE l2.l_orderkey = l1.l_orderkey\n      AND l2.l_suppkey <> l1.l_suppkey\n)\nAND NOT EXISTS (\n    SELECT 1\n    FROM late_lineitems l3\n    WHERE l3.l_orderkey = l1.l_orderkey\n      AND l3.l_suppkey <> l1.l_suppkey\n)\nGROUP BY mozambique_suppliers.s_name\nORDER BY numwait DESC, s_name\nLIMIT 100;",
+        "time_cost": 455.83558320999146,
+        "rewrite_suggestion": [
+            {
+                "group": "Query_optimization",
+                "produced_suggestion": "Use CTEs to materialize intermediate results and avoid redundant scans of large tables"
+            },
+            {
+                "group": "Join_optimization",
+                "produced_suggestion": "Replace implicit joins with explicit JOIN syntax for better readability and optimization"
+            },
+            {
+                "group": "Predicate_simplification",
+                "produced_suggestion": "Reuse the late_lineitems CTE for both the main query and the NOT EXISTS subquery to avoid redundant filtering"
+            },
+            {
+                "group": "Subquery_optimization",
+                "produced_suggestion": "Apply early filtering by creating separate CTEs for Mozambique suppliers and orders with status 'F'"
+            }
+        ]
+    }
+]
