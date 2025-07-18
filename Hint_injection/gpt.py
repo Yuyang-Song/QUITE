@@ -11,16 +11,34 @@ import httpx
 class GPT:
     def __init__(self):
         # load_dotenv(dotenv_path='../config_file/.env') 
-        self.api_key = "sk-RIjSVmomD7UfMDx181B3F6F4A9E34bDcA6F386Cd72Ba016f"
+        self.api_key = "sk-HWmTLFjVk6bOVaMw3993Bd491fE8494b939bB94b080e7545"
         self.base_url = "https://aihubmix.com/v1"
-        # self.model = "gpt-4o-2024-11-20"
         self.model = "claude-3-7-sonnet-20250219"
-        # self.api_key = "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",
-        # self.base_url = "https://api.openai.com/v1",
         self.client = OpenAI(
             api_key= self.api_key,
             base_url = self.base_url
         )
+        self.log_file = "model_output.txt"
+        # 在每次程序启动时清空日志文件
+        with open(self.log_file, 'w', encoding='utf-8') as f:
+            f.write("--- LLM Interaction Log ---\n\n")
+
+    def _log_interaction(self, model_name, response):
+        try:
+            with open(self.log_file, 'a', encoding='utf-8') as f:
+                f.write("="*80 + "\n")
+                f.write(f"MODEL: {model_name}\n")
+                f.write("-" * 34 + " RESPONSE " + "-" * 34 + "\n")
+                
+                # 如果响应是字典或列表（来自JSON模式），则格式化输出
+                if isinstance(response, (dict, list)):
+                    f.write(json.dumps(response, indent=2, ensure_ascii=False))
+                else:
+                    f.write(str(response))
+                
+                f.write("\n" + "="*80 + "\n\n")
+        except Exception as e:
+            print(f"\n[Logging Error] Failed to write to log file: {e}\n")
 
     def get_GPT_response(self, prompt, system_message=None, json_format=False):
         messages = []
@@ -43,6 +61,7 @@ class GPT:
                     print(chunk_text, end="", flush=True)
                     full_response += chunk_text
             print()
+            self._log_interaction(self.model, full_response)
             return json.loads(full_response)
             
         else:
@@ -59,6 +78,7 @@ class GPT:
                     print(chunk_text, end="", flush=True)
                     full_response += chunk_text
             print()
+            self._log_interaction(self.model, full_response)
             return full_response
         
     def get_decision_GPT_response(self, prompt, system_message=None, json_format=False):
@@ -85,6 +105,8 @@ class GPT:
             )
             answer = completion.choices[0].message.content
 
+        print(answer)
+        self._log_interaction(self.model, answer)
         return answer
     
     async def get_decision_GPT_response_async(self, prompt, system_message=None, json_format=False):
@@ -116,19 +138,3 @@ class GPT:
         elif self.model == "gpt-3.5-turbo":
             return (self.calc_token(in_text) * 0.0015 + self.calc_token(out_text) * 0.002) / 1000
 
-
-        
-# Test with system message
-# gpt = GPT()
-
-# # Example 1: With a system message
-# system_message = "You are a helpful assistant that provides factual answers to general knowledge questions."
-# prompt = "What is the capital of France?"
-# response = gpt.get_GPT_response(prompt, system_message=system_message, json_format=False)
-# print(response)
-# token = gpt.calc_token(prompt, response)
-# print(f"Token cost: {token}")
-
-# # Example 2: Without system message
-# response_no_system = gpt.get_GPT_response(prompt, system_message=None, json_format=False)
-# print(f"Response without system message: {response_no_system}")

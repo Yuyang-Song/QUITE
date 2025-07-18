@@ -29,7 +29,7 @@ from typing import List, Dict, Any
 class DBMS_PLUS:
     def __init__(self,json_file_path = None):
         # load_dotenv(dotenv_path='../../config_file/.env')  # Load environment variables from .env file
-        load_dotenv(dotenv_path="/root/syy/code/QUITE/Hint_injection/config_file/.env")
+        load_dotenv(dotenv_path="/root/syy/code/Hint_injection/config_file/.env")
         self.db_name = os.getenv("DB_NAME")
         self.db_user= os.getenv("DB_USER")
         self.db_password= os.getenv("DB_PASSWORD")

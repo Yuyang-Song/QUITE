@@ -7,9 +7,9 @@ from gpt import *
 from tools import *
 import textwrap
 # file = "/root/syy/MARter_hint/input/MARter_dsb_53.json"
-file = "/root/syy/machine1/query/dsb/dsb_shengyu.json"
+file = "/root/syy/code/experiments_results/dsb/filtered_QUITE_dsb_156_copy.json"
 # file = "/root/syy/MARter_hint/input/MARter_calcite.json"
-save_file_path = "/root/syy/code/QUITE/Hint_injection/output/dsb_shengyu"
+save_file_path = "/root/syy/code/Hint_injection/output/dsb"
 
 with open(file, "r") as f:
     ori_data = json.load(f)
@@ -102,8 +102,7 @@ def get_analysis_prompt(input_sql,physical_plan):
 
         2. Concentrate on the following hint categories. Report only the most critical items (Recommend MAX 3 hints):
             ## Join Methods:  (NestLoop is used for small table driving large table, HashJoin is used for large data volume)
-
-                No Hash join, /*+ NoHashJoin(table table[ table...]) */ 
+                Hash join, /*+ NoHashJoin(table table[ table...]) */ 
                 No Nested loop join, /*+ NoNestLoop(table table[ table...]) */
                 No Merge join, /*+ NoMergeJoin(table table[ table...]) */
                             
@@ -115,10 +114,10 @@ def get_analysis_prompt(input_sql,physical_plan):
         3. Provide a suggestion report on how to improve query performance using only these methods. If you believe the query is not worth optimizing with pg_hint_plan hints, explicitly state that in your report.
                              
         4. If the SQL uses a CTE and you determine the CTE should NOT be materialized, include the hint `/*+ NO_MATERIALIZE(table) */`. Use the following principles:
-        - NO MATERIALIZE if: 
+        - MATERIALIZE if: 
             1) The CTE is referenced multiple times in the query.
             2) The CTE is large and complex.
-        - MATERIALIZE if:
+        - NO MATERIALIZE if:
             1) The CTE is referenced only once.
             2) The CTE is small and simple.
                                                             
@@ -145,104 +144,6 @@ def get_analysis_prompt(input_sql,physical_plan):
     """)
     return prompt
 
-            # /*+ SET (enable_indexscan off) SET (enable_mergejoin off) */
-            # /*+ SET (enable_nestloop off) SET (enable_indexscan off) SET (enable_mergejoin off) */
-# def get_analysis_prompt(input_sql,physical_plan):
-#     prompt = textwrap.dedent(f"""
-#         <Mission>    
-#         You are an experienced DBA. Your mission is to analyze the SQL physical plan and identify costly operations to inform efficient query hints。
-#         You have been given:
-#         - <input_sql>
-#         - <physical_plan>
-#         - <data_statistics> (for the database)
-                                 
-#         <Steps>
-#         1. Analyze the SQL physical plan and identify potential costly operations that can be applied in pg hint plan. Note that you don't need consider change query structure, scan, index, parallel, or other advanced features.
-#         2. Do not need report every aspect, just focus on the most important ones as less as possible:                   
-#             ## Join Methods: NestLoop is used for small table driving large table, HashJoin is used for large data volume
-#                 No Hash join, /*+ NoHashJoin(table table[ table...]) */ 
-#                 No Nested loop join, /*+ NoNestLoop(table table[ table...]) */
-                            
-#             ##  Advanced Control:
-#                 Cardinality estimation(rows) correction,  changes the row number estimation of joins that comes from restrictions in the planner. If you want to use this hint, please give a calculation process in the analysis.
-#                         /*+ Rows(a b #10) */ (Sets rows of join result to 10)
-                             
-        
-#         3. Provide a suggestion report on how to improve the query performance based on the following aspects. You only can use thess methods. If you believe the query isn't worth optimizing with pg_hint_plans, please mention it in your report.
-                             
-#         4. If the SQL has CTE and you think the CTE should be inlined, you should mention the inline CTE hint opertaion in report as "/* Inline(table) */". the inlined priciple as below:
-#                 - not need inline: 1) CTE is used multiple times in the query. 2) CTE is large and complex.
-#                 - need inline: 1) CTE is used only once in the query. 2) CTE is small and simple. 
-                             
-#         5. Return the results in the following format:
-
-#         </analysis>
-#             //Fill in with your analysis
-#         </analysis>
-
-#         </report>
-#             //Fill in your report
-#         </report>
-
-        
-#         <input_sql>
-#         {input_sql}
-
-#         <physical_plan>
-#         {physical_plan}
-
-#         <data_statistics>
-#         {data_statistics}
-
-#     """)
-#     return prompt
-
-
-# def get_selection_prompt(input_sql,report):
-#     prompt = textwrap.dedent(f"""
-#         <Mission>
-#             You are an experienced DBA. Your mission is to provide the most efficient pg_hint_plan for the given SQL query based on the analysis report.
-#             You have been provided with:
-#             - A reference table illustrating how to use pg_hint_plan
-#             - <data_statistics> about the database
-                                 
-#         <Steps>
-#             1. Based on the <report>, determine the single most effective pg_hint_plan to improve SQL performance.
-#             2. If the report indicates that pg_hint_plan optimization is warranted, return only the pg_hint_plan in JSON format as shown below. Otherwise, return an empty string ("").
-#             3. Classify hints into "context" hints and "preamble" hints if the SQL includes CTEs:
-#             - Context hints apply inside a CTE; you must specify the corresponding CTE name. If there are no CTEs, use an empty string ("") for both name and hints.
-#             - Preamble hints apply at the head of the query (before the main body).
-
-#         <Notation>
-#             1. Return only the pg_hint_plan, not the entire SQL query.
-#             2. Provide as few hints as possible, formatted as a single string (not a list).
-
-#         <input_sql>
-#         {input_sql}
-
-#         <report>
-#         {report}
-
-#         Please return the answer in the following format:
-#         ```json
-#         {{
-#             "flag": {{flag}},           // true if pg_hint_plan is recommended, false otherwise
-#             "CTE_flag": {{CTE_flag}},   // true if the query includes CTEs, false otherwise
-#             "analysis": {{analysis}},   // Your analysis of the SQL query
-#             "context_pg_hint_plan": [
-#                 {{
-#                     "CTE_name": "{{name}}",    // The CTE name for the context hint (or "" if none)
-#                     "pg_hint_plan": "{{pg_hint_plan}}"         // The pg_hint_plan string for this CTE (or "" if none)
-#                 }},
-#                 {{
-#                     ... // Include additional objects if multiple CTEs exist
-#                 }}   
-#             ],
-#             "preamble_pg_hint_plan": "{{pg_hint_plam}}"  // The pg_hint_plan string for the main query (or "" if none)
-#         }}
-#         ```
-#         """)
-#     return prompt
 
 def get_selection_prompt(input_sql,report):
     prompt = textwrap.dedent(f"""
@@ -292,64 +193,21 @@ def get_selection_prompt(input_sql,report):
 
 
 
-# def get_selection_prompt(input_sql,report):
-#     prompt = textwrap.dedent(f"""
-#         <Mission>
-#         You are an experienced DBA, and your mission is to provide the most efficient pg_hint_plan for the following SQL query based on the analysis report.
-#         You have been given a table for how to use pg_hint_plan and the <data_statistics> about the database.
-                                 
-#         <Steps>
-#         1. Based on the <report>, find and check the most efficient pg_hint_plan to improve SQL performance.
-#         2. If the report mentions that the query is worth optimizing with pg_hint_plan, return the pg_hint_plan in JSON format as shown below. Otherwise, return "".
-#         3. classifiled the hints into "inline" hints and "outline" hints if the sql has CTE. 
-#             The inline hints means the hints in CTE, and you must mention the CTE name of the inline hints you add. If the SQL doesn't have CTE, fill ""
 
-#         <Notation>
-#         1. Note that you should only return the pg_hint_plan, not the whole SQL query.
-#         2. You can only use the hints in <pg_hint_plan_table>, and you should return as few hints as possible, in string format, not a list.
 
-#         <pg_hint_plan_table>                                
-                            
-#         ## Join Methods: NestLoop is used for small table driving large table, HashJoin is used for large data volume
-#             No Hash join, /*+ NoHashJoin(table table[ table...]) */ 
-#             No Nested loop join, /*+ NoNestLoop(table table[ table...]) */
-                        
-#         ##  Advanced Control:
-#             Cardinality estimation(rows) correction,  changes the row number estimation of joins that comes from restrictions in the planner:
-#                     /*+ Rows(a b #10) */ (Sets rows of join result to 10)
-
-#         <input_sql>
-#         {input_sql}
-
-#         <report>
-#         {report}
-
-#         Please return the answer in the following format:
-#         ```json
-#         {{
-#             "flag": {{flag}},           // true if pg_hint_plan is recommended, false otherwise
-#             "CTE_flag": {{CTE_flag}},   // true if the query includes CTEs, false otherwise
-#             "analysis": {{analysis}},   // Your analysis of the SQL query
-#             "context_pg_hint_plan": [
-#                 {{
-#                     "CTE_name": "{{name}}",    // The CTE name for the context hint (or "" if none)
-#                     "{{hints}}"         // The hints string for this CTE (or "" if none)
-#                 }},
-#                 {{
-#                     ... // Include additional objects if multiple CTEs exist
-#                 }}   
-#             ],
-#             "preamble_pg_hint_plan": "{{hints}}"  // The hints string for the main query (or "" if none)
-#         }}
-#         ```
-#         """)
-#     return prompt
-
-def  extract_func(text,label):
-    pattern = rf'</{label}>\s*(.*?)\s*</{label}>'
-    match = re.search(pattern, text, re.DOTALL)
-    if match:
-        return match.group(1).strip()
+def extract_func(text, label):
+    # 先尝试正确的XML标签格式
+    pattern1 = rf'<{label}>\s*(.*?)\s*</{label}>'
+    match1 = re.search(pattern1, text, re.DOTALL)
+    if match1:
+        return match1.group(1).strip()
+    
+    # 如果没找到，尝试您提到的特殊格式（开始和结尾都是结束标签）
+    pattern2 = rf'</{label}>\s*(.*?)\s*</{label}>'
+    match2 = re.search(pattern2, text, re.DOTALL)
+    if match2:
+        return match2.group(1).strip()
+    
     return ""
 
 def extract_json(text):
@@ -367,73 +225,14 @@ def extract_json(text):
     return json_list
 
 
-    # "context_pg_hint_plan": [
-    #     {
-    #         "CTE_name": "filtered_parts",
-    #         "context_pg_hint_plan": "/*+ Inline(filtered_parts) Rows(filtered_parts 2127) */"
-    #     }
-    # ],
-
-    # "preamble_pg_hint_plan": "/*+ Leading(filtered_parts lineitem subq) HashJoin(filtered_parts lineitem) HashJoin(lineitem subq) */"
-    # "input_query" = "WITH filtered_parts AS (     SELECT p_partkey     FROM part     WHERE p_brand = 'Brand#32'      AND p_container = 'WRAP PKG' ) SELECT SUM(l.l_extendedprice) / 7.0 AS avg_yearly FROM filtered_parts p JOIN lineitem l ON p.p_partkey = l.l_partkey JOIN (     SELECT l_partkey, 0.2 * AVG(l_quantity) AS avg_quantity     FROM lineitem l     JOIN filtered_parts p ON l.l_partkey = p.p_partkey     GROUP BY l_partkey ) subq ON l.l_partkey = subq.l_partkey WHERE l.l_quantity < subq.avg_quantity;"
-
-# def refine_func(input_sql: str, context_pg_hint_plan: list, preamble_pg_hint_plan: str) -> str:
-#     # 处理外部提示
-#     hinted_sql = f"{preamble_pg_hint_plan}\n{input_sql.strip()}"
-    
-#     # 处理内联提示
-#     for cte_hint in context_pg_hint_plan:
-#         cte_name = cte_hint["CTE_name"]
-#         hint_str = cte_hint["pg_hint_plan"].strip()
-        
-#         # 匹配两种模式：
-#         # 1. WITH + CTE_NAME + AS + (
-#         # 2. 逗号 + CTE_NAME + AS + (
-
-#         pattern = re.compile(
-#             rf'''
-#             (                       # 捕获组1：前缀（WITH或逗号及空格）
-#                 (?:WITH\s+|,\s*)
-#             )
-#             ({re.escape(cte_name)})  # 捕获组2：CTE名称
-#             \s+AS\s*                # 匹配 AS 及空格
-#             (\()                    # 捕获组3：左括号
-#             ''',
-#             re.IGNORECASE | re.VERBOSE
-#         )
-        
-#         # 处理提示
-#         if f"NO_MATERIALIZE({cte_name})" in hint_str:
-#             hint_str = hint_str.replace(f"NOT MATERIALIZED({cte_name}) ", "").strip()
-#             if hint_str != "/*+ */":
-#                 replacement = rf'\1{cte_name} AS NOT MATERIALIZED ( {hint_str}'
-#             else:
-#                 replacement = rf'\1{cte_name} AS NOT MATERIALIZED ('
-#         else:
-#             if hint_str != "/*+ */":
-#                 replacement = rf'\1{cte_name} AS ( {hint_str}'
-#             else:
-#                 replacement = rf'\1{cte_name} AS ('
-            
-            
-#         # 执行替换
-#         hinted_sql = pattern.sub(replacement, hinted_sql, count=1)
-    
-#     return hinted_sql
-
 def refine_func(input_sql: str, context_pg_hint_plan: list, preamble_pg_hint_plan: str) -> str:
     result_sql = input_sql.strip()
     
     # 1. 处理 preamble hints (主查询前的hints)
     if preamble_pg_hint_plan and preamble_pg_hint_plan.strip():
-        # 确保 hint 被正确包装
-        if not preamble_pg_hint_plan.strip().startswith('/*+'):
-            # 如果没有 /*+ 开头，添加完整格式
-            formatted_hint = f"/*+ {preamble_pg_hint_plan.strip()} */"
-        else:
-            # 如果已经有格式，直接使用
-            formatted_hint = preamble_pg_hint_plan.strip()
-        
+        formatted_hint = preamble_pg_hint_plan.strip()
+        if not formatted_hint.startswith('/*+'):
+            formatted_hint = f"/*+ {formatted_hint} */"
         result_sql = f"{formatted_hint}\n{result_sql}"
     
     # 2. 处理 CTE context hints
@@ -447,33 +246,47 @@ def refine_func(input_sql: str, context_pg_hint_plan: list, preamble_pg_hint_pla
         if not hint_str:
             continue
         
-        # 确保 hint 格式正确
-        if not hint_str.startswith('/*+'):
-            hint_str = f"/*+ {hint_str} */"
-        
         # 查找 CTE 定义位置
         pattern = re.compile(
             rf'''
-            (                       # 捕获组1：前缀
+            (                       # 捕获组1：前缀 (WITH 或 ,)
                 (?:WITH\s+|,\s*)
             )
             ({re.escape(cte_name)})  # 捕获组2：CTE名称
-            \s+AS\s*                # 匹配 AS
-            (\()                    # 捕获组3：左括号
+            (\s+AS\s*)              # 捕获组3：AS
+            (\()                    # 捕获组4：左括号
             ''',
             re.IGNORECASE | re.VERBOSE
         )
+
+        # 检查是否包含 NO_MATERIALIZE
+        is_no_materialize = f"NO_MATERIALIZE({cte_name})" in hint_str
         
-        # 处理特殊的 NO_MATERIALIZE hint
-        if f"NO_MATERIALIZE({cte_name})" in hint_str:
-            hint_str = hint_str.replace(f"NO_MATERIALIZE({cte_name})", "").strip()
-            if hint_str in ["/*+", "*/", "/*+ */"]:
-                replacement = rf'\1{cte_name} AS NOT MATERIALIZED \3'
-            else:
-                replacement = rf'\1{cte_name} AS NOT MATERIALIZED \3 {hint_str}\n'
+        # 从 hint_str 中移除 NO_MATERIALIZE 部分，以便处理剩余的普通Hint
+        remaining_hint = hint_str.replace(f"NO_MATERIALIZE({cte_name})", "").strip()
+        
+        # 清理空的Hint壳
+        if remaining_hint in ["/*+", "*/", "/*+ */"]:
+            remaining_hint = ""
+        
+        # 确保剩余的Hint格式正确
+        if remaining_hint and not remaining_hint.startswith('/*+'):
+            remaining_hint = f"/*+ {remaining_hint} */"
+
+        # 构建替换字符串
+        replacement_parts = [rf'\1{cte_name}'] # 前缀和CTE名
+        
+        if is_no_materialize:
+            replacement_parts.append(rf' AS NOT MATERIALIZED\4') # AS NOT MATERIALIZED (
         else:
-            replacement = rf'\1{cte_name} AS \3 {hint_str}\n'
+            replacement_parts.append(rf'\3\4') # AS (
+            
+        if remaining_hint:
+            replacement_parts.append(f" {remaining_hint}\n") # 注入剩余的Hint
         
+        replacement = "".join(replacement_parts)
+        
+        # 执行替换
         result_sql = pattern.sub(replacement, result_sql, count=1)
     
     return result_sql
@@ -508,21 +321,12 @@ for item in ori_data:
     report_prompt = get_analysis_prompt(input_sql,operation)
     report_result = llm.get_GPT_response(report_prompt)
     report = extract_func(report_result,"report")
-    # money_cost += llm.calc_money(report_prompt, report)
 
     prompt = get_selection_prompt(input_sql, report)
-    # result = llm_assistant.get_GPT_response(prompt,json_format=True)
-    result = llm.get_GPT_response(prompt)
+    result = llm.get_decision_GPT_response(prompt)
     json_list = extract_json(result)
     if json_list and len(json_list) > 0:
         result = json_list[0]
-    # print(result)
-    # json_list = extract_json(llm.get_GPT_response(prompt))
-    # if json_list and len(json_list) > 0:
-    #     result = json_list[0]
-    # print(result)
-    # # money_cost += llm.calc_money(prompt,result)
-    # # result = json.loads(llm.get_GPT_response(prompt))
 
     res = {}
     if result["flag"]:
