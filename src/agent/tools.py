@@ -2,44 +2,32 @@ import sys
 sys.path.append('../')
 sys.path.append('../../')
 sys.path.append('./')
-import json
-import os
-from dotenv import load_dotenv
-import re
+
 import psycopg2
-from psycopg2.extras import RealDictCursor
-from typing import List, Dict,Any, Optional,Tuple
 import concurrent.futures
 import os
 import hashlib
 import json
+import pickle
 import time
 import textwrap
+import subprocess
+import tempfile
+import signal
+
+from dotenv import load_dotenv
+from typing import List, Dict,Any, Optional,Tuple
+from psycopg2.extras import RealDictCursor
 from haystack import Pipeline, Document
 from haystack.utils import Secret
 from haystack.document_stores.in_memory import InMemoryDocumentStore
 from haystack.components.retrievers.in_memory import InMemoryBM25Retriever, InMemoryEmbeddingRetriever
 from haystack.components.generators import OpenAIGenerator
 from haystack.components.builders.prompt_builder import PromptBuilder
-from haystack.components.embedders import SentenceTransformersTextEmbedder, SentenceTransformersDocumentEmbedder
-import pickle
-import os
-import hashlib
-import time
+
 from datetime import datetime
-
-import re
 from typing import List, Dict, Any
-import subprocess
-import tempfile
-import os
-import json
-import signal
 
-
-
-# os.environ['HTTP_PROXY'] = 'socks5h://127.0.0.1:1080'
-# os.environ['HTTPS_PROXY'] = 'socks5h://127.0.0.1:1080'
 load_dotenv(dotenv_path="/root/syy/code/QUITE/Hint_injection/config_file/.env")
 
 
@@ -766,23 +754,6 @@ def DBMS_Cost_Tool(dbms: DBMS, db_id: str, test_sql: str) ->float: # Dict[str, A
         return {"error": str(e)}
 
 
-# db_id = 'tpch_s1'
-# dbms = DBMS(db_id)
-# query = "select s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment from part, supplier, partsupp, nation, region where p_partkey = ps_partkey and s_suppkey = ps_suppkey and p_size = 46 and p_type like '%NICKEL' and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = 'ASIA' and ps_supplycost = ( select min(ps_supplycost) from partsupp, supplier, nation, region where p_partkey = ps_partkey and s_suppkey = ps_suppkey and s_nationkey = n_nationkey and n_regionkey = r_regionkey and r_name = 'ASIA' ) order by s_acctbal desc, n_name, s_name, p_partkey limit 100;"
-# result = DBMS_Cost_Tool(dbms, db_id, query)
-# print(result)
-
-
-# # query2 = "WITH min_supplycost AS ( SELECT ps_partkey, MIN(ps_supplycost) AS min_supplycost FROM partsupp JOIN supplier ON partsupp.ps_suppkey = supplier.s_suppkey JOIN nation ON supplier.s_nationkey = nation.n_nationkey JOIN region ON nation.n_regionkey = region.r_regionkey WHERE region.r_name = 'ASIA' GROUP BY ps_partkey ) SELECT s_acctbal, s_name, n_name, p_partkey, p_mfgr, s_address, s_phone, s_comment FROM part JOIN partsupp ON part.p_partkey = partsupp.ps_partkey JOIN supplier ON partsupp.ps_suppkey = supplier.s_suppkey JOIN nation ON supplier.s_nationkey = nation.n_nationkey JOIN region ON nation.n_regionkey = region.r_regionkey JOIN min_supplycost ON part.p_partkey = min_supplycost.ps_partkey WHERE part.p_size = 46 AND part.p_type LIKE '%NICKEL' AND region.r_name = 'ASIA' AND partsupp.ps_supplycost = min_supplycost.min_supplycost ORDER BY s_acctbal DESC, n_name, s_name, p_partkey LIMIT 100;"
-# # query3 = "SELECT t411.s_acctbal, t411.s_name, t411.n_name, t411.p_partkey, t411.p_mfgr, t411.s_address, t411.s_phone, t411.s_comment FROM (SELECT t397.p_partkey, t397.p_name, t397.p_mfgr, t397.p_brand, t397.p_type, t397.p_size, t397.p_container, t397.p_retailprice, t397.p_comment, t397.s_suppkey, t397.s_name, t397.s_address, t397.s_nationkey, t397.s_phone, t397.s_acctbal, t397.s_comment, t397.ps_partkey, t397.ps_suppkey, t397.ps_availqty, t397.ps_supplycost, t397.ps_comment, t397.n_nationkey, t397.n_name, t397.n_regionkey, t397.n_comment, t397.r_regionkey, t397.r_name, t397.r_comment, CAST(t408.ps_partkey AS INTEGER) AS ps_partkey0, CAST(t408.EXPR0 AS DECIMAL(19, 0)) AS EXPR0 FROM (SELECT * FROM (SELECT * FROM (SELECT * FROM (SELECT * FROM part WHERE p_size = 46 AND p_type LIKE '%NICKEL') AS t393, supplier AS supplier55, partsupp AS partsupp55 WHERE t393.p_partkey = partsupp55.ps_partkey AND supplier55.s_suppkey = partsupp55.ps_suppkey) AS t394, nation AS nation55 WHERE t394.s_nationkey = nation55.n_nationkey) AS t395, (SELECT * FROM region WHERE r_name = 'ASIA') AS t396 WHERE t395.n_regionkey = t396.r_regionkey) AS t397, (SELECT t404.ps_partkey, MIN(t404.EXPR0) AS EXPR0 FROM (SELECT t401.ps_partkey, t402.n_regionkey, MIN(t401.EXPR0) AS EXPR0 FROM (SELECT t398.ps_partkey, t399.s_nationkey, MIN(t398.EXPR0) AS EXPR0 FROM (SELECT ps_partkey, ps_suppkey, MIN(ps_supplycost) AS EXPR0 FROM partsupp GROUP BY ps_partkey, ps_suppkey) AS t398, (SELECT s_suppkey, s_nationkey FROM supplier GROUP BY s_suppkey, s_nationkey) AS t399 WHERE t399.s_suppkey = t398.ps_suppkey GROUP BY t398.ps_partkey, t399.s_nationkey) AS t401, (SELECT n_nationkey, n_regionkey FROM nation GROUP BY n_nationkey, n_regionkey) AS t402 WHERE t401.s_nationkey = t402.n_nationkey GROUP BY t401.ps_partkey, t402.n_regionkey) AS t404, (SELECT r_regionkey FROM region WHERE r_name = 'ASIA' GROUP BY r_regionkey) AS t406 WHERE t404.n_regionkey = t406.r_regionkey GROUP BY t404.ps_partkey) AS t408 WHERE t397.p_partkey = t408.ps_partkey AND t397.ps_supplycost = t408.EXPR0 ORDER BY t397.s_acctbal DESC, t397.n_name, t397.s_name, t397.p_partkey FETCH NEXT 100 ROWS ONLY) AS t411;"
-
-# # result2 = DBMS_Cost_Tool(dbms, db_id, query2)
-# # result3 = DBMS_Cost_Tool(dbms, db_id, query3)
-# print(result)
-# print(result2)
-# print(result3)
-# print(result["total_cost"])
-# print(type(result["total_cost"]))
 
 os.environ['LD_LIBRARY_PATH'] = '/root/syy/MARter_5/src/utils'
 # tool_5

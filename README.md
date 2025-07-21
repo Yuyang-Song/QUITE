@@ -5,7 +5,7 @@
 - [Quick Start](#quick-start)
 - [Experimental Results](#experimental-results)
 - [Code Structure](#code-structure)
-- [Citation](#citation)
+<!-- - [Citation](#citation) -->
 ## System Overview
 <p align="center">
     <img src="figures/overview.png" width="1000px">
@@ -24,7 +24,7 @@ We compare QUITE with state-of-the-art methods:
 - []
 ## Code Structure
 
-## Citation
+<!-- ## Citation
 If you use this codebase, or otherwise found our work valuable, please cite:
 ```
 @article{song2025quite,
@@ -33,5 +33,5 @@ If you use this codebase, or otherwise found our work valuable, please cite:
   journal={arXiv preprint arXiv:2506.07675},
   year={2025}
 }
-```
+``` -->
 

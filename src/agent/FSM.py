@@ -14,13 +14,8 @@ sys.path.append('../utils')
 sys.path.append('./')
 
 from agent_role import ReasoningAgent, AssistantAgent, DecisionAgent
-from utils.gpt_request import GPT
+from code.src.utils.gpt_client import GPT
 from utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue
-
-
-# os.environ['HTTP_PROXY'] = 'socks5h://127.0.0.1:1080'
-# os.environ['HTTPS_PROXY'] = 'socks5h://127.0.0.1:1080'
-
 
 class OutputCollector:
     """收集终端输出的工具类"""
@@ -582,7 +577,7 @@ async def main():
     # data_statistics = "[['BONUS', '29999999'], ['DEPT', '299999'], ['EMP_B', '29999999'], ['EMP', '29999999'], ['EMPNULLABLES_20', '55'], ['EMPNULLABLES', '29999999']]"
     # calcite_new
     
-    schema_file = "./tpch_schema.sql"
+    schema_file = "/root/syy/QUITE/dataset/schemas/tpch_schema.sql"
     # schema_file = "./dsb_schema.sql"
     # schema_file = "./calcite_schema.sql"
 
