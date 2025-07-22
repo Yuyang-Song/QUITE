@@ -13,7 +13,7 @@ sys.path.append('../')
 sys.path.append('../utils')
 sys.path.append('./')
 from utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue,  Agent
-from utils.gpt_request import GPT
+from QUITE.src.utils.llm_client import GPT
 
 from dotenv import load_dotenv
 # load_dotenv(dotenv_path='/root/syy/MARter_5_parallel/config_file/.env')  # Load environment variables from .env file, here is the running path
@@ -233,7 +233,7 @@ class DecisionAgent(Agent):
             {original_sql}
         """)
         
-        response = await self.llm.get_GPT_response_async(
+        response = await self.llm.get_LLM_response_async(
             prompt=prompt,
             json_format= False
         )
@@ -269,7 +269,7 @@ class DecisionAgent(Agent):
         </corrected_sql>
         """)
         
-        response = await self.llm.get_GPT_response_async(
+        response = await self.llm.get_LLM_response_async(
             prompt=prompt,
             json_format=False
         )
@@ -297,7 +297,7 @@ class DecisionAgent(Agent):
         </selected_id>
         """)
         
-        response = await self.llm.get_GPT_response_async(
+        response = await self.llm.get_LLM_response_async(
             prompt=prompt,
             json_format=False
         )
@@ -336,7 +336,7 @@ class DecisionAgent(Agent):
         {report}
         """)
         
-        response = await self.llm.get_GPT_response_async(
+        response = await self.llm.get_LLM_response_async(
             prompt=prompt,
             json_format=False
         )
@@ -469,7 +469,7 @@ class DecisionAgent(Agent):
             }}
         }}
         """)
-        response = await self.llm.get_GPT_response_async(
+        response = await self.llm.get_LLM_response_async(
             prompt=prompt,
             json_format=False
         )
@@ -556,7 +556,7 @@ class AssistantAgent(Agent):
 
         # """)
         
-        response = await self.llm.get_GPT_response_async(
+        response = await self.llm.get_LLM_response_async(
             prompt=prompt
         )
         
@@ -622,7 +622,7 @@ class AssistantAgent(Agent):
         {imp_explain_result}
 
         """)
-        return await self.llm.get_GPT_response_async(
+        return await self.llm.get_LLM_response_async(
             prompt=prompt
         )
 

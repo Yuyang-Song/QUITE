@@ -14,7 +14,7 @@ sys.path.append('../utils')
 sys.path.append('./')
 
 from agent_role import ReasoningAgent, AssistantAgent, DecisionAgent
-from code.src.utils.gpt_client import GPT
+from QUITE.src.utils.llm_client import GPT
 from utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue
 
 class OutputCollector:

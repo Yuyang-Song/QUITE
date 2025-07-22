@@ -24,16 +24,15 @@ from haystack.document_stores.in_memory import InMemoryDocumentStore
 from haystack.components.retrievers.in_memory import InMemoryBM25Retriever, InMemoryEmbeddingRetriever
 from haystack.components.generators import OpenAIGenerator
 from haystack.components.builders.prompt_builder import PromptBuilder
-
+from haystack.components.embedders import SentenceTransformersTextEmbedder, SentenceTransformersDocumentEmbedder
 from datetime import datetime
 from typing import List, Dict, Any
 
-load_dotenv(dotenv_path="/root/syy/code/QUITE/Hint_injection/config_file/.env")
+load_dotenv(dotenv_path="/root/syy/QUITE/config_file/.env")
 
 
 class DBMS:
     def __init__(self,json_file_path = None):
-        # load_dotenv(dotenv_path='../../config_file/.env')  # Load environment variables from .env file
         
         self.db_name = os.getenv("DB_NAME")
         self.db_user= os.getenv("DB_USER")
@@ -173,17 +172,14 @@ class DBMS:
             print(f"Error executing statement: {e}")
             raise
 
-class RAG:
+class Structured_Knowledge_Base:
     def __init__(self, folder_path, json_file_path, document_store_path=None):
-        # load_dotenv(dotenv_path='/root/syy/MARter_3/config_file/.env')  # Load environment variables from .env file, here is the running path
         self.open_api_key = Secret.from_token(os.getenv("ASSISTANT_MODEL_API_KEY"))  # Get the API key from the environment variable
         self.model = os.getenv("ASSISTANT_MODEL")
         self.api_base_url = os.getenv("ASSISTANT_MODEL_URL")
         self.folder_path = folder_path
         self.json_file_path = json_file_path
-        # self.documents_from_file = self.load_documents_from_file()
-        # 将文档写入 InMemoryDocumentStore
-        
+
         # 设置document_store缓存路径
         if document_store_path is None:
             base_dir = os.path.dirname(json_file_path)
@@ -532,13 +528,13 @@ async def DBMS_EXPLAIN_Tool(dbms: DBMS, input_sql: str) -> str:
 
 
 # tool_2
-async def Knowledge_Pool_Tool(input_sql: str, navie_suggestion_list: str) -> str:
+async def Knowledge_Base_Tool(input_sql: str, navie_suggestion_list: str) -> str:
     print("Knowledge_Pool_Tool starts...")
     # 指定文件夹路径
-    folder_path = '/root/syy/MARter_5/src/knowledge_pool/results'
-    json_file_path = '/root/syy/MARter_5/src/knowledge_pool/documents.json'
-    document_path = '/root/syy/MARter_5/src/knowledge_pool/documents_document_store.pkl'
-    rag = RAG(folder_path, json_file_path,document_path)
+    folder_path = '/root/syy/QUITE/src/Rewrite_Middleware/Structured_Knowledge_Base/storage'
+    json_file_path = '/root/syy/QUITE/src/Rewrite_Middleware/Structured_Knowledge_Base/documents.json'
+    document_path = '/root/syy/QUITE/src/Rewrite_Middleware/Structured_Knowledge_Base/documents_document_store.pkl'
+    rag = Structured_Knowledge_Base(folder_path, json_file_path,document_path)
 
     start = time.time()
 
@@ -581,44 +577,44 @@ async def Knowledge_Pool_Tool(input_sql: str, navie_suggestion_list: str) -> str
     print("Knowledge Pool ends..",final_output)
     return final_output
 
-# input_sql = """
-# WITH min_supply AS (
-#     SELECT ps.ps_partkey, MIN(ps.ps_supplycost) AS min_supplycost
-#     FROM partsupp ps
-#     JOIN supplier s ON ps.ps_suppkey = s.s_suppkey
-#     JOIN nation n ON s.s_nationkey = n.n_nationkey
-#     JOIN region r ON n.n_regionkey = r.r_regionkey
-#     WHERE r.r_name = 'EUROPE'
-#     GROUP BY ps.ps_partkey
-# )
-# SELECT s.s_acctbal, s.s_name, n.n_name, p.p_partkey, p.p_mfgr, s.s_address, s.s_phone, s.s_comment
-# FROM part p
-# JOIN partsupp ps ON p.p_partkey = ps.ps_partkey
-# JOIN supplier s ON ps.ps_suppkey = s.s_suppkey
-# JOIN nation n ON s.s_nationkey = n.n_nationkey
-# JOIN min_supply ms ON p.p_partkey = ms.ps_partkey AND ps.ps_supplycost = ms.min_supplycost
-# WHERE p.p_size = 6
-#   AND p.p_type LIKE '%NICKEL'
-# ORDER BY s.s_acctbal DESC, n.n_name, s.s_name, p.p_partkey
-# LIMIT 100;
-# """
-# navie_suggestion_list = [
-#     {
-#         "group": "Redundancy_elimination",
-#         "navie_suggestion": "Ensure the CTE precomputes the minimum supply cost for parts from European suppliers, thus avoiding repetitive execution."
-#     },
-#     {
-#         "group": "Join_optimization",
-#         "navie_suggestion": "Simplify the main query by leveraging this CTE and reducing redundant joins, particularly eliminating unnecessary joins to the `region` table in the main query."
-#     },
-#     {
-#         "group": "Predication_simplification",
-#         "navie_suggestion": "Replace the correlated subquery that finds the minimum `ps_supplycost` with a more efficient Common Table Expression (CTE)."
-#     }
-# ]
-# import asyncio
-# output = asyncio.run(Knowledge_Pool_Tool(input_sql, navie_suggestion_list))
-# print(output)
+input_sql = """
+WITH min_supply AS (
+    SELECT ps.ps_partkey, MIN(ps.ps_supplycost) AS min_supplycost
+    FROM partsupp ps
+    JOIN supplier s ON ps.ps_suppkey = s.s_suppkey
+    JOIN nation n ON s.s_nationkey = n.n_nationkey
+    JOIN region r ON n.n_regionkey = r.r_regionkey
+    WHERE r.r_name = 'EUROPE'
+    GROUP BY ps.ps_partkey
+)
+SELECT s.s_acctbal, s.s_name, n.n_name, p.p_partkey, p.p_mfgr, s.s_address, s.s_phone, s.s_comment
+FROM part p
+JOIN partsupp ps ON p.p_partkey = ps.ps_partkey
+JOIN supplier s ON ps.ps_suppkey = s.s_suppkey
+JOIN nation n ON s.s_nationkey = n.n_nationkey
+JOIN min_supply ms ON p.p_partkey = ms.ps_partkey AND ps.ps_supplycost = ms.min_supplycost
+WHERE p.p_size = 6
+  AND p.p_type LIKE '%NICKEL'
+ORDER BY s.s_acctbal DESC, n.n_name, s.s_name, p.p_partkey
+LIMIT 100;
+"""
+navie_suggestion_list = [
+    {
+        "group": "Subquery_optimization",
+        "navie_suggestion": "Ensure the CTE precomputes the minimum supply cost for parts from European suppliers, thus avoiding repetitive execution."
+    },
+    {
+        "group": "Join_optimization",
+        "navie_suggestion": "Simplify the main query by leveraging this CTE and reducing redundant joins, particularly eliminating unnecessary joins to the `region` table in the main query."
+    },
+    {
+        "group": "Predication_simplification",
+        "navie_suggestion": "Replace the correlated subquery that finds the minimum `ps_supplycost` with a more efficient Common Table Expression (CTE)."
+    }
+]
+import asyncio
+output = asyncio.run(Knowledge_Base_Tool(input_sql, navie_suggestion_list))
+print(output)
 # 默认使用与JSON文件相同目录下的文件存储缓存
 
 
@@ -755,8 +751,12 @@ def DBMS_Cost_Tool(dbms: DBMS, db_id: str, test_sql: str) ->float: # Dict[str, A
 
 
 
+
+
+
+
 os.environ['LD_LIBRARY_PATH'] = '/root/syy/MARter_5/src/utils'
-# tool_5
+
 async def run_sql_solver(sql1_query, sql2_query, schema_file_path, timeout=10, verbose=False):
     """
     调用sqlsolver.jar并返回结果，如果超时则终止进程并返回UNKNOWN
