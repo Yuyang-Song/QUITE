@@ -10,20 +10,21 @@ import json
 import textwrap
 from typing import List, Dict, Set, Optional, Union
 sys.path.append('../')
-sys.path.append('../utils')
 sys.path.append('./')
 from utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue,  Agent
-from QUITE.src.utils.llm_client import GPT
+from src.utils.llm_client import GPT
 
 from dotenv import load_dotenv
-# load_dotenv(dotenv_path='/root/syy/MARter_5_parallel/config_file/.env')  # Load environment variables from .env file, here is the running path
 
 class ReasoningAgent(Agent):
     """SQL重写推理Agent"""
-    def __init__(self, mq: MessageQueue, gpt: GPT):
-        super().__init__("ReasoningAgent", mq, gpt)
-        
-        
+    def __init__(self, mq: MessageQueue):
+        super().__init__("ReasoningAgent", mq, gpt = GPT(
+        api_key=os.getenv("REASONING_MODEL_API_KEY"),
+        model=os.getenv("REASONING_MODEL"),
+        base_url=os.getenv("REASONING_MODEL_URL")
+        ))
+
         self.api_key = os.getenv("REASONING_MODEL_API_KEY")  # Get the API key from the environment variable
         self.model = os.getenv("REASONING_MODEL")
         self.base_url = os.getenv("REASONING_MODEL_URL")
@@ -484,9 +485,12 @@ class DecisionAgent(Agent):
 
 class AssistantAgent(Agent):
     """执行计划分析Agent"""
-    def __init__(self, mq: MessageQueue, gpt: GPT):
-        super().__init__("AssistantAgent", mq, gpt)
-        self.watch(["SummaryAgent"])
+    def __init__(self, mq: MessageQueue):
+        super().__init__("AssistantAgent", mq, gpt = GPT(
+    api_key=os.getenv("ASSISTANT_MODEL_API_KEY"),
+    model=os.getenv("ASSISTANT_MODEL"),
+    base_url=os.getenv("ASSISTANT_MODEL_URL")
+))
     
     def extract_corrected_sql_content(self, text: str) -> str:
         """

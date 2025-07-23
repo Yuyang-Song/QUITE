@@ -35,10 +35,9 @@ from pydantic import BaseModel
 from dataclasses import replace
 
 sys.path.append('../')
-sys.path.append('./utils')
 sys.path.append('./')
 
-from QUITE.src.utils.llm_client import GPT
+from src.utils.llm_client import GPT
     
 class MessageContent(BaseModel):
     """

@@ -4,18 +4,22 @@ import os
 import asyncio
 import sys
 import time
-from tools import DBMS, RAG
 import time
-from tools import DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Knowledge_Pool_Tool, Equivalence_Check_Tool
-import threading
-
 sys.path.append('../')
-sys.path.append('../utils')
+sys.path.append('../../')
 sys.path.append('./')
 
-from agent_role import ReasoningAgent, AssistantAgent, DecisionAgent
-from QUITE.src.utils.llm_client import GPT
-from utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue
+
+from src.Rewrite_Middleware.middleware import DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Knowledge_Base_Tool, Equivalence_Check_Tool, DBMS
+from src.Rewrite_Middleware.Agent_Memory_Buffer.memory_buffer import AgentMemoryBuffer, create_memory_buffer
+from src.utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue
+
+from pathlib import Path
+import threading
+
+
+from src.Query_Rewriter.agent_definition import ReasoningAgent, AssistantAgent, DecisionAgent
+from src.utils.llm_client import GPT
 
 class OutputCollector:
     """收集终端输出的工具类"""
@@ -48,41 +52,22 @@ class OutputCollector:
 
 
 
-class SQLRewriteFSM:
+class QueryRewriteFSM:
     """SQL重写有限状态机"""
-    def __init__(self, message_queue: MessageQueue, gpt: GPT, dbms: DBMS, data_statistics, schema_file, MAX_ITERATION_LOOP=3):
+    def __init__(self, message_queue: MessageQueue, dbms: DBMS, data_statistics, schema_file, MAX_ITERATION_LOOP=3):
         self.current_state = "REASONING"
-        # self.current_state = "SUMMARY"
-        # self.current_state = "VERIFICATION"
-        self.llm = gpt
-        self.data_statistics = data_statistics
-        self.initial_sql = None
-        self.optimization_advice = None
-        self.produced_sql = None
-        self.enhanced_sql = None
-        self.re_explain_result = None
-        self.ori_explain_result = None
-        self.imp_explain_result = None
-        self.report = None
+        self.memory = create_memory_buffer(data_statistics, schema_file)
+
         self.dbms = dbms
-        self.guide_info = None
         self.iteration = 0
-        self.schema_file = schema_file
         self.MAX_ITERATION_LOOP = MAX_ITERATION_LOOP    
         self.terminal_output = None
         self.output_collector = OutputCollector()
         
         # 初始化各Agent
-        self.reasoning_agent = ReasoningAgent(message_queue, gpt)
-        self.assistant_agent = AssistantAgent(message_queue, gpt)
+        self.reasoning_agent = ReasoningAgent(message_queue)
+        self.assistant_agent = AssistantAgent(message_queue)
         self.decision_agent = DecisionAgent(message_queue)
-        # 指定文件夹路径
-        folder_path = '/root/syy/MARter_5/src/knowledge_pool/data/results'
-        # 指定 JSON 文件存储路径
-        json_file_path = '/root/syy/MARter_5/src/knowledge_pool/data/documents.json'
-        self.rag_tool = RAG(folder_path, json_file_path)
-        # self.syntax_tool = DBMS_Syntax_Tool()
-        # self.explain_tool = DBMS_EXPLAIN_Tool()
         
         # 设置观察关系
         self.decision_agent.watch(["ReasoningAgent","ExplainAgent"])
@@ -96,23 +81,99 @@ class SQLRewriteFSM:
         self.llm_semaphore = asyncio.Semaphore(3)  # 控制LLM并发数
         self.db_semaphore = asyncio.Semaphore(5)   # 控制数据库并发数
 
+    @property
+    def data_statistics(self):
+        return self.memory.data_statistics
+    
+    @property
+    def initial_sql(self):
+        return self.memory.initial_sql
+    
+    @initial_sql.setter
+    def initial_sql(self, value):
+        self.memory.initial_sql = value
+    
+    @property
+    def optimization_advice(self):
+        return self.memory.optimization_advice
+    
+    @optimization_advice.setter
+    def optimization_advice(self, value):
+        self.memory.optimization_advice = value
+    
+    @property
+    def produced_sql(self):
+        return self.memory.produced_sql
+    
+    @produced_sql.setter
+    def produced_sql(self, value):
+        self.memory.produced_sql = value
+    
+    @property
+    def enhanced_sql(self):
+        return self.memory.enhanced_sql
+    
+    @enhanced_sql.setter
+    def enhanced_sql(self, value):
+        self.memory.enhanced_sql = value
+    
+    @property
+    def re_explain_result(self):
+        return self.memory.re_explain_result
+    
+    @re_explain_result.setter
+    def re_explain_result(self, value):
+        self.memory.re_explain_result = value
+    
+    @property
+    def ori_explain_result(self):
+        return self.memory.ori_explain_result
+    
+    @ori_explain_result.setter
+    def ori_explain_result(self, value):
+        self.memory.ori_explain_result = value
+    
+    @property
+    def imp_explain_result(self):
+        return self.memory.imp_explain_result
+    
+    @imp_explain_result.setter
+    def imp_explain_result(self, value):
+        self.memory.imp_explain_result = value
+    
+    @property
+    def guide_info(self):
+        return self.memory.guide_info
+    
+    @guide_info.setter
+    def guide_info(self, value):
+        self.memory.guide_info = value
+    
+    @property
+    def report(self):
+        return self.memory.report
+    
+    @report.setter
+    def report(self, value):
+        self.memory.report = value
+    
+    @property
+    def schema_file(self):
+        return self.memory.schema_file
     
     async def clear(self):
-        """清除所有初始化变量"""
-        self.initial_sql = None
+        """清除所有初始化变量 - 使用简化的memory buffer"""
+        # 使用memory buffer的清理方法
+        self.memory.clear_volatile_memory()
+        
+        # 重置FSM状态
         self.current_state = "REASONING"
-        self.optimization_advice = None
-        self.produced_sql = None
-        self.enhanced_sql = None
-        self.re_explain_result = None
-        self.ori_explain_result = None
-        self.imp_explain_result = None
-        self.guide_info = None
-        self.report = None
         self.iteration = 0
         self.parallel_reasoning_results = []
         self.parallel_verification_results = []
         self._stop_event.clear()
+        
+        print(f"🧹 Memory cleared. Buffer status: {self.memory}")
     
     async def clear_log(self):
         if hasattr(self, 'terminal_output'):
@@ -512,7 +573,7 @@ class SQLRewriteFSM:
                 print(f"## The decision was not approved. Further optimization is required (iteration: {self.iteration}/{self.MAX_ITERATION_LOOP}) ##")
                 
                 print("## Start a new round of complete iteration ## ")
-                rag_knowledge = await Knowledge_Pool_Tool(self.enhanced_sql, self.optimization_advice)
+                rag_knowledge = await Knowledge_Base_Tool(self.enhanced_sql, self.optimization_advice)
                 async with self.llm_semaphore:
                     self.optimization_advice = await self.decision_agent.merge_advice(
                         self.enhanced_sql, 
@@ -555,107 +616,5 @@ def save_terminal_output_to_file(save_file_path, batch, original_stdout, temp_fi
     temp_file = open("temp_output.txt", "w")
     sys.stdout = temp_file
     return temp_file
-
-
-                                                                                                                                                                                      
-# 初始化运行示例
-async def main():
-    # tpch_s1
-    # data_statistics = '[["region", "4"], ["nation", "24"], ["customer", "149999"], ["lineitem", "6001214"], ["orders", "1499999"], ["part", "199999"], ["partsupp", "799999"], ["supplier", "9999"]]'
-
-    # tpch_s10
-    data_statistics = '[["customer", "1499999"], ["lineitem", "59986051"], ["nation", "24"], ["orders", "14999999"], ["part", "1999999"], ["partsupp", "7999999"], ["region", "4"], ["supplier", "99999"]]'
-    
-    # tpch_s30
-    # data_statistics = '[["region", "4"],["nation", "24"],["customer", "4499999"],["lineitem", "179998371"],["orders", "44999999"],["part", "5999999"],["partsupp", "23999999"],["supplier", "299999"]]'
-    
-    # tpcds
-    # data_statistics = "[['call_center', '24'], ['catalog_page', '12000'], ['catalog_returns', '1439749'], ['catalog_sales', '14401261'], ['customer', '500000'], ['customer_address', '250000'], ['customer_demographics', '1920800'], ['date_dim', '73049'], ['dbgen_version', '1'], ['household_demographics', '7200'], ['income_band', '20'], ['inventory', '133110000'], ['item', '102000'], ['promotion', '500'], ['reason', '45'], ['ship_mode', '20'], ['store', '102'], ['store_returns', '2875432'], ['store_sales', '28800991'], ['time_dim', '86400'], ['warehouse', '10'], ['web_page', '200'], ['web_returns', '719217'], ['web_sales', '7197566'], ['web_site', '42']]"
-    # dsb
-    # data_statistics = "[['call_center', '24'], ['catalog_page', '12000'], ['customer_address', '250000'], ['customer_demographics', '1920800'], ['date_dim', '73049'], ['dbgen_version', '1'], ['household_demographics', '7200'], ['income_band', '20'], ['item', '102000'], ['reason', '45'], ['ship_mode', '20'], ['store', '102'], ['time_dim', '86400'], ['warehouse', '10'], ['web_site', '42'], ['catalog_returns', '1439749'], ['catalog_sales', '14401261'], ['inventory', '133110000'], ['promotion', '500'], ['web_page', '200'], ['web_returns', '719217'], ['web_sales', '7197566'], ['store_sales', '28800991'], ['customer', '500000'], ['store_returns', '2875432']]"
-    # calcite
-    # data_statistics = "[['BONUS', '29999999'], ['DEPT', '299999'], ['EMP_B', '29999999'], ['EMP', '29999999'], ['EMPNULLABLES_20', '55'], ['EMPNULLABLES', '29999999']]"
-    # calcite_new
-    
-    schema_file = "/root/syy/QUITE/dataset/schemas/tpch_schema.sql"
-    # schema_file = "./dsb_schema.sql"
-    # schema_file = "./calcite_schema.sql"
-
-
-    input_path ="/root/syy/machine1/query/tpch/tpch_hard.json"
-    save_file_path = "/root/syy/code/QUITE/src/agent/output/tpch_hard" 
-    count = 0
-    batch = 0
-    result = []
-    MAX_ITERATION_LOOP = 2
-
-    load_dotenv(dotenv_path='/root/syy/code/QUITE/config_file/.env')
-    
-    gpt = GPT(
-        api_key=os.getenv("ASSISTANT_MODEL_API_KEY"),
-        model=os.getenv("ASSISTANT_MODEL"),
-        base_url=os.getenv("ASSISTANT_MODEL_URL")
-    )
-    dbms = DBMS()
-    
-    mq = MessageQueue(window_size=8)
-    
-    with open(input_path, "r") as f:
-        data = json.load(f)
-        
-    fsm = SQLRewriteFSM(mq, gpt, dbms, data_statistics, schema_file, MAX_ITERATION_LOOP)
-
-
-    for item in data:
-        print("################################################################################")
-        print(f"This is the {count}-th iteration")
-        
-        initial_sql = item["query"]
-
-        print("Trying to rewrite the SQL query: ", initial_sql)
-        
-        fsm.initial_sql = initial_sql
-        start_time = time.time()
-        rewritten_sql = await fsm.run()
-        end_time = time.time()
-        rewrite_time = end_time - start_time
-        print("Rewrite time costs: ", rewrite_time)
-        tmp = {
-            "id": item["id"],
-            "original_query": item["query"],
-            "rewritten_query": rewritten_sql,
-            "time_cost": end_time - start_time,
-            "rewrite_suggestion": fsm.optimization_advice
-        }
-        result.append(tmp)
-        count += 1
-        await fsm.clear()
-        
-        # 每3条保存一次
-        if count % 1 == 0:  
-            batch += 1
-            json_file_name = f"{save_file_path}/batch_{batch}.json"
-            txt_file_name = f"{save_file_path}/batch_{batch}.txt"
-            with open(json_file_name, "w") as f:
-                json.dump(result, f, indent=4)
-            
-            with open(txt_file_name, "w") as f:
-                for r in result:
-                    f.write(fsm.terminal_output)
-                    f.write("\n")
-                
-            await fsm.clear_log()
-
-            result = [] # 清空结果列表
-    
-    # 保存剩余结果
-    if result:
-        batch += 1
-        with open(f"{save_file_path}/batch_{batch}.json", "w") as f:
-            json.dump(result, f, indent=4)
-        
-
-if __name__ == "__main__":
-    asyncio.run(main())
 
 

@@ -8,6 +8,7 @@ Simple unit test for Knowledge Base Tool and DBMS Explain Tool components.
 Author: Yuyang Song
 Date: 2025-07-23
 
+For better DBMS tool testing, verify that self.input_sql is a valid SQL query and can correspond to the database specified in the .env file.
 ####################################################################
 """
 
@@ -18,10 +19,12 @@ import asyncio
 from pathlib import Path
 sys.path.append('../')
 sys.path.append('./')
-
-from QUITE.src.Rewrite_Middleware.middleware import Knowledge_Base_Tool, DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Equivalence_Check_Tool, DBMS
+from src.Rewrite_Middleware.middleware import Knowledge_Base_Tool, DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Equivalence_Check_Tool, DBMS
+from dotenv import load_dotenv
+from src.utils.llm_client import GPT
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[2]))
-
+LOAD_PATH = PROJECT_ROOT / "config_file" / ".env"
+load_dotenv(dotenv_path= LOAD_PATH)
 
 class TestRewriteMiddleware(unittest.TestCase):
     """
@@ -75,6 +78,79 @@ class TestRewriteMiddleware(unittest.TestCase):
         # Test SQL Pairs for Euiqvalence_Check_Tool
         # Initialize DBMS instance
         self.dbms = DBMS()
+    
+    def test_dbms_connection(self):
+        """
+        ############################################################
+        #               Test: DBMS Connection                        #
+        ############################################################
+        """
+        print("\n" + "="*50)
+        print("🧪 Testing DBMS Connection")
+        print("="*50)
+        
+        try:
+            self.dbms.connect()
+            print("✅ DBMS Connection Test PASSED!")
+        except Exception as e:
+            self.fail(f"❌ DBMS Connection Test FAILED: {str(e)}")
+
+    def test_llm_connection(self):
+        """
+        ############################################################
+        #               Test: LLM Connection                         #
+        ############################################################
+        """
+        print("\n" + "="*50)
+        print("🧪 Testing LLM Connection")
+        print("="*50)
+        
+        test_prompt = "What is the capital of France?"
+        print(f"The reasoning agent configuration is: {os.getenv('REASONING_MODEL')}, base URL: {os.getenv('REASONING_MODEL_URL')}")
+        print(f"The decision agent configuration is: {os.getenv('DECISION_MODEL')}, base URL: {os.getenv('DECISION_MODEL_URL')}")
+        print(f"The assistant agent configuration is: {os.getenv('ASSISTANT_MODEL')}, base URL: {os.getenv('ASSISTANT_MODEL_URL')}")
+        Reasoning_Agent = GPT(
+        api_key=os.getenv("REASONING_MODEL_API_KEY"),
+        model=os.getenv("REASONING_MODEL"),
+        base_url=os.getenv("REASONING_MODEL_URL") 
+        )
+        Decision_Agent = GPT(
+        api_key=os.getenv("DECISION_MODEL_API_KEY"),
+        model=os.getenv("DECISION_MODEL"),
+        base_url=os.getenv("DECISION_MODEL_URL") 
+        )
+        Assistant_Agent = GPT(
+        api_key=os.getenv("ASSISTANT_MODEL_API_KEY"),
+        model=os.getenv("ASSISTANT_MODEL"),
+        base_url=os.getenv("ASSISTANT_MODEL_URL")
+        )
+
+        # Test LLM connection
+        try:
+            response = Reasoning_Agent.get_LLM_response(test_prompt)
+            self.assertIsNotNone(response, "LLM response is None")
+            print("✅ Reasoning Agent Connection Test PASSED!")
+        except Exception as e:
+            self.fail(f"❌ Reasoning Agent Connection Test FAILED: {str(e)}")
+        
+
+        try:
+            response = Decision_Agent.get_LLM_response(test_prompt)
+            self.assertIsNotNone(response, "LLM response is None")
+            print("✅ Decision Agent Connection Test PASSED!")
+        except Exception as e:
+            self.fail(f"❌ Decision Agent Connection Test FAILED: {str(e)}")
+        
+
+        try:
+            response = Assistant_Agent.get_LLM_response(test_prompt)
+            self.assertIsNotNone(response, "LLM response is None")
+            print("✅ Assistant Agent Connection Test PASSED!")
+        except Exception as e:
+            self.fail(f"❌ Assistant Agent Connection Test FAILED: {str(e)}")
+        
+
+        print("🧪 All LLM Connection Tests PASSED!")
 
 
     def test_dbms_explain_tool(self):
@@ -100,27 +176,27 @@ class TestRewriteMiddleware(unittest.TestCase):
         except Exception as e:
             self.fail(f"❌ Test FAILED: {str(e)}")
 
-    # def test_knowledge_base_tool(self):
-    #     """
-    #     ############################################################
-    #     #               Test: Knowledge Base Tool                 #
-    #     ############################################################
-    #     """
-    #     print("\n" + "="*50)
-    #     print("🧪 Testing Knowledge Base Tool")
-    #     print("="*50)
+    def test_knowledge_base_tool(self):
+        """
+        ############################################################
+        #               Test: Knowledge Base Tool                 #
+        ############################################################
+        """
+        print("\n" + "="*50)
+        print("🧪 Testing Knowledge Base Tool")
+        print("="*50)
         
-    #     try:
-    #         output = asyncio.run(Knowledge_Base_Tool(self.input_sql, self.origin_suggestion_list))
+        try:
+            output = asyncio.run(Knowledge_Base_Tool(self.input_sql, self.origin_suggestion_list))
             
-    #         # Basic assertions
-    #         self.assertIsNotNone(output)
+            # Basic assertions
+            self.assertIsNotNone(output)
             
-    #         print("✅ Test PASSED!")
-    #         # print(f"📋 Output: {output}")
+            print("✅ Test PASSED!")
+            # print(f"📋 Output: {output}")
             
-    #     except Exception as e:
-    #         self.fail(f"❌ Test FAILED: {str(e)}")
+        except Exception as e:
+            self.fail(f"❌ Test FAILED: {str(e)}")
 
     def test_dbms_syntax_tool(self):
         """
