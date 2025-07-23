@@ -1,7 +1,7 @@
 import sys
 import os
 import json
-from tools import DBMS
+from QUITE.src.Rewrite_Middleware.middleware import DBMS
 
 def get_data_statistics():
     print("Starting database statistics collection...")

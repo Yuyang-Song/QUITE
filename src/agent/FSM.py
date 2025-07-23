@@ -6,7 +6,7 @@ import sys
 import time
 from tools import DBMS, RAG
 import time
-from tools import DBMS_EXPLAIN_Tool, DBMS_syntax_Tool, Knowledge_Pool_Tool, run_sql_solver
+from tools import DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Knowledge_Pool_Tool, Equivalence_Check_Tool
 import threading
 
 sys.path.append('../')
@@ -81,7 +81,7 @@ class SQLRewriteFSM:
         # 指定 JSON 文件存储路径
         json_file_path = '/root/syy/MARter_5/src/knowledge_pool/data/documents.json'
         self.rag_tool = RAG(folder_path, json_file_path)
-        # self.syntax_tool = DBMS_syntax_Tool()
+        # self.syntax_tool = DBMS_Syntax_Tool()
         # self.explain_tool = DBMS_EXPLAIN_Tool()
         
         # 设置观察关系
@@ -262,7 +262,7 @@ class SQLRewriteFSM:
             
             # Syntax Check
             async with self.db_semaphore:
-                syntax_check = await DBMS_syntax_Tool(self.dbms, enhanced_sql)
+                syntax_check = await DBMS_Syntax_Tool(self.dbms, enhanced_sql)
             MAX_CORRECT_TIMES = 0
             MAX_CORRECT_FLAG = False
             
@@ -280,7 +280,7 @@ class SQLRewriteFSM:
                             self.initial_sql, enhanced_sql, syntax_check["error"]
                         )
                     async with self.db_semaphore:
-                        check_result = await DBMS_syntax_Tool(self.dbms, checked_sql)
+                        check_result = await DBMS_Syntax_Tool(self.dbms, checked_sql)
                     MAX_CORRECT_TIMES += 1
                     
                     if check_result["flag"]:
@@ -304,7 +304,7 @@ class SQLRewriteFSM:
             
             print(f"-- Worker {worker_id}: Perform SQL equivalence check--")
             
-            result = await run_sql_solver(
+            result = await Equivalence_Check_Tool(
                 self.initial_sql, enhanced_sql, self.schema_file, timeout=10
             )
             
