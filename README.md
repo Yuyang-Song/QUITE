@@ -40,8 +40,7 @@ cd QUITE
 ```bash
 pip install -r requirements.txt
 ```
-
-<!-- For the Rewrite Middleware dependencies installation, you can check the official document to find help. We use [SQLSolver SIGMOD'24](https://github.com/SJTU-IPADS/SQLSolver) as the start point of our hybrid SQL Corrector, [haystack](https://github.com/deepset-ai/haystack) to build our knowledge base. -->
+Note: For the Rewrite Middleware dependencies installation, we have simplified and integrated the installation process as much as possible into our workflow. If there still has any error related to this during runtime, you can check the official document to find help. We use [SQLSolver SIGMOD'24](https://github.com/SJTU-IPADS/SQLSolver) as the start point of our hybrid SQL Corrector, [haystack](https://github.com/deepset-ai/haystack) to build our knowledge base.
 
 <!-- 3. **Database Setup:**
 ```bash
@@ -103,6 +102,7 @@ DB_PASSWORD=your_password
 # Project Configuration
 PROJECT_ROOT=/path/to/QUITE
 ```
+Note: Make sure you have add the **PROJECT_ROOT** path in the `.env` file!
 
 #### 1.2 Test Each Module
 
@@ -111,12 +111,25 @@ Test DBMS connection, LLM platform connection and the Rewrite Middleware Compone
 ```bash
 # Test database connection and middleware tools
 python test_module.py
-
-# Test specific components
-python src/Rewrite_Middleware/Structured_Knowledge_Base/scripts/test.py
 ```
+The system will automatically test each unit to make sure the whole rewrite process stable. You will see the output like this:
+```
+============================================================
+🚀 Starting SQL Optimization Tests
+============================================================
 
-### Step 2: Prepare Input Queries
+==================================================
+🧪 Testing DBMS Connection
+==================================================
+✅ DBMS Connection Test PASSED!
+.
+==================================================
+🧪 Testing DBMS Explain Tool
+==================================================
+DBMS_EXPLAIN_Tool starts...
+......
+```
+### Step 2: Prepare Input Queries and Schemas
 
 #### 2.1 Use Provided Query Sets
 
@@ -124,13 +137,19 @@ QUITE includes three benchmark query sets:
 
 ```bash
 # TPC-H queries
-dataset/queries/tpch.json      # Test queries
+dataset/queries/tpch_queries.json
+# TPC-H schemas
+dataset/schemas/tpch_schemas.sql
 
 # DSB queries  
-dataset/queries/dsb_test.json
+dataset/queries/dsb_queries.json
+# DSB schemas
+dataset/queries/dsb_schemas.sql
 
 # Calcite queries
-dataset/queries/calcite_test.json
+dataset/queries/calcite_queries.json
+# Calcite schemas
+dataset/schemascalcite_schemas.sql
 ```
 
 #### 2.2 Prepare Custom Queries
@@ -150,6 +169,24 @@ Create your own query file in JSON format:
         "description": "Customer order aggregation"
     }
 ]
+```
+Create your own benchmark schemas in sql format:
+```
+CREATE TABLE region (
+    r_regionkey integer  NOT NULL,
+    r_name      char(25) NOT NULL,
+    r_comment   varchar(152),
+    PRIMARY KEY (r_regionkey)
+);
+
+CREATE TABLE nation (
+    n_nationkey integer  NOT NULL,
+    n_name      char(25) NOT NULL,
+    n_regionkey integer  NOT NULL,
+    n_comment   varchar(152),
+    PRIMARY KEY (n_nationkey),
+    FOREIGN KEY (n_regionkey) REFERENCES region (r_regionkey) ON DELETE CASCADE
+);
 ```
 
 ### Step 3: Execute QUITE to Rewrite SQL Queries
@@ -201,7 +238,7 @@ output/
 
 #### 4.2 Result Format
 
-Each JSON file contains:
+Each JSON file contains the example followings:
 
 ```json
 [
@@ -221,10 +258,7 @@ Use the provided analysis tools:
 
 ```bash
 # Analyze rewrite effectiveness  
-python scripts/analyze_results.py --input output/batch_1.json
-
-# Compare performance improvements
-python scripts/performance_comparison.py --original queries.json --rewritten output/batch_1.json
+python performance_analysis/evaluation.py --input output/batch_1.json
 ```
 
 

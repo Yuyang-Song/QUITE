@@ -1,2 +1,0 @@
-SELECT i, j FROM a
-SELECT x, y FROM b
