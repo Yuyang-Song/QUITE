@@ -367,40 +367,36 @@ The system will display real-time progress with tqdm progress bars:
 
 #### 4.1 Output Structure
 
-Results are saved in the `output/` directory:
+Results are organized in a hierarchical directory structure with temporary and final outputs:
 
 ```
 output/
-├── batch_1.json          # Rewritten queries batch 1
-├── batch_1.txt           # Detailed logs batch 1  
-├── batch_2.json          # Rewritten queries batch 2
-├── batch_2.txt           # Detailed logs batch 2
-└── ...
-```
-
-#### 4.2 Result Format
-
-Each JSON file contains the example followings:
-
-```json
-[
-    {
-        "id": 1,
-        "original_query": "SELECT * FROM customer WHERE c_acctbal > 1000",
-        "rewritten_query": "SELECT * FROM customer WHERE c_acctbal > 1000.0",
-        "time_cost": 2.34,
-        "rewrite_suggestion": "Added explicit decimal notation for numeric comparison"
-    }
-]
+├── rewriter_temp/                   # Temporary rewriter batch files
+│   ├── batch_1.json                # Query rewriting batch 1
+│   ├── batch_1.txt                 # Detailed logs batch 1 (if --save_rewriter_logs)
+│   ├── batch_2.json                # Query rewriting batch 2  
+│   ├── batch_2.txt                 # Detailed logs batch 2 (if --save_rewriter_logs)
+│   └── ...
+├── recommender_temp/                # Temporary recommender batch files
+│   ├── batch_1.json                # Hint recommendation batch 1
+│   ├── batch_2.json                # Hint recommendation batch 2
+│   └── ...
+├── rewritten_queries.json          # Final merged rewriter output
+└── recommended_hints.json          # Final merged recommender output
 ```
 
 ### Step 5: Performance Evaluation
 
-Use the provided analysis tools:
+#### 5.1 Using Built-in Evaluation Tools
 
 ```bash
-# Analyze rewrite effectiveness  
-python experiements_evaluation/evaluation.py --input output/batch_1.json
+# Evaluate rewrite effectiveness using the provided script
+chmod +x evaluation.sh
+./evaluation.sh
+
+# Or run evaluation directly on specific output files
+python experiments_evaluation/evaluation.py --input output/rewritten_queries.json
+python experiments_evaluation/evaluation.py --input output/recommended_hints.json
 ```
 
 
