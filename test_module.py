@@ -6,7 +6,7 @@
 Simple unit test for Knowledge Base Tool and DBMS Explain Tool components.
 
 Author: Yuyang Song
-Date: 2025-07-23
+Date: 2025-06-23
 
 For better DBMS tool testing, verify that self.input_sql is a valid SQL query and can correspond to the database specified in the .env file.
 ####################################################################
@@ -232,7 +232,7 @@ class TestRewriteMiddleware(unittest.TestCase):
 
         os.environ['LD_LIBRARY_PATH'] = str(PROJECT_ROOT / "src" / "Rewrite_Middleware" / "Hybrid_SQL_Corrector" )
 
-        SCHEMA_PATH = PROJECT_ROOT / "dataset" / "schemas" / "calcite.sql"
+        SCHEMA_PATH = PROJECT_ROOT / "dataset" / "schemas" / "calcite_schemas.sql"
         with open(SCHEMA_PATH, 'r') as f:
             schema_content = f.read()
             if not schema_content.strip():

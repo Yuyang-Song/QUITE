@@ -1,58 +1,17 @@
-from dotenv import load_dotenv
-import json
-import os
 import asyncio
 import sys
-import time
-import time
 sys.path.append('../')
 sys.path.append('../../')
 sys.path.append('./')
-
-
-from src.Rewrite_Middleware.middleware import DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Knowledge_Base_Tool, Equivalence_Check_Tool, DBMS
-from src.Rewrite_Middleware.Agent_Memory_Buffer.memory_buffer import AgentMemoryBuffer, create_memory_buffer
-from src.utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue
-
-from pathlib import Path
 import threading
 
-
+from src.Rewrite_Middleware.middleware import DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Knowledge_Base_Tool, Equivalence_Check_Tool, DBMS
+from src.Rewrite_Middleware.Agent_Memory_Buffer.memory_buffer import AgentMemoryBuffer, OutputCollector, create_memory_buffer
 from src.Query_Rewriter.agent_definition import ReasoningAgent, AssistantAgent, DecisionAgent
-from src.utils.llm_client import GPT
-
-class OutputCollector:
-    """收集终端输出的工具类"""
-    def __init__(self):
-        self.outputs = []
-        self.original_stdout = sys.stdout
-        self.current_output = ""
-    
-    def start_collecting(self):
-        """开始收集输出"""
-        self.original_stdout = sys.stdout
-        sys.stdout = self
-    
-    def stop_collecting(self):
-        """停止收集输出并返回收集到的内容"""
-        sys.stdout = self.original_stdout
-        collected = self.current_output
-        self.current_output = ""
-        return collected
-    
-    def write(self, text):
-        """重写write方法以捕获输出"""
-        self.current_output += text
-        self.original_stdout.write(text)
-    
-    def flush(self):
-        """实现flush方法以满足stdout接口"""
-        self.original_stdout.flush()
+from src.utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue
 
 
-
-
-class QueryRewriteFSM:
+class QueryRewriter:
     """SQL重写有限状态机"""
     def __init__(self, message_queue: MessageQueue, dbms: DBMS, data_statistics, schema_file, MAX_ITERATION_LOOP=3):
         self.current_state = "REASONING"

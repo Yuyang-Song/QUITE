@@ -5,11 +5,11 @@
 
 简化的Agent Memory Buffer - 用于管理SQL重写过程中的各种信息
 
-Author: System
+Author: Yuyang-Song
 Date: 2025-07-23
 ####################################################################
 """
-
+import sys
 
 class AgentMemoryBuffer:
     """
@@ -54,20 +54,6 @@ class AgentMemoryBuffer:
         self.report = None
         self.guide_info = None
     
-    def clear_all_memory(self):
-        """清除所有内存内容，包括配置信息"""
-        self.initial_sql = None
-        self.data_statistics = None
-        self.schema_file = None
-        self.optimization_advice = None
-        self.produced_sql = None
-        self.enhanced_sql = None
-        self.ori_explain_result = None
-        self.re_explain_result = None
-        self.imp_explain_result = None
-        self.report = None
-        self.guide_info = None
-    
     def get_status(self):
         """获取当前状态，用于调试"""
         status = {}
@@ -78,13 +64,34 @@ class AgentMemoryBuffer:
             value = getattr(self, attr)
             status[attr] = 'has_content' if value is not None else 'empty'
         return status
+
+class OutputCollector:
+    """收集终端输出的工具类"""
+    def __init__(self):
+        self.outputs = []
+        self.original_stdout = sys.stdout
+        self.current_output = ""
     
-    def __repr__(self):
-        """简单的字符串表示"""
-        active_count = sum(1 for attr in ['initial_sql', 'optimization_advice', 'produced_sql', 
-                                         'enhanced_sql', 'report', 'guide_info'] 
-                          if getattr(self, attr) is not None)
-        return f"AgentMemoryBuffer(active_fields={active_count})"
+    def start_collecting(self):
+        """开始收集输出"""
+        self.original_stdout = sys.stdout
+        sys.stdout = self
+    
+    def stop_collecting(self):
+        """停止收集输出并返回收集到的内容"""
+        sys.stdout = self.original_stdout
+        collected = self.current_output
+        self.current_output = ""
+        return collected
+    
+    def write(self, text):
+        """重写write方法以捕获输出"""
+        self.current_output += text
+        self.original_stdout.write(text)
+    
+    def flush(self):
+        """实现flush方法以满足stdout接口"""
+        self.original_stdout.flush()
 
 
 def create_memory_buffer(data_statistics: str = None, schema_file: str = None) -> AgentMemoryBuffer:
@@ -92,3 +99,6 @@ def create_memory_buffer(data_statistics: str = None, schema_file: str = None) -
     创建内存缓冲区的简单工厂函数
     """
     return AgentMemoryBuffer(data_statistics, schema_file)
+
+
+

@@ -1,0 +1,192 @@
+[
+  {
+    "method": "AGGREGATE_EXPAND_DISTINCT_AGGREGATES",
+    "description": "Rule that expands distinct aggregates (such as COUNT(DISTINCT x)) from a Aggregate",
+    "summary": "Rewrite: SELECT COUNT(DISTINCT column) -> SELECT COUNT(*) FROM (SELECT DISTINCT column FROM table). This rewrite optimizes the DISTINCT operation by breaking it into a subquery."
+  },
+  {
+    "method": "AGGREGATE_EXPAND_DISTINCT_AGGREGATES_TO_JOIN",
+    "description": "As AGGREGATE_EXPAND_DISTINCT_AGGREGATES but generates a Join",
+    "summary": "Rewrite: SELECT COUNT(DISTINCT x) -> SELECT COUNT(*) FROM table JOIN (SELECT DISTINCT x FROM table) as t. This transforms the distinct aggregation into a join to potentially optimize performance."
+  },
+  {
+    "method": "AGGREGATE_JOIN_TRANSPOSE_EXTENDED",
+    "description": "As AGGREGATE_JOIN_TRANSPOSE, but extended to push down aggregate functions",
+    "summary": "Rewrite: SELECT SUM(x) FROM table JOIN table2 ON ... -> SELECT SUM(x) FROM (SELECT x FROM table JOIN table2 ON ...) subquery. The aggregation is pushed down to avoid unnecessary join operations."
+  },
+  {
+    "method": "AGGREGATE_PROJECT_MERGE",
+    "description": "Rule that recognizes an Aggregate on top of a Project and if possible aggregates through the Project or removes the Project",
+    "summary": "Rewrite: SELECT SUM(x + 1) FROM table -> SELECT SUM(x) + COUNT(*) FROM table. This merges the project and aggregate operations, simplifying the query."
+  },
+  {
+    "method": "AGGREGATE_ANY_PULL_UP_CONSTANTS",
+    "description": "More general form of AGGREGATE_PROJECT_PULL_UP_CONSTANTS that matches any relational expression",
+    "summary": "Rewrite: SELECT SUM(x) + 10 FROM table -> SELECT SUM(x) + 10 FROM table. Constants are pulled up outside the aggregation to optimize the calculation."
+  },
+  {
+    "method": "AGGREGATE_UNION_AGGREGATE",
+    "description": "Rule that matches an Aggregate whose input is a Union one of whose inputs is an Aggregate",
+    "summary": "Rewrite: SELECT SUM(x) FROM (SELECT x FROM table1 UNION SELECT x FROM table2) -> SELECT SUM(x) FROM table1 UNION SELECT SUM(x) FROM table2. Aggregation is pushed through the UNION to optimize execution."
+  },
+  {
+    "method": "AGGREGATE_UNION_TRANSPOSE",
+    "description": "Rule that pushes an Aggregate past a non-distinct Union",
+    "summary": "Rewrite: SELECT COUNT(*) FROM (SELECT x FROM table1 UNION ALL SELECT x FROM table2) -> SELECT COUNT(*) FROM table1 + SELECT COUNT(*) FROM table2. The aggregate is applied to each UNION branch for efficiency."
+  },
+  {
+    "method": "AGGREGATE_VALUES",
+    "description": "Rule that applies an Aggregate to a Values (currently just an empty Values)",
+    "summary": "Rewrite: SELECT COUNT(*) FROM (VALUES()) -> SELECT 0. When operating on an empty VALUES clause, the query returns a known constant."
+  },
+  {
+    "method": "AGGREGATE_REMOVE",
+    "description": "Rule that removes an Aggregate if it computes no aggregate functions (that is, it is implementing SELECT DISTINCT), or all the aggregate functions are splittable, and the underlying relational expression is already distinct",
+    "summary": "Rewrite: SELECT DISTINCT x FROM table -> SELECT x FROM table GROUP BY x. If the aggregation adds no value, it's removed to simplify the query."
+  },
+  {
+    "method": "FILTER_AGGREGATE_TRANSPOSE",
+    "description": "Rule that pushes a Filter past an Aggregate",
+    "summary": "Rewrite: SELECT * FROM (SELECT SUM(x) FROM table) WHERE SUM(x) > 100 -> SELECT SUM(x) FROM (SELECT * FROM table WHERE x > 100). The filter is pushed below the aggregation for more efficient filtering."
+  },
+  {
+    "method": "FILTER_CORRELATE",
+    "description": "Rule that pushes a Filter above a Correlate into the inputs of the Correlate",
+    "summary": "Rewrite: SELECT * FROM table1, LATERAL (SELECT * FROM table2 WHERE condition) -> SELECT * FROM table1, LATERAL (SELECT * FROM (SELECT * FROM table2 WHERE condition) WHERE additional_condition). The filter is pushed into the correlated subquery for optimization."
+  },
+  {
+    "method": "FILTER_INTO_JOIN",
+    "description": "Rule that tries to push filter expressions into a join condition and into the inputs of the join",
+    "summary": "Rewrite: SELECT * FROM table1 JOIN table2 ON table1.id = table2.id WHERE table1.value > 10 -> SELECT * FROM table1 JOIN table2 ON table1.id = table2.id AND table1.value > 10. The filter is pushed into the join condition to optimize filtering."
+  },
+  {
+    "method": "JOIN_CONDITION_PUSH",
+    "description": "Rule that pushes predicates in a Join into the inputs to the join",
+    "summary": "Rewrite: SELECT * FROM table1 JOIN table2 ON table1.id = table2.id WHERE table2.value > 10 -> SELECT * FROM (SELECT * FROM table1 WHERE value > 10) t1 JOIN table2 ON t1.id = table2.id. The filter is pushed into the join inputs to minimize unnecessary join operations."
+  },
+  {
+    "method": "FILTER_MERGE",
+    "description": "Rule that combines two LogicalFilters",
+    "summary": "Rewrite: SELECT * FROM table WHERE x > 10 AND y > 5 -> SELECT * FROM table WHERE x > 10 AND y > 5. Filters are merged into one operation, simplifying the execution."
+  },
+  {
+    "method": "FILTER_MULTI_JOIN_MERGE",
+    "description": "Rule that merges a Filter into a MultiJoin, creating a richer MultiJoin",
+    "summary": "Rewrite: SELECT * FROM table1 JOIN table2 JOIN table3 WHERE condition -> SELECT * FROM table1 JOIN (SELECT * FROM table2 WHERE condition) t2 JOIN table3. The filter is merged into the MultiJoin to improve performance."
+  },
+  {
+    "method": "FILTER_PROJECT_TRANSPOSE",
+    "description": "The default instance of FilterProjectTransposeRule",
+    "summary": "Rewrite: SELECT x + 1 FROM (SELECT * FROM table WHERE condition) -> SELECT x + 1 FROM table WHERE condition. The filter is pushed past the projection for better execution."
+  },
+  {
+    "method": "FILTER_SET_OP_TRANSPOSE",
+    "description": "Rule that pushes a Filter past a SetOp",
+    "summary": "Rewrite: SELECT * FROM (SELECT x FROM table1 UNION SELECT x FROM table2) WHERE x > 10 -> SELECT x FROM (SELECT * FROM table1 WHERE x > 10 UNION SELECT * FROM table2 WHERE x > 10). The filter is pushed past the UNION operation."
+  },
+  {
+    "method": "FILTER_TABLE_FUNCTION_TRANSPOSE",
+    "description": "Rule that pushes a LogicalFilter past a LogicalTableFunctionScan",
+    "summary": "Rewrite: SELECT * FROM TABLE(FUNCTION()) WHERE x > 10 -> SELECT * FROM (SELECT * FROM FUNCTION() WHERE x > 10). The filter is pushed past the table function scan for optimization."
+  },
+  {
+    "method": "FILTER_SCAN",
+    "description": "Rule that matches a Filter on a TableScan",
+    "summary": "Rewrite: SELECT * FROM table WHERE x > 10 -> SELECT * FROM (SELECT * FROM table WHERE x > 10). The filter is pushed into the scan operation to reduce the amount of data processed."
+  },
+  {
+    "method": "FILTER_REDUCE_EXPRESSIONS",
+    "description": "Rule that reduces constants inside a LogicalFilter",
+    "summary": "Rewrite: SELECT * FROM table WHERE x + 0 = 10 -> SELECT * FROM table WHERE x = 10. Constant expressions are reduced inside the filter."
+  },
+  {
+    "method": "PROJECT_REDUCE_EXPRESSIONS",
+    "description": "Rule that reduces constants inside a LogicalProject",
+    "summary": "Rewrite: SELECT x + 0 FROM table -> SELECT x FROM table. Constant expressions are reduced in the projection to simplify execution."
+  },
+  {
+    "method": "JOIN_EXTRACT_FILTER",
+    "description": "Rule to convert an inner join to a filter on top of a cartesian inner join",
+    "summary": "Rewrite: SELECT * FROM table1 INNER JOIN table2 ON table1.id = table2.id -> SELECT * FROM (SELECT * FROM table1, table2) WHERE table1.id = table2.id. The join is converted into a cartesian product with a filter."
+  },
+  {
+    "method": "JOIN_PROJECT_BOTH_TRANSPOSE",
+    "description": "Rule that matches a LogicalJoin whose inputs are LogicalProjects, and pulls the project expressions up",
+    "summary": "Rewrite: SELECT x + 1, y FROM (SELECT x, y FROM table1) t1 JOIN (SELECT z FROM table2) t2 ON t1.y = t2.z -> SELECT x + 1, y FROM table1 JOIN table2 ON table1.y = table2.z. The projection is pulled up before the join for optimization."
+  },
+  {
+    "method": "JOIN_PROJECT_LEFT_TRANSPOSE",
+    "description": "As JOIN_PROJECT_BOTH_TRANSPOSE but only the left input is a LogicalProject",
+    "summary": "Rewrite: SELECT x + 1 FROM (SELECT x FROM table1) t1 JOIN table2 ON t1.x = table2.id -> SELECT x + 1 FROM table1 JOIN table2 ON table1.x = table2.id. The projection on the left input is pulled up."
+  },
+  {
+    "method": "JOIN_PROJECT_RIGHT_TRANSPOSE",
+    "description": "As JOIN_PROJECT_BOTH_TRANSPOSE but only the right input is a LogicalProject",
+    "summary": "Rewrite: SELECT * FROM table1 JOIN (SELECT x FROM table2) t2 ON table1.id = t2.x -> SELECT * FROM table1 JOIN table2 ON table1.id = table2.x. The projection on the right input is pulled up."
+  },
+  {
+    "method": "JOIN_LEFT_UNION_TRANSPOSE",
+    "description": "Rule that pushes a Join past a non-distinct Union as its left input",
+    "summary": "Rewrite: SELECT * FROM (SELECT * FROM table1 UNION ALL SELECT * FROM table2) t JOIN table3 ON t.id = table3.id -> SELECT * FROM (SELECT * FROM table1 JOIN table3 ON table1.id = table3.id UNION ALL SELECT * FROM table2 JOIN table3 ON table2.id = table3.id). The join is pushed past the Union for better query performance."
+  },
+  {
+    "method": "JOIN_RIGHT_UNION_TRANSPOSE",
+    "description": "Rule that pushes a Join past a non-distinct Union as its right input",
+    "summary": "Rewrite: SELECT * FROM table1 JOIN (SELECT * FROM table2 UNION ALL SELECT * FROM table3) t ON table1.id = t.id -> SELECT * FROM (SELECT * FROM table1 JOIN table2 ON table1.id = table2.id UNION ALL SELECT * FROM table1 JOIN table3 ON table1.id = table3.id). The join is pushed past the Union for better optimization."
+  },
+  {
+    "method": "SEMI_JOIN_REMOVE",
+    "description": "Rule that removes a semi-join from a join tree",
+    "summary": "Rewrite: SELECT * FROM table1 WHERE EXISTS (SELECT * FROM table2 WHERE table1.id = table2.id) -> SELECT DISTINCT * FROM table1 WHERE id IN (SELECT id FROM table2). The semi-join is replaced by a more efficient IN clause or other equivalent logic."
+  },
+  {
+    "method": "JOIN_REDUCE_EXPRESSIONS",
+    "description": "Rule that reduces constants inside a Join",
+    "summary": "Rewrite: SELECT * FROM table1 JOIN table2 ON table1.x + 0 = table2.x -> SELECT * FROM table1 JOIN table2 ON table1.x = table2.x. Constant expressions are simplified inside the join condition."
+  },
+  {
+    "method": "SORT_JOIN_TRANSPOSE",
+    "description": "Rule that pushes a Sort past a Join",
+    "summary": "Rewrite: SELECT * FROM (SELECT * FROM table1 JOIN table2 ON table1.id = table2.id ORDER BY table1.name) -> SELECT * FROM (SELECT * FROM table1 JOIN table2 ON table1.id = table2.id) ORDER BY table1.name. The sort operation is pushed past the join to optimize query execution."
+  },
+  {
+    "method": "SORT_PROJECT_TRANSPOSE",
+    "description": "Rule that pushes a Sort past a Project",
+    "summary": "Rewrite: SELECT * FROM (SELECT x + 1 AS y FROM table ORDER BY y) -> SELECT x + 1 AS y FROM (SELECT * FROM table ORDER BY x). The sort is pushed past the projection for better query performance."
+  },
+  {
+    "method": "SORT_UNION_TRANSPOSE",
+    "description": "Rule that pushes a Sort past a Union",
+    "summary": "Rewrite: SELECT * FROM (SELECT * FROM table1 UNION SELECT * FROM table2 ORDER BY id) -> SELECT * FROM (SELECT * FROM table1 ORDER BY id UNION SELECT * FROM table2 ORDER BY id). The sort is pushed into the branches of the UNION for optimized sorting."
+  },
+  {
+    "method": "SORT_REMOVE_CONSTANT_KEYS",
+    "description": "Rule that removes keys from a Sort if those keys are known to be constant, or removes the entire Sort if all keys are constant",
+    "summary": "Rewrite: SELECT * FROM table ORDER BY 1 -> SELECT * FROM table. The sort by a constant is removed, as it does not affect the result."
+  },
+  {
+    "method": "SORT_REMOVE",
+    "description": "Rule that removes a Sort if its input is already sorted",
+    "summary": "Rewrite: SELECT * FROM (SELECT * FROM table ORDER BY id) ORDER BY id -> SELECT * FROM table ORDER BY id. The outer sort is removed because the input is already sorted."
+  },
+  {
+    "method": "UNION_MERGE",
+    "description": "Rule that flattens a Union on a Union into a single Union",
+    "summary": "Rewrite: SELECT * FROM (SELECT * FROM table1 UNION SELECT * FROM table2 UNION SELECT * FROM table3) -> SELECT * FROM table1 UNION SELECT * FROM table2 UNION SELECT * FROM table3. The nested unions are flattened into a single UNION for better performance."
+  },
+  {
+    "method": "UNION_REMOVE",
+    "description": "Rule that removes a Union if it has only one input",
+    "summary": "Rewrite: SELECT * FROM (SELECT * FROM table1) UNION SELECT * FROM table1 -> SELECT * FROM table1. The UNION is removed when there is only one input, simplifying the query."
+  },
+  {
+    "method": "UNION_TO_DISTINCT",
+    "description": "Rule that translates a distinct Union (all = false) into an Aggregate on top of a non-distinct Union (all = true)",
+    "summary": "Rewrite: SELECT * FROM table1 UNION SELECT * FROM table2 -> SELECT * FROM (SELECT * FROM table1 UNION ALL SELECT * FROM table2) GROUP BY column_list. The distinct UNION is replaced by a UNION ALL with a GROUP BY to remove duplicates."
+  },
+  {
+    "method": "UNION_PULL_UP_CONSTANTS",
+    "description": "Rule that pulls up constants through a Union operator",
+    "summary": "Rewrite: SELECT 1 AS x FROM table1 UNION SELECT 1 AS x FROM table2 -> SELECT 1 AS x FROM (SELECT * FROM table1 UNION SELECT * FROM table2). The constant is pulled up and computed once instead of in each branch of the UNION."
+  }
+]

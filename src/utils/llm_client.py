@@ -21,6 +21,7 @@ import asyncio
 import sys
 import json
 import tiktoken
+from dotenv import load_dotenv
 
 # Add parent directories to Python path for relative imports
 sys.path.append('../')

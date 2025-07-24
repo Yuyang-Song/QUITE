@@ -2,6 +2,7 @@
 
 ## Table of Contents
 - [System Overview](#system-overview)
+- [Environment Setup](#environment-setup)
 - [Quick Start](#quick-start)
 - [Experimental Results](#experimental-results)
 - [Rewrite Beyond Rules Discussion](#rewrite-beyond-rules-discussion)
@@ -23,6 +24,7 @@ The figure above presents the query rewrite workflow:
 - **Feedback-Aware**: Iterative refinement based on execution plan analysis
 - **Broad Coverage**: Supports complex query patterns beyond traditional rule-based systems
 - **Memory Management**: Efficient context management to prevent hallucinations
+
 ## Environment Setup
 The following instructions have been tested on Ubuntu 22.04 and PostgreSQL v14.13, Python 3.12.
 
@@ -189,36 +191,176 @@ CREATE TABLE nation (
 );
 ```
 
+#### 2.3 Prepare Domain Knowledge Base
+
+You can find our constructed Knowledge Base in [`knowledge_base.json`](src/Rewrite_Middleware/Structured_Knowledge_Base/storage/knowledge_base.json). If you want to construct your own knowledge base, you can refer to our knowledge preparation code in [`data_clean.py`](src/Rewrite_Middleware/Structured_Knowledge_Base/preparation/data_clean.py).
+
+Here is a detailed guideline:
+
+**Option 1: Use Our Pre-built Knowledge Base**
+```bash
+# The knowledge base is ready to use at:
+src/Rewrite_Middleware/Structured_Knowledge_Base/storage/knowledge_base.json
+```
+
+**Option 2: Build Your Own Knowledge Base**
+
+1. **Prepare your data sources:**
+```bash
+# Navigate to preparation directory
+cd src/Rewrite_Middleware/Structured_Knowledge_Base/preparation/
+```
+
+2. **Organize your data files:**
+   - Place StackOverflow markdown files in `data/stackoverflow/`
+   - Place official documentation JSON files in `data/` (e.g., `calcite.json`)
+
+3. **Configure and run the data processing pipeline:**
+```bash
+# Edit the configuration paths in data_clean.py:
+# - input_file_dir: Path to your StackOverflow data
+# - save_file_dir: Output path for knowledge base JSON
+# - save_document_file_dir: Output path for document store
+
+# Run the data cleaning pipeline
+python data_clean.py
+```
+
 ### Step 3: Execute QUITE to Rewrite SQL Queries
 
-#### 3.1 Run the Main System
+#### 3.1 Using Automation Scripts (Recommended)
+
+We provide three convenient scripts for different scenarios:
+
+**Option 1: Complete Pipeline (Rewriter + Recommender)**
+```bash
+# Navigate to scripts directory
+cd scripts
+
+# Run the complete pipeline
+chmod +x run_quite.sh
+./run_quite.sh
+```
+
+**Option 2: Query Rewriting Only**
+```bash
+# Run only the query rewriter
+chmod +x run_quite_only_query_rewrite.sh
+./run_quite_only_query_rewrite.sh
+```
+
+**Option 3: Hint Recommendation Only**
+```bash
+# Run only the hint recommender (requires existing rewritten queries)
+chmod +x run_quite_only_hint_injection.sh
+./run_quite_only_hint_injection.sh
+```
+
+#### 3.2 Direct Python Execution
+
+You can also run the system directly with custom parameters:
 
 ```bash
-# Run with default configuration
-python run_QUITE.py
+# Basic usage with both modules
+python run.py \
+    --input_path dataset/queries/tpch_test.json \
+    --output_dir output/my_results \
+    --schema_file dataset/schemas/tpch_schemas.sql \
+    --enable_rewriter \
+    --enable_recommender
 
-# Run with custom parameters
-python run_QUITE.py --input dataset/queries/tpch_test.json --output output/my_results --max_iterations 3
+# Query rewriting only
+python run.py \
+    --input_path dataset/queries/tpch_test.json \
+    --output_dir output/rewrite_only \
+    --schema_file dataset/schemas/tpch_schemas.sql \
+    --enable_rewriter
+
+# Hint recommendation only
+python run.py \
+    --input_path dataset/queries/tpch_test.json \
+    --output_dir output/hints_only \
+    --schema_file dataset/schemas/tpch_schemas.sql \
+    --enable_recommender
+
+# With detailed logging
+python run.py \
+    --input_path dataset/queries/tpch_test.json \
+    --output_dir output/with_logs \
+    --schema_file dataset/schemas/tpch_schemas.sql \
+    --enable_rewriter \
+    --enable_recommender \
+    --save_rewriter_logs
 ```
 
-#### 3.2 Monitor the Process
+#### 3.3 Available Parameters
 
-The system will display real-time progress:
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `--input_path` | Input JSON file path containing queries | Required |
+| `--output_dir` | Output directory for results | `/root/syy/QUITE/output` |
+| `--schema_file` | Path to the database schema file | Required |
+| `--enable_rewriter` | Enable query rewriter module | False |
+| `--enable_recommender` | Enable hint recommender module | False |
+| `--save_rewriter_logs` | Save detailed rewriter logs to txt files | False |
+| `--rewriter_batch_size` | Batch size for rewriter | 3 (forced to 1 if saving logs) |
+| `--recommender_batch_size` | Batch size for recommender | 3 |
+| `--max_iterations` | Maximum iteration loops for query rewriting | 2 |
+
+#### 3.4 Monitor the Process
+
+The system will display real-time progress with tqdm progress bars:
 
 ```
-====================================================================
-🗄️  Starting Database Statistics Collection
-====================================================================
-🔗 Database: your_database_name
-📊 Getting list of tables in public schema...
-✅ Found 8 tables. Starting table scan...
+🚀 QUITE System Starting...
+📂 Input: /root/syy/QUITE/dataset/queries/tpch_test.json
+📁 Output: /root/syy/QUITE/output/test
+🔄 Rewriter: Enabled
+💡 Recommender: Enabled
+📝 Rewriter logs: Enabled (batch size forced to 1)
 
-######################################################################################
+📁 Directory structure created:
+   rewriter_temp: /root/syy/QUITE/output/test/rewriter_temp
+   recommender_temp: /root/syy/QUITE/output/test/recommender_temp
+   output: /root/syy/QUITE/output/test
 
-=== Start Parallel Reasoning (Number of Threads: 2) ===
-## Worker 0: Start Reasoning Stage ===
-## Worker 1: Start Reasoning Stage ===
-...
+============================================================
+🔄 Starting Query Rewriter
+============================================================
+📊 Processing 10 queries with batch size 1
+📁 Temp directory: /root/syy/QUITE/output/test/rewriter_temp
+📝 Save logs: Yes
+
+🔄 Processing Query 1/10 (ID: query_1): 100%|██████████| 10/10 [02:34<00:00, 15.4s/query]
+
+✅ Query Rewriter completed! Processed 10 queries in 10 batches
+✅ Merged 10 batch files into /root/syy/QUITE/output/test/rewritten_queries.json
+📊 Total queries processed: 10
+
+============================================================
+💡 Starting Hint Recommender
+============================================================
+📖 Loading data from /root/syy/QUITE/output/test/rewritten_queries.json
+📊 Processing 10 queries with batch size 3
+
+💡 Processing Hint 1/10 (ID: query_1): 100%|██████████| 10/10 [01:45<00:00, 10.5s/hint]
+
+✅ Hint Recommender completed! Processed 10 queries in 4 batches
+✅ Merged 4 batch files into /root/syy/QUITE/output/test/recommended_hints.json
+📊 Total queries processed: 10
+
+============================================================
+🎉 QUITE System Completed!
+============================================================
+📝 Query Rewriter Output: /root/syy/QUITE/output/test/rewritten_queries.json
+💡 Hint Recommender Output: /root/syy/QUITE/output/test/recommended_hints.json
+📁 Output Directory: /root/syy/QUITE/output/test
+
+📊 Final output files:
+   rewritten_queries.json: 3,396 bytes
+   recommended_hints.json: 3,936 bytes
+
+✨ Processing completed successfully!
 ```
 
 ### Step 4: View the Rewrite Results
@@ -252,13 +394,13 @@ Each JSON file contains the example followings:
 ]
 ```
 
-#### 4.3 Performance Analysis
+### Step 5: Performance Evaluation
 
 Use the provided analysis tools:
 
 ```bash
 # Analyze rewrite effectiveness  
-python performance_analysis/evaluation.py --input output/batch_1.json
+python experiements_evaluation/evaluation.py --input output/batch_1.json
 ```
 
 
@@ -282,7 +424,7 @@ We compare QUITE with state-of-the-art methods on different benchmarks (TPC-H, D
 
 
 ## Rewrite Beyond Rules Discussion
-We have collected and analyzed a set of high-impact rewrite examples and integrated them into our [TPC-H examples](./example/TPC-H), [DSB examples](./example/DSB) and [Calcite examples](./example/Calcite)
+We have collected and analyzed a set of high-impact rewrite examples and integrated them into our [TPC-H examples](./documents/examples/TPC-H), [DSB examples](./documents/examples/DSB) and [Calcite examples](./documents/examples/Calcite)
 
 In the course of rewriting with QUITE, we discovered a range of strategies previously unmodeled by our rule set. These newly identified techniques can be found in our more detailed [Appendix](./documents/Detailed_Appendix.pdf).
 
@@ -290,23 +432,39 @@ In the course of rewriting with QUITE, we discovered a range of strategies previ
 
 
 ## Code Structure
-#### 🔧 Core Modules
+#### 📊 Data & Configuration
+- **`config_file/`**: Environment configuration and API keys
+  - `.env`: LLM API keys, database connection settings
+- **`dataset/`**: Benchmark datasets and schemas for evaluation
+  - `queries/`: Query sets for TPC-H, DSB, and Calcite benchmarks
+  - `schemas/`: Database schemas for different benchmarks
+
+#### 📁 Documents % Examples
+- **`documents/Detailed_Appendix.pdf`**: Detailed MDP-based Reasoning Agent construction and rewritten examples beyond rule expressions
+- **`documents/examples/`**: Analysis of Rewirtten queries in experiment for representative examples
+
+#### 📋 Automation Scripts
+- **`scripts/`**: Execution scripts for different scenarios
+  - `run_quite.sh`: Complete pipeline with both rewriter and recommender
+  - `run_quite_only_query_rewrite.sh`: Query rewriting only
+  - `run_quite_only_hint_injection.sh`: Hint recommendation only
+  - `performance_evaluation.sh`: Evaluate the rewrite result in real DBMS
+
+#### 🔧 LLM Agent-based Query Rewriter
 - **`src/Query_Rewriter/`**: Main query rewriting engine
   - `finite_state_machine.py`: Finite state machine orchestrating the complete rewrite workflow
   - `agent_definition.py`: Definitions for Reasoning, Assistant, and Decision agents
-  - `memory_buffer.py`: Memory management to prevent context overflow and hallucinations
 
-#### 🛠️ Middleware Components  
+#### 🛠️ Rewrite Middleware
 - **`src/Rewrite_Middleware/`**: Database interaction and verification tools
   - `middleware.py`: Core tools including DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Knowledge_Base_Tool
   - `Agent_Memory_Buffer/`: Advanced memory management for agent context
   - `Structured_Knowledge_Base/`: Knowledge retrieval and management system
+  - `Agent_Memory_Buffer`: Memory management to prevent context overflow and hallucinations
 
-#### 💡 Intelligent Recommendation
+#### 💡 Query Hint Recommender
 - **`src/Hint_Recommender/`**: Optimization hint generation system
-  - `main.py`: Entry point for hint recommendation workflow
-  - `gpt.py`: GPT-based hint generation engine
-  - `tools.py`: Utility functions for hint processing and validation
+  - `injection.py`: Main hint injection and recommendation engine
 
 #### 🔧 Utilities
 - **`src/utils/`**: Shared utilities and base classes
@@ -315,33 +473,40 @@ In the course of rewriting with QUITE, we discovered a range of strategies previ
   - `data_distribution.py`: Database statistics storage and management
   - `get_data_statistics.py`: Automated database profiling and statistics collection
 
-#### 📊 Data & Configuration
-- **`dataset/`**: Benchmark datasets and schemas for evaluation
-- **`config_file/`**: Environment configuration and API keys
-- **`example/`**: Sample queries and usage examples
-- **`experiments_results/`**: Experimental results and performance analysis
-
 #### 🚀 Entry Points
-- **`run_QUITE.py`**: Main script to execute the complete rewrite pipeline
+- **`run.py`**: Main execution script with progress monitoring and batch processing
 - **`test_module.py`**: Comprehensive testing suite for all components
+- **`evaluation.sh`**: Evaluate the rewritten querties in real DBMS
 
-```
+
+
+<!-- ```
 QUITE/
 ├── config_file/
-│   └── .env                           # Environment configuration file
+│   ├── .env                         # Environment configuration file
 ├── dataset/
 │   ├── queries/
-│   │   ├── tpch_test.json            # TPC-H test queries
-│   │   ├── tpch_hard.json            # TPC-H complex queries
-│   │   ├── dsb_test.json             # DSB benchmark queries
-│   │   └── calcite_test.json         # Calcite benchmark queries
+│   │   ├── tpch_quries.json         # TPC-H benchmark queries
+│   │   ├── dsb_queries.json         # DSB benchmark queries
+│   │   └── calcite_queries.json     # Calcite benchmark queries
 │   └── schemas/
-│       ├── tpch.sql                  # TPC-H database schema
-│       ├── dsb.sql                   # DSB database schema
-│       └── calcite.sql               # Calcite database schema
+│       ├── tpch_schemas.sql         # TPC-H database schema
+│       ├── dsb_schemas.sql          # DSB database schema
+│       └── calcite_schemas.sql      # Calcite database schema
+├── documents/
+│   ├── Detailed_Appendix.pdf       # Detailed MDP-based reasoning 
+│   └── examples/                    # Analysis of rewritten queries 
+│       ├── TPC-H/                   # TPC-H query examples
+│       ├── DSB/                     # DSB query examples
+│       └── Calcite/                 # Calcite query examples
+├── scripts/
+│   ├── run_quite.sh                 # Complete pipeline execution 
+│   ├── run_quite_only_query_rewrite.sh    # Query rewriting only
+│   ├── run_quite_only_hint_injection.sh   # Hint recommendation only
+│   └── performance_evaluation.sh   # Evaluate rewrite results in real 
 ├── src/
 │   ├── Query_Rewriter/
-│   │   ├── finite_state_machine.py  # Main FSM orchestrating rewrite process
+│   │   ├── finite_state_machine.py  # Main FSM orchestrating rewrite 
 │   │   ├── agent_definition.py      # LLM agent role definitions
 │   │   └── memory_buffer.py         # Agent memory management system
 │   ├── Rewrite_Middleware/
@@ -349,34 +514,41 @@ QUITE/
 │   │   ├── Agent_Memory_Buffer/
 │   │   │   └── memory_buffer.py     # Enhanced memory management
 │   │   └── Structured_Knowledge_Base/
+│   │       ├── storage/
+│   │       │   └── knowledge_base.json     # Pre-built knowledge base
+│   │   |    ├── preparation/
+│   │   |    │   └── data_clean.py    # Knowledge base preparation 
+|   |   |
+pipeline
 │   │       └── scripts/
 │   │           └── test.py          # Knowledge base testing utilities
 │   ├── Hint_Recommender/
-│   │   ├── main.py                  # Hint recommendation entry point
+│   │   ├── injection.py             # Main hint injection and recommendation engine
 │   │   ├── gpt.py                   # GPT client for hint generation
-│   │   ├── GPT_request.py          # GPT API request handler
 │   │   └── tools.py                 # Utility tools for hint processing
 │   └── utils/
 │       ├── agent_template.py        # Base agent template classes
 │       ├── llm_client.py           # LLM client interface
 │       ├── data_distribution.py     # Database statistics management
 │       └── get_data_statistics.py   # Database statistics collection
-├── example/
-│   ├── TPC-H/                       # TPC-H query examples
-│   ├── DSB/                         # DSB query examples
-│   └── Calcite/                     # Calcite query examples
-├── experiments_results/
-│   ├── tpch/                        # TPC-H experimental results
-│   ├── dsb/                         # DSB experimental results
-│   └── calcite/                     # Calcite experimental results
-├── output/                          # Generated rewrite results
+├── BaoForPostgreSQL/               # PostgreSQL optimization integration
+├── MAReter/                        # Multi-Agent Rewriter system components
+├── QUITE/                          # Core QUITE system implementation
+├── critical_result/                # Critical performance analysis results
+├── machine1/                       # Experimental data and benchmark results
+├── output/                         # Generated rewrite results and logs
+├── utils/                          # Shared utilities and helper functions
 ├── figures/
-│   └── overview.png                 # System architecture diagram
-├── run_QUITE.py                     # Main execution script
-├── test_module.py                   # Comprehensive testing suite
-├── requirements.txt                 # Python dependencies
-└── README.md                        # Project documentation
-```
+│   ├── overview.png                # System architecture diagram
+│   ├── query_latency.png           # Performance comparison results
+│   └── rewritten_rate.png          # Rewrite effectiveness metrics
+├── run.py                          # Main execution script with progress monitoring
+├── test_module.py                  # Comprehensive testing suite
+├── evaluation.sh                   # Evaluate rewritten queries in real DBMS
+├── backup.sh                       # System backup and maintenance script
+├── requirements.txt                # Python dependencies
+└── README.md                       # Project documentation
+``` -->
 <!-- ## Citation
 If you use this codebase, or otherwise found our work valuable, please cite:
 ```

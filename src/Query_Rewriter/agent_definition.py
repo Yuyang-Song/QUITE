@@ -11,7 +11,8 @@ import textwrap
 from typing import List, Dict, Set, Optional, Union
 sys.path.append('../')
 sys.path.append('./')
-from utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue,  Agent
+
+from src.utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue,  Agent
 from src.utils.llm_client import GPT
 
 from dotenv import load_dotenv
@@ -532,33 +533,7 @@ class AssistantAgent(Agent):
             // Insert the corrected SQL here.
             </corrected_sql>
             """)
-        # prompt = textwrap.dedent(f"""
-        # You are an expert in SQL syntax and are good at fixing SQL syntax errors. 
-        # Please help fix the following SQL statement with the error message provided.
-                                 
-        # * Note that If the SQL variable contains double quotes, do not ignore them and keep them as they are.
-        # <rewritten_sql>
-        # {rewritten_sql}
-        
-        # error message: {error}
 
-        # and the following sql is the original format of the rewritten SQL, you can read it to know about the original schema info.
-        # Notice that you should only correct the rewritten_sql syntax error, do not make it similar to original sql, and DO NOT CONTAIN "EXPLAIN (FORMAT JSON)" PART  !!!
-        
-        # <original_sql>
-        # {original_sql}
-
-        # please strictly follow the format provided below:
-        # [format]
-        # </analysis>
-
-        # </analysis>
-    
-        # </corrected_sql>
-        #     // Fill in the corrected SQL here.
-        # </corrected_sql>
-
-        # """)
         
         response = await self.llm.get_LLM_response_async(
             prompt=prompt
