@@ -3,9 +3,6 @@ Test Module
 
 Simple unit test for Knowledge Base Tool and DBMS Explain Tool components.
 
-Author: Yuyang Song
-Date: 2025-06-23
-
 For better DBMS tool testing, verify that self.input_sql is a valid SQL query and can correspond to the database specified in the .env file.
 """
 
@@ -309,7 +306,6 @@ def main():
     print("="*60)
     
     unittest.main(verbosity=1)
-
 
 if __name__ == "__main__":
     main()

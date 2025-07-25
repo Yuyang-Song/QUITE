@@ -386,7 +386,6 @@ async def main():
         for file in output_files:
             size = file.stat().st_size
             print(f"   {file.name}: {size:,} bytes")
-    
     print("\n✨ Processing completed successfully!")
 
 if __name__ == "__main__":

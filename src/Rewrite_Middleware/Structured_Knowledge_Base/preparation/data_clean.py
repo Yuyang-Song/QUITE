@@ -1,8 +1,4 @@
 """
-Author: Yuyang Song
-Created: 2024-10-19
-Last Modified: 2025-07-24
-
 Module: data_clean.py
 
 This module provides data cleaning and processing capabilities for StackOverflow markdown files
@@ -39,7 +35,6 @@ import textwrap
 from datetime import datetime
 import hashlib
 import time
-
 
 from pathlib import Path
 import os

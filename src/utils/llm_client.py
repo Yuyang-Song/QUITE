@@ -1,8 +1,4 @@
 """
-Author: Yuyang Song
-Created: 2024-10-13
-Last Modified: 2025-07-22
-
 Module: llm_client.py
 
 A lightweight wrapper around OpenAI's synchronous and asynchronous Chat Completion APIs.

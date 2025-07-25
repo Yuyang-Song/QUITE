@@ -1,28 +1,9 @@
 """
-Author: Yuyang Song
-Created: 2024-10-19
-Last Modified: 2025-07-22
-
 Module: agent_template.py
 
 This module provides a comprehensive multi-agent communication framework with memory management,
 message queuing, and observation patterns. It includes sliding window memory, message deduplication,
 and flexible agent interaction capabilities.
-
-Usage:
-    # Initialize message queue and GPT client
-    gpt = GPT(api_key="your-key", model="gpt-4o", base_url="https://api.openai.com/v1")
-    message_queue = MessageQueue(window_size=10)
-    
-    # Create agents
-    agent1 = Agent("Agent1", message_queue, gpt)
-    agent2 = Agent("Agent2", message_queue, gpt)
-    
-    # Set up observation
-    agent1.watch(["Agent2"])
-    
-    # Send messages
-    agent1.send_message("Hello, Agent2!", "user", "Agent2")
 """
 
 import re
@@ -36,7 +17,6 @@ from dataclasses import replace
 
 sys.path.append('../')
 sys.path.append('./')
-
 from src.utils.llm_client import GPT
     
 class MessageContent(BaseModel):
