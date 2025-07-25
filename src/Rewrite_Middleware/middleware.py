@@ -75,6 +75,7 @@ class DBMS:
         :param sql: SQL query to explain.
         :return: Tuple (success: bool, data: explain result or error message)
         """
+        self.connect()
         try:
             self.cursor.execute(f"EXPLAIN (FORMAT JSON) {sql}")
             result = self.cursor.fetchone()
@@ -82,14 +83,18 @@ class DBMS:
 
             # Check if explain_result is a string or list and parse accordingly
             if isinstance(explain_result, str):
+                self.close()
                 return True, json.loads(explain_result)
             elif isinstance(explain_result, list):
+                self.close()
                 return True, explain_result  # Return list directly
             else:
+                self.close()
                 return False, "Unexpected EXPLAIN result format."
         except Exception as e:
             error_message = str(e)
             print(f"Error executing EXPLAIN: {error_message}")
+            self.close()
             return False, error_message
     
     def execute_ddl(self, sql: str) -> Tuple[bool, Any]:

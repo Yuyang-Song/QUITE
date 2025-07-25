@@ -2,11 +2,9 @@
 
 # QUITE System Run Script - Simple Configuration
 
-# Load environment variables from .env file
-# —— 1. 自动导出模式 —— 
+# Load environment variables from .env file 
 set -o allexport
 
-# —— 2. 找到本脚本所在目录，然后指向 ../config_file/.env —— 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 ENV_FILE="$SCRIPT_DIR/../config_file/.env"
 
@@ -17,7 +15,6 @@ else
     echo "❌ Warning: $ENV_FILE not found"
 fi
 
-# —— 3. 关闭自动导出 —— 
 set +o allexport
 
 # Path variables

@@ -2,16 +2,22 @@
 
 # QUITE System Run Script - Hint Injection Only
 
-# Load environment variables from .env file
-if [ -f "../config_file/.env" ]; then
-    source "../config_file/.env"
-    echo "✅ Environment variables loaded from .env"
+# Load environment variables from .env file 
+set -o allexport
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+ENV_FILE="$SCRIPT_DIR/../config_file/.env"
+
+if [[ -f "$ENV_FILE" ]]; then
+    source "$ENV_FILE"
+    echo "✅ Environment variables loaded from $ENV_FILE"
 else
-    echo "❌ Warning: .env file not found"
+    echo "❌ Warning: $ENV_FILE not found"
 fi
 
-# Path variables
+set +o allexport
 
+# Path variables
 INPUT_QUERIES="${PROJECT_ROOT}/dataset/queries/tpch_test.json"
 SCHEMA_FILE="${PROJECT_ROOT}/dataset/schemas/tpch_schemas.sql"
 OUTPUT_DIR="${PROJECT_ROOT}/output/test"

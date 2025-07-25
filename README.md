@@ -108,7 +108,7 @@ DB_PASSWORD=[your_password]
 # Project Configuration
 PROJECT_ROOT=/path/to/QUITE
 ```
-Note: Make sure you have add the **PROJECT_ROOT** path in the `.env` file!
+Note: Make sure you have added the **PROJECT_ROOT** path in the `.env` file.
 
 #### 1.2 Test Each Module
 
@@ -160,7 +160,7 @@ We provide three convenient scripts for different scenarios.
 
 **Option 1: Complete Pipeline (Rewriter + Recommender)**
 ```bash
-# Check the .sh file configureations
+# Check the .sh file configurations
 
 # Run the complete pipeline and make sure you are under the QUITE root path
 chmod +x ./scripts/run_quite.sh
@@ -169,7 +169,7 @@ bash ./scripts/run_quite.sh
 
 **Option 2: Query Rewriting Only**
 ```bash
-# Check the .sh file configureations
+# Check the .sh file configurations
 
 # Run only the query rewriter and make sure you are under the QUITE root path
 chmod +x ./scripts/run_quite_only_query_rewrite.sh
@@ -178,7 +178,7 @@ bash ./scripts/run_quite_only_query_rewrite.sh
 
 **Option 3: Hint Recommendation Only**
 ```bash
-# Check the .sh file configureations
+# Check the .sh file configurations
 
 # Run only the hint recommender (requires existing rewritten queries) and make sure you are under the QUITE root path
 chmod +x ./scripts/run_quite_only_hint_injection.sh
@@ -251,7 +251,7 @@ The system will display real-time progress with tqdm progress bars:
 📁 Directory structure created:
    rewriter_temp: /root/syy/QUITE/output/test/rewriter_temp
    recommender_temp: /root/syy/QUITE/output/test/recommender_temp
-   output: /root/syy/QUITE/output/test
+   output: /root/syy/QUITE/ofutput/test
 
 ============================================================
 🔄 Starting Query Rewriter
@@ -323,7 +323,7 @@ output/
 #### 5.1 Using Built-in Evaluation Tools
 
 ```bash
-# Evaluate rewrite effectiveness using the provided script
+# Evaluate the rewrite effectiveness using the provided script
 chmod +x evaluation.sh
 ./evaluation.sh
 ```
@@ -401,7 +401,7 @@ In the course of rewriting with QUITE, we discovered a range of strategies previ
 #### 🚀 Entry Points
 - **`run.py`**: Main execution script with progress monitoring and batch processing
 - **`test_module.py`**: Comprehensive testing suite for all components
-- **`evaluation.sh`**: Evaluate the rewritten querties in real DBMS
+- **`evaluation.sh`**: Evaluate the rewritten query performance in real DBMS
 
 
 
