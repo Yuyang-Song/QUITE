@@ -2,11 +2,25 @@
 
 # QUITE System Run Script - Query Rewrite Only
 
+# Load environment variables from .env file 
+set -o allexport
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+ENV_FILE="$SCRIPT_DIR/../config_file/.env"
+
+if [[ -f "$ENV_FILE" ]]; then
+    source "$ENV_FILE"
+    echo "✅ Environment variables loaded from $ENV_FILE"
+else
+    echo "❌ Warning: $ENV_FILE not found"
+fi
+
+set +o allexport
+
 # Path variables
-QUITE_ROOT="/root/syy/QUITE"
-INPUT_QUERIES="${QUITE_ROOT}/dataset/queries/tpch_test.json"
-SCHEMA_FILE="${QUITE_ROOT}/dataset/schemas/tpch_schemas.sql"
-OUTPUT_DIR="${QUITE_ROOT}/output/test"
+INPUT_QUERIES="${PROJECT_ROOT}/dataset/queries/tpch_test.json"
+SCHEMA_FILE="${PROJECT_ROOT}/dataset/schemas/tpch_schemas.sql"
+OUTPUT_DIR="${PROJECT_ROOT}/output/test"
 
 # Feature flags - only rewriter enabled
 ENABLE_REWRITER="--enable_rewriter"

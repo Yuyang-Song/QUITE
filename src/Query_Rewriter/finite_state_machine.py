@@ -12,7 +12,7 @@ from src.utils.agent_template import MessageContent, Message, MemoryWindow, Mess
 
 
 class QueryRewriter:
-    """SQL重写有限状态机"""
+    """SQL Rewrite Finite State Machine"""
     def __init__(self, message_queue: MessageQueue, dbms: DBMS, data_statistics, schema_file, MAX_ITERATION_LOOP=3):
         self.current_state = "REASONING"
         self.memory = create_memory_buffer(data_statistics, schema_file)
@@ -22,23 +22,23 @@ class QueryRewriter:
         self.MAX_ITERATION_LOOP = MAX_ITERATION_LOOP    
         self.terminal_output = None
         self.output_collector = OutputCollector()
-        
-        # 初始化各Agent
+
+        # Initialize each agent
         self.reasoning_agent = ReasoningAgent(message_queue)
         self.assistant_agent = AssistantAgent(message_queue)
         self.decision_agent = DecisionAgent(message_queue)
-        
-        # 设置观察关系
+
+        # Set up observation relationships
         self.decision_agent.watch(["ReasoningAgent","ExplainAgent"])
         self.assistant_agent.watch(["SummaryAgent","ExplainAgent"])
 
-        # 并行处理相关
+        # Parallel processing related
         self.parallel_threads = 2
         self.parallel_reasoning_results = []
         self.parallel_verification_results = []
         self._stop_event = threading.Event()
-        self.llm_semaphore = asyncio.Semaphore(3)  # 控制LLM并发数
-        self.db_semaphore = asyncio.Semaphore(5)   # 控制数据库并发数
+        self.llm_semaphore = asyncio.Semaphore(3)  # Control LLM concurrency
+        self.db_semaphore = asyncio.Semaphore(5)   # Control database concurrency
 
     @property
     def data_statistics(self):
@@ -121,11 +121,11 @@ class QueryRewriter:
         return self.memory.schema_file
     
     async def clear(self):
-        """清除所有初始化变量 - 使用简化的memory buffer"""
-        # 使用memory buffer的清理方法
+        """Clear all initialization variables - using a simplified memory buffer"""
+        # Use memory buffer's clearing method
         self.memory.clear_volatile_memory()
-        
-        # 重置FSM状态
+
+        # Reset FSM state
         self.current_state = "REASONING"
         self.iteration = 0
         self.parallel_reasoning_results = []
@@ -151,10 +151,10 @@ class QueryRewriter:
 
             elif self.current_state == "DECISION":
                 await self.state_decision()
-            await asyncio.sleep(0.1)  # 防止事件循环阻塞
-        
+            await asyncio.sleep(0.1)  # Prevent event loop blocking
+
         terminal_output = self.output_collector.stop_collecting()
-        # 将输出存储到FSM的属性中
+        # Store the output in FSM's attributes
         self.terminal_output = terminal_output
         
         return self.enhanced_sql
@@ -188,9 +188,9 @@ class QueryRewriter:
             enhanced_sql = self.decision_agent.extract_enhanced_sql_content(summary)
             optimization_advice = self.decision_agent.extract_advice_content(summary)
 
-            # 检查是否有实际的优化内容
+            # Check if there is any actual optimization content
             if enhanced_sql and enhanced_sql.strip() and enhanced_sql != self.initial_sql:
-                # 有有效的优化SQL，使用它
+                # If there is valid optimized SQL, use it
                 print(f"Worker {worker_id}: Found optimized SQL")
                 return {
                     "worker_id": worker_id,
@@ -200,7 +200,7 @@ class QueryRewriter:
                     "optimization_advice": optimization_advice
                 }
             elif "TERMINATE" in reasoning_result:
-                # 只有在没有优化SQL且明确要求终止时才early stop
+                # Only early stop when there is no optimized SQL and a clear request to terminate
                 print(f"Worker {worker_id}: Early stop - no need to optimize")
                 return {
                     "worker_id": worker_id,
@@ -210,7 +210,7 @@ class QueryRewriter:
                     "optimization_advice": "No need to optimize"
                 }
             else:
-                # 有优化建议但没有提取到SQL，仍然当作成功
+                # There are optimization suggestions but no SQL extracted, still considered a success
                 print(f"Worker {worker_id}: Using extracted results")
                 return {
                     "worker_id": worker_id,
@@ -221,7 +221,7 @@ class QueryRewriter:
                 }
             
         except Exception as e:
-            print(f"Worker {worker_id}: Reasoning发生错误: {str(e)}")
+            print(f"Worker {worker_id}: Reasoning error occurred: {str(e)}")
             return {
                 "worker_id": worker_id,
                 "status": "error",
@@ -229,29 +229,29 @@ class QueryRewriter:
             }
         
     async def state_reasoning_parallel(self):
-        """并行推理状态"""
+        """Parallel reasoning state"""
         print(f"######################################################################################")
         print(f"\n=== Start Parallel Reasoning (Number of Threads: {self.parallel_threads}) ===")
-        
-        # 清空结果
+
+        # Clear results
         new_reasoning_results = []
-        
-        # 创建并运行并行任务
+
+        # Create and run parallel tasks
         tasks = []
         for worker_id in range(self.parallel_threads):
             task = asyncio.create_task(self.parallel_reasoning_worker(worker_id))
             tasks.append(task)
-        
-        # 等待所有任务完成
+
+        # Wait for all tasks to complete
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        # 处理结果
+        # Process results
         for result in results:
             if result is not None and not isinstance(result, Exception):
                 if result.get("status") in ["success", "early_stop"]:
                     new_reasoning_results.append(result)
                 else:
-                    # 失败的worker直接跳过
+                    # Skip failed workers
                     worker_id = result.get("worker_id", "unknown")
                     print(f"## Worker {worker_id} Reasoning failed. Skipping this worker.##")
         
@@ -384,21 +384,21 @@ class QueryRewriter:
     
 
     async def state_verification_parallel(self):
-        """并行验证状态"""
+        """Parallel verification state"""
         print(f"######################################################################################")
         print(f"\n=== Start Parallel Verification ===")
-        
-        # 重置结果和停止事件
+
+        # Reset results and stop event
         new_verification_results = []
         self._stop_event.clear()
-        
-        # 只对成功的reasoning结果进行verification
-        successful_reasoning = [r for r in self.parallel_reasoning_results 
+
+        # Only successful reasoning results are subject to verification
+        successful_reasoning = [r for r in self.parallel_reasoning_results
                                if r["status"] == "success"]
         early_stop_reasoning = [r for r in self.parallel_reasoning_results 
                                if r["status"] == "early_stop"]
-        
-        # Early stop的结果可以直接加入最终结果
+
+        # Early stop results can be directly added to the final results
         for early_stop in early_stop_reasoning:
             new_verification_results.append({
                 "worker_id": early_stop["worker_id"],
@@ -407,35 +407,35 @@ class QueryRewriter:
                 "enhanced_sql": early_stop["enhanced_sql"],
                 "optimization_advice": early_stop["optimization_advice"]
             })
-        
-        # 为需要验证的worker创建任务
+
+        # Create tasks for workers that need verification
         tasks = []
         for reasoning_result in successful_reasoning:
             task = asyncio.create_task(self.parallel_verification_worker(reasoning_result))
             tasks.append(task)
-        
-        if tasks:  # 如果有需要验证的任务
-            # 等待所有验证任务完成
+
+        if tasks:  # If there are tasks that need verification
+            # Wait for all verification tasks to complete
             results = await asyncio.gather(*tasks, return_exceptions=True)
-            
-            # 处理验证结果
+
+            # Process verification results
             for result in results:
                 if result is not None and not isinstance(result, Exception):
                     if result.get("status") == "success":
                         new_verification_results.append(result)
                     else:
-                        # 验证失败的worker直接跳过，不再重试
+                        # Skip failed workers
                         worker_id = result.get("worker_id", "unknown")
                         print(f"## Worker {worker_id} Verification failed. Skipping this worker.##")
 
-        # 判断下一个状态
+        # Determine the next state
         if new_verification_results:
-        # 有成功的验证结果，直接进入决策
+            # If there are successful verification results, proceed to decision 
             print(f"## Parallel verification complished, obtains {len(new_verification_results)} effective results##")
             self.parallel_verification_results = new_verification_results
             self.current_state = "DECISION"
         else:
-            # 所有验证都失败了，使用原始SQL终止
+            # All verification attempts failed, terminate using the original SQL
             print("## All the parallel verification workers failed. Using the original SQL.##")
             self.produced_sql = self.initial_sql
             self.enhanced_sql = self.initial_sql
@@ -445,17 +445,17 @@ class QueryRewriter:
 
 
     async def state_decision(self):
-        """决策状态 - 包含选择和决策逻辑"""
+        """Decision state - includes selection and decision logic"""
         print(f"######################################################################################")
-        print(f"\n=== Start Decison Stage: (Iteration: {self.iteration}/{self.MAX_ITERATION_LOOP}) ===")
-        
-        # Step 1: 选择最优SQL（如果有多个verification结果）
+        print(f"\n=== Start Decision Stage: (Iteration: {self.iteration}/{self.MAX_ITERATION_LOOP}) ===")
+
+        # Step 1: Select the optimal SQL (if there are multiple verification results)
         if len(self.parallel_verification_results) == 1:
-            # 只有一个结果，直接使用
+            # Only one result, use it directly
             selected_result = self.parallel_verification_results[0]
             print(f"## There is only one valid option, so choose it directly Worker {selected_result['worker_id']}##")
         else:
-            # 多个结果，需要选择
+            # Multiple results, need to select
             print(f"##  {len(self.parallel_verification_results)} results, try to select the best one ##")
             query_pairs = []
             for result in self.parallel_verification_results:
@@ -467,8 +467,8 @@ class QueryRewriter:
             async with self.llm_semaphore:
                 selected_advice = await self.decision_agent.select_sql(self.initial_sql, query_pairs)
             selected_id = self.decision_agent.extract_selected_id_content(selected_advice)
-            
-            # 找到对应的结果
+
+            # Find the corresponding result
             selected_result = None
             for result in self.parallel_verification_results:
                 if result["worker_id"] == selected_id:
@@ -480,26 +480,20 @@ class QueryRewriter:
                 selected_result = self.parallel_verification_results[0]
             else:
                 print(f"## selected Worker {selected_id}##")
-        
-        # 设置选中的结果
+
+        # Set the selected result
         self.produced_sql = selected_result["produced_sql"]
         self.enhanced_sql = selected_result["enhanced_sql"]
         self.optimization_advice = selected_result["optimization_advice"]
-        
-        print(f"## Slected Rewritten SQL: {self.enhanced_sql} ##")
+
+        print(f"## Selected Rewritten SQL: {self.enhanced_sql} ##")
         print(f"## Rewrite Proposals: {self.optimization_advice} ##")
 
-        # # 检查SQL是否相等
-        # sql_equal = (self.initial_sql == self.enhanced_sql)
-        # if sql_equal:
-        #     print(f"## SQL UNCHANGED: enhanced_sql equals initial_sql ##")
-        # else:
-        #     print(f"## SQL CHANGED: enhanced_sql differs from initial_sql ##")
-        
-        # 生成report
+
+        # Generate report
         print(f"## Generate optimization report... ##")
         async with self.db_semaphore:
-            # 并行执行这两个explain
+            # Execute the two explain tasks in parallel
             ori_explain_task = asyncio.create_task(DBMS_EXPLAIN_Tool(self.dbms, self.initial_sql))
             enhanced_explain_task = asyncio.create_task(DBMS_EXPLAIN_Tool(self.dbms, self.enhanced_sql))
             
@@ -515,7 +509,7 @@ class QueryRewriter:
         self.report = analysis_report
         print(f"## Report generation completed ##")
 
-        # Step 2: 进行决策
+        # Step 2: Make a decision
         async with self.llm_semaphore:
             decision = await self.decision_agent.evaluate(
                 self.initial_sql,
@@ -546,8 +540,8 @@ class QueryRewriter:
                 }
                 self.guide_info = input_report
                 self.report = input_report
-                
-                # 重新开始整个流程，重置所有状态
+
+                # Restart the entire process and reset all states
                 self.parallel_reasoning_results = []
                 self.parallel_verification_results = []
                 self.current_state = "REASONING"
@@ -560,18 +554,18 @@ class QueryRewriter:
 
 
 
-# 在每次保存JSON文件时，将终端输出保存到txt文件
+# Save terminal output to txt file each time a JSON file is saved
 def save_terminal_output_to_file(save_file_path, batch, original_stdout, temp_file):
-    # 恢复标准输出
+    # Restore standard output
     sys.stdout = original_stdout
     temp_file.close()
-    
-    # 将临时文件的内容复制到最终文件
+
+    # Copy the contents of the temporary file to the final file
     with open(f"{save_file_path}/batch_{batch}.txt", "w") as f:
         with open("temp_output.txt", "r") as temp_f:
             f.write(temp_f.read())
-    
-    # 重新重定向标准输出到临时文件
+
+    # Redirect standard output to temporary file again
     temp_file = open("temp_output.txt", "w")
     sys.stdout = temp_file
     return temp_file

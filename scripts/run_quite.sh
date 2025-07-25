@@ -2,10 +2,28 @@
 
 # QUITE System Run Script - Simple Configuration
 
+# Load environment variables from .env file
+# —— 1. 自动导出模式 —— 
+set -o allexport
+
+# —— 2. 找到本脚本所在目录，然后指向 ../config_file/.env —— 
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+ENV_FILE="$SCRIPT_DIR/../config_file/.env"
+
+if [[ -f "$ENV_FILE" ]]; then
+    source "$ENV_FILE"
+    echo "✅ Environment variables loaded from $ENV_FILE"
+else
+    echo "❌ Warning: $ENV_FILE not found"
+fi
+
+# —— 3. 关闭自动导出 —— 
+set +o allexport
+
 # Path variables
-INPUT_QUERIES="/root/syy/QUITE/dataset/queries/tpch_test.json"
-SCHEMA_FILE="/root/syy/QUITE/dataset/schemas/tpch_schemas.sql"
-OUTPUT_DIR="/root/syy/QUITE/output/test"
+INPUT_QUERIES="${PROJECT_ROOT}/dataset/queries/tpch_test.json"
+SCHEMA_FILE="${PROJECT_ROOT}/dataset/schemas/tpch_schemas.sql"
+OUTPUT_DIR="${PROJECT_ROOT}/output/test"
 
 # Feature flags
 ENABLE_REWRITER="--enable_rewriter"

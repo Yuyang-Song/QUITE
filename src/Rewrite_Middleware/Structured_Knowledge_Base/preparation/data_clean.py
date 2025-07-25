@@ -17,7 +17,7 @@ structured information including question descriptions, query examples, and answ
 Usage:
     # Initialize the cleaner with input and output directories
     input_dir = '/path/to/input/markdown/files'
-    output_file = '/path/to/output/result.json'
+    output_file = '/path/to/output/knowledge_base.json'
     
     # Create cleaner instance and run processing pipeline
     cleaner_instance = cleaner(input_dir, output_file)
@@ -308,7 +308,8 @@ class cleaner():
         official_docs = {
             'calcite': './data/calcite.json',
             'oracle': './data/oracle.json', 
-            'sql_server': './data/sql_server.json'
+            'sql_server': './data/sql_server.json',
+            'sql_query': './data/sql_query.json'
         }
         
         # Use tqdm for progress tracking
@@ -481,11 +482,11 @@ class cleaner():
         """
         try:
             # Read the current result file
-            if not os.path.exists(save_document_file_dir):
-                print(f"❌ Result file does not exist: {save_document_file_dir}")
+            if not os.path.exists(self.save_file_dir):
+                print(f"❌ Result file does not exist: {self.save_file_dir}")
                 return False
-                
-            with open(save_document_file_dir, 'r', encoding='utf-8') as file:
+
+            with open(self.save_file_dir, 'r', encoding='utf-8') as file:
                 data = json.load(file)
             
             # Generate ID and standard format for each document
@@ -720,9 +721,9 @@ class cleaner():
                 
 # Configuration and execution section
 # Default paths for processing StackOverflow markdown files and official docs
-input_file_dir = './data/stackoverflow'  # Modify this to your own data directory
-save_file_dir = '../storage/knowledge_base.json'  # Output JSON file path, modify to your own knowledge base file
-save_document_file_dir = '../storage/document_store.json'  # Document store cache file path, modify to your own document store file
+input_file_dir = './data/ur_folder'  # Modify this to your own data directory
+save_file_dir = '../storage/ur_knowledge_base.json'  # Output JSON file path, modify to your own knowledge base file
+save_document_file_dir = '../storage/ur_document_store.json'  # Document store cache file path, modify to your own document store file
 
 # Initialize the cleaner
 clean = cleaner(input_file_dir, save_file_dir)

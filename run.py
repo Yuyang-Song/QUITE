@@ -1,17 +1,16 @@
-from pathlib import Path
+
 import os
 import sys
-
-sys.path.append('../')
-sys.path.append('./')
-
 import json
 import asyncio
 import time
 import argparse
-import shutil
 import glob
+sys.path.append('../')
+sys.path.append('./')
+
 from tqdm import tqdm
+from pathlib import Path
 from dotenv import load_dotenv
 from src.utils.data_distribution import get_statistics_list, get_available_databases
 from src.utils.get_data_statistics import get_data_statistics
@@ -22,13 +21,13 @@ from src.Hint_Recommender.injection import Hint_Recommender
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[2]))
 LOAD_PATH = PROJECT_ROOT / "config_file" / ".env"
-load_dotenv(dotenv_path=LOAD_PATH)
+load_dotenv(dotenv_path= LOAD_PATH)   
 
 def parse_arguments():
     """Parse parameters from command line or use default values"""
     parser = argparse.ArgumentParser(description="QUITE: Query Rewrite and Hint Recommendation System")
     
-    # 基本参数
+    # basic configuration
     parser.add_argument("--input_path", type=str, 
                        default=None,
                        help="Input JSON file path containing queries")

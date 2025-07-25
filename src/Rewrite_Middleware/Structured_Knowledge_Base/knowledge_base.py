@@ -28,26 +28,26 @@ class Structured_Knowledge_Base:
         self.folder_path = folder_path
         self.json_file_path = json_file_path
 
-        # 设置document_store缓存路径
+        # Set document_store cache path
         if document_store_path is None:
             base_dir = os.path.dirname(json_file_path)
             base_name = os.path.basename(json_file_path).split('.')[0]
             self.document_store_path = os.path.join(base_dir, f"{base_name}_document_store.pkl")
         else:
             self.document_store_path = document_store_path
-        
-        # 尝试从缓存加载document_store
+
+        # Try to load document_store from cache
         if not self.load_document_store_from_cache():
             print("Building new document store...")
-            # 如果缓存加载失败，执行原始的加载和索引构建流程
+            # If cache loading fails, execute the original loading and indexing process
             self.document_store = InMemoryDocumentStore()
             documents = self.load_documents_from_file()
             self.document_store.write_documents(documents)
-            # 保存构建好的document_store到缓存
+            # Save the constructed document_store to cache
             self.save_document_store_to_cache()
 
     def _compute_json_file_hash(self):
-        """计算JSON文件的哈希值，用于检测文件是否被修改"""
+        """Compute the hash of the JSON file to detect if it has been modified."""
         if not os.path.exists(self.json_file_path):
             return None
             
@@ -60,9 +60,9 @@ class Structured_Knowledge_Base:
             return None
     
     def save_document_store_to_cache(self):
-        """将document_store保存到缓存文件"""
+        """Save document_store to cache file."""
         try:
-            # 创建一个包含文档内容哈希值的元数据
+            # Create metadata containing document content hash
             json_hash = self._compute_json_file_hash()
             cache_data = {
                 "document_store": self.document_store,
@@ -72,8 +72,8 @@ class Structured_Knowledge_Base:
                     "document_count": len(self.document_store.filter_documents())
                 }
             }
-            
-            # 保存到文件
+
+            # Save to file
             with open(self.document_store_path, 'wb') as f:
                 pickle.dump(cache_data, f)
                 
@@ -83,28 +83,28 @@ class Structured_Knowledge_Base:
         except Exception as e:
             print(f"Error saving document store: {e}")
             return False
-    
+
     def load_document_store_from_cache(self):
-        """从缓存文件加载document_store"""
+        """Load document_store from cache file."""
         if not os.path.exists(self.document_store_path):
             print(f"Document store cache file not found: {self.document_store_path}")
             return False
             
         try:
-            # 加载缓存数据
+            # Load cache data 
             with open(self.document_store_path, 'rb') as f:
                 cache_data = pickle.load(f)
             
             document_store = cache_data["document_store"]
             metadata = cache_data["metadata"]
-            
-            # 验证JSON文件哈希值是否匹配
+
+            # Verify if JSON file hash matches
             current_json_hash = self._compute_json_file_hash()
             if current_json_hash != metadata["json_hash"]:
                 print("JSON file has changed since document store was cached. Rebuilding store.")
                 return False
-                
-            # 设置文档存储
+
+            # Set document store
             self.document_store = document_store
             
             print(f"Loaded document store from cache with {metadata['document_count']} documents.")
@@ -116,7 +116,7 @@ class Structured_Knowledge_Base:
             return False
             
     def refresh_document_store(self):
-        """强制重新构建document_store"""
+        """Force rebuild document_store"""
         print("Refreshing document store...")
         self.document_store = InMemoryDocumentStore()
         documents = self.load_documents_from_file()
@@ -124,13 +124,13 @@ class Structured_Knowledge_Base:
         self.save_document_store_to_cache()
         print("Document store refreshed")
 
-    # 将文档保存到本地 JSON 文件
+    # Save documents to local JSON file
     def save_documents_to_file(self, documents):
         documents_data = [{"id": doc.id, "content": doc.content} for doc in documents]
         with open(self.json_file_path, 'w', encoding='utf-8') as file:
             json.dump(documents_data, file, ensure_ascii=False, indent=4)
-            
-    # 从本地 JSON 文件加载文档
+
+    # Load documents from local JSON file
     def load_documents_from_file(self):
         print("Loading documents from file...")
         documents = []
@@ -142,7 +142,7 @@ class Structured_Knowledge_Base:
 
         return documents
 
-    # 读取文件夹中的所有 json 文件
+    # Read all JSON files from the folder
     def read_json_files_from_folder(self):
         start_time = time.time()
         documents = []
@@ -159,7 +159,7 @@ class Structured_Knowledge_Base:
                     with open(file_path, 'r', encoding='utf-8') as file:
                         data = json.load(file)
 
-                    # 若为数组，则逐个处理
+                    # If it's an array, process each item individually
                     if isinstance(data, list):
                         for item in data:
                             if 'id' not in item or not item['id']:
@@ -167,13 +167,13 @@ class Structured_Knowledge_Base:
                                 item['id'] = generated_id
                             item_id = item['id']
 
-                            # 将该对象保存为独立 Document
+                            # Save this object as a separate Document
                             doc_json_str = json.dumps(item, ensure_ascii=False)
                             doc_hash_id = hashlib.sha256(doc_json_str.encode('utf-8')).hexdigest()
                             if doc_hash_id not in existing_ids:
                                 documents.append(Document(content=doc_json_str, id=item_id))
                                 existing_ids.add(doc_hash_id)
-                    # 若为单个对象
+                    # If it's a single object
                     elif isinstance(data, dict):
                         if 'id' not in data or not data['id']:
                             generated_id = hashlib.sha256(json.dumps(data, ensure_ascii=False).encode('utf-8')).hexdigest()
@@ -186,7 +186,7 @@ class Structured_Knowledge_Base:
                             documents.append(Document(content=doc_json_str, id=item_id))
                             existing_ids.add(doc_hash_id)
 
-                    # 将处理过的文件重新写回，确保都有 id
+                    # Write the processed file back, ensuring all have IDs
                     with open(file_path, 'w', encoding='utf-8') as file:
                         json.dump(data, file, ensure_ascii=False, indent=4)
 
@@ -199,18 +199,18 @@ class Structured_Knowledge_Base:
 
     def format_suggestion(self, suggestion) -> List[Dict[str, str]]:
         """
-        格式化 suggestion 字段，将其解析为结构化 JSON 格式并去除不需要的符号。
-        :param suggestion: 需要格式化的原始 suggestion（可能是字符串、列表或其他类型）
-        :return: 格式化后的 suggestion 字段（作为 JSON 对象列表）
+        Format the suggestion field by parsing it into a structured JSON format and removing unnecessary symbols.
+        :param suggestion: The original suggestion to be formatted (which may be a string, list, or other types)
+        :return: The formatted suggestion field (as a list of JSON objects)
         """
         import re
         
         try:
-            # 处理空值
+            # Handle empty values
             if not suggestion:
                 return [{"suggestion": "No suggestion available"}]
-            
-            # 统一转换为字符串
+
+            # Normalize to string
             if isinstance(suggestion, list):
                 text = ''.join(str(item) for item in suggestion)
             else:
@@ -218,23 +218,23 @@ class Structured_Knowledge_Base:
             
             if not text.strip():
                 return [{"suggestion": "No suggestion content"}]
-            
-            # 提取JSON内容 - 使用正则表达式简化
+
+            # Extract JSON content - Simplified using regular expressions
             text = text.strip()
-            
-            # 尝试提取```json...```或```...```包围的内容
+
+            # Try to extract content surrounded by ```json...``` or ```...```
             json_match = re.search(r'```(?:json)?\s*(.*?)\s*```', text, re.DOTALL)
             if json_match:
                 json_content = json_match.group(1).strip()
             else:
-                # 尝试提取从第一个{或[开始的JSON
+                # Try to extract JSON starting from the first { or [
                 brace_match = re.search(r'[{\[].*[}\]]', text, re.DOTALL)
                 if brace_match:
                     json_content = brace_match.group(0)
                 else:
                     json_content = text
-            
-            # 尝试解析JSON
+
+            # Try to parse JSON
             try:
                 parsed = json.loads(json_content)
                 if isinstance(parsed, list):
@@ -244,12 +244,12 @@ class Structured_Knowledge_Base:
                 else:
                     return [{"suggestion": str(parsed)}]
             except json.JSONDecodeError:
-                # JSON解析失败，尝试提取suggestion字段
+                # JSON parsing failed, try to extract suggestion field
                 suggestions = re.findall(r'"suggestion"\s*:\s*"([^"]*)"', json_content)
                 if suggestions:
                     return [{"suggestion": s} for s in suggestions]
-                
-                # 最后备选：返回清理后的文本
+
+                # Last resort: return cleaned text
                 return [{"suggestion": json_content}]
                 
         except Exception as e:
@@ -258,7 +258,7 @@ class Structured_Knowledge_Base:
 
 
     def retrieval(self,input_sql, suggestion_tuple):
-        # 建立RAG pipeline
+        # Establish RAG pipeline
         question = textwrap.dedent(f"""
         find the potential rewrite strageties for the sql query: {input_sql} and its suggestions are: {suggestion_tuple["origin_suggestion"]}.
         Please notice that the suggestion group reffered to the rewritten strataegie classification: {suggestion_tuple["group"]}.

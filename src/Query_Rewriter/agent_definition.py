@@ -18,7 +18,7 @@ from src.utils.llm_client import GPT
 from dotenv import load_dotenv
 
 class ReasoningAgent(Agent):
-    """SQL重写推理Agent"""
+    """MDP-based Reasoning Agent"""
     def __init__(self, mq: MessageQueue):
         super().__init__("ReasoningAgent", mq, gpt = GPT(
         api_key=os.getenv("REASONING_MODEL_API_KEY"),
@@ -41,7 +41,6 @@ class ReasoningAgent(Agent):
 
     async def get_answer(self, prompt):
         reasoning_content = ""  # 
-        answer_content = ""     # 
         is_answering = False   # 
         messages= []
 
@@ -161,7 +160,7 @@ class ReasoningAgent(Agent):
 
     
 class DecisionAgent(Agent):
-    """总结优化建议Agent"""
+    """Summarize Optimization Suggestions Agent"""
     def __init__(self, mq: MessageQueue):
         super().__init__("DecisionAgent", mq, gpt = GPT(
     api_key=os.getenv("DECISION_MODEL_API_KEY"),
@@ -172,7 +171,6 @@ class DecisionAgent(Agent):
     
 
     async def summarize_chain(self, chain: str, original_sql: str, data_statistics) -> dict:
-        # print("chain:",chain)
         prompt = textwrap.dedent(f"""
         <Mission>
         You are an experienced database administrator. Your mission is to
@@ -347,7 +345,7 @@ class DecisionAgent(Agent):
     
     def extract_advice_content(self, text: str) -> str:
         """
-        提取文本中从 </advice> 到 </advice> 之间的内容。
+        Extract content between </advice> and </advice> tags.
         """
         pattern = r'</advice>\s*(.*?)\s*</advice>'
         match = re.search(pattern, text, re.DOTALL)
@@ -357,7 +355,7 @@ class DecisionAgent(Agent):
     
     def extract_selected_id_content(self, text: str) -> str:
         """
-        提取文本中从 </selected_id> 到 </selected_id> 之间的内容。
+        Extract content between </selected_id> and </selected_id> tags.
         """
         pattern = r'</selected_id>\s*(.*?)\s*</selected_id>'
         match = re.search(pattern, text, re.DOTALL)
@@ -368,7 +366,7 @@ class DecisionAgent(Agent):
 
     def extract_sql_candidate_content(self, text: str) -> str:
         """
-        提取文本中从 </sql_candidate> 到 </sql_candidate> 之间的内容。
+        Extract content between </sql_candidate> and </sql_candidate> tags.
         """
         # 首先尝试匹配带```sql的格式
         pattern1 = r'</sql_candidate>\s*```sql\s*(.*?)\s*```\s*</sql_candidate>'
@@ -390,7 +388,7 @@ class DecisionAgent(Agent):
 
     def extract_enhanced_sql_content(self, text: str) -> str:
         """
-        提取文本中从 </enhanced_sql> 到 </enhanced_sql> 之间的内容。
+        Extract content between </enhanced_sql> and </enhanced_sql> tags.
         """
         # 首先尝试匹配带```sql的格式
         pattern1 = r'</enhanced_sql>\s*```sql\s*(.*?)\s*```\s*</enhanced_sql>'
@@ -412,7 +410,7 @@ class DecisionAgent(Agent):
     
     def extract_equivalence_content(self, text: str) -> str:
         """
-        提取文本中从 </equivalence> 到 </equivalence> 之间的内容。
+        Extract content between </equivalence> and </equivalence> tags.
         """
         pattern = r'</equivalence>\s*(.*?)\s*</equivalence>'
         match = re.search(pattern, text, re.DOTALL)
@@ -422,21 +420,21 @@ class DecisionAgent(Agent):
     
     def extract_corrected_sql_content(self, text: str) -> str:
         """
-        提取文本中从 </corrected_sql> 到 </corrected_sql> 之间的内容。
-        支持多种格式：带```sql的代码块和不带的纯文本
+        Extract content between </corrected_sql> and </corrected_sql> tags.
+        Support multiple formats: code blocks with ```sql and plain text without.
         """
-        # 首先尝试匹配带```sql的格式
+        # First, try to match the format with ```sql
         pattern1 = r'</corrected_sql>\s*```sql\s*(.*?)\s*```\s*</corrected_sql>'
         match1 = re.search(pattern1, text, re.DOTALL)
         if match1:
             return match1.group(1).strip()
-        
-        # 如果没有匹配到，尝试匹配不带```的纯文本格式
+
+        # If no match is found, try to match the plain text format without ```
         pattern2 = r'</corrected_sql>\s*(.*?)\s*</corrected_sql>'
         match2 = re.search(pattern2, text, re.DOTALL)
         if match2:
             sql_content = match2.group(1).strip()
-            # 移除可能的```sql标记
+            # Remove any ```sql markers
             sql_content = re.sub(r'^```sql\s*', '', sql_content)
             sql_content = re.sub(r'\s*```$', '', sql_content)
             return sql_content.strip()
@@ -445,7 +443,7 @@ class DecisionAgent(Agent):
         return ""
 
     async def merge_advice(self, base_sql: str, optimizations: List[str], rag_optimizations: List[str]) -> str:
-        """合并优化建议到SQL"""
+        """Merge optimization suggestions into SQL"""
         optimizations_str = [
             json.dumps(opt) if isinstance(opt, dict) else str(opt)
             for opt in optimizations
@@ -479,13 +477,13 @@ class DecisionAgent(Agent):
         return response
     
     def retrieve_reasoning_chain(self) -> str:
-        """从消息队列获取推理链"""
+        """Retrieve reasoning chain from message queue"""
         messages = self.retrieve_memories(k=1)
         return [msg.content.text for msg in messages if msg.content and msg.content.text]
 
 
 class AssistantAgent(Agent):
-    """执行计划分析Agent"""
+    """Execution Plan Analysis Agent"""
     def __init__(self, mq: MessageQueue):
         super().__init__("AssistantAgent", mq, gpt = GPT(
     api_key=os.getenv("ASSISTANT_MODEL_API_KEY"),
@@ -495,7 +493,7 @@ class AssistantAgent(Agent):
     
     def extract_corrected_sql_content(self, text: str) -> str:
         """
-        提取文本中从 </corrected_sql>```sql 到 ```</corrected_sql> 之间的内容。
+        Extract content between </corrected_sql>```sql and ```</corrected_sql> tags.
         """
         pattern = r'</corrected_sql>\s*```sql\s*(.*?)\s*```\s*</corrected_sql>'
         match = re.search(pattern, text, re.DOTALL)
@@ -504,7 +502,7 @@ class AssistantAgent(Agent):
         return ""
     
     async def _correct_sql(self, original_sql: str, rewritten_sql: str, error: str) -> str:
-        """修正SQL语法错误"""
+        """Correct SQL syntax errors"""
         prompt = textwrap.dedent(f"""
             You are an expert in SQL syntax and excel at correcting SQL syntax errors.
             Please fix the following SQL statement, using the error message provided.
@@ -544,7 +542,7 @@ class AssistantAgent(Agent):
     
     def extract_analysis_content(self, text: str) -> str:
         """
-        提取文本中从 </analysis> 到 </analysis> 之间的内容。
+        Extract content between </analysis> and </analysis> tags.
         """
         print(text)
         if text is None:

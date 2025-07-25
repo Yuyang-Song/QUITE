@@ -1,48 +1,37 @@
-"""
-####################################################################
-#                     Agent Memory Buffer                          #
-####################################################################
-
-简化的Agent Memory Buffer - 用于管理SQL重写过程中的各种信息
-
-Author: Yuyang-Song
-Date: 2025-07-23
-####################################################################
-"""
 import sys
 
 class AgentMemoryBuffer:
     """
-    简化的内存缓冲区，存储SQL重写过程中的关键信息
+    Simplified memory buffer for storing key information during the SQL rewriting process
     """
     
     def __init__(self, data_statistics: str = None, schema_file: str = None):
-        """初始化内存缓冲区"""
-        
-        # 查询相关信息
+        """Initialize memory buffer"""
+
+        # Query related information
         self.initial_sql = None
         self.data_statistics = data_statistics
         self.schema_file = schema_file
-        
-        # 重写过程结果
+
+        # Rewriting process results
         self.optimization_advice = None
         self.produced_sql = None
         self.enhanced_sql = None
-        
-        # 执行计划相关
+
+        # Execution plan related
         self.ori_explain_result = None
         self.re_explain_result = None
         self.imp_explain_result = None
-        
-        # 报告和指导信息
+
+        # Report and guidance information
         self.report = None
         self.guide_info = None
     
     def clear_volatile_memory(self):
         """
-        清除易变的内存内容，保留稳定的配置信息
-        保留：data_statistics, schema_file
-        清除：其他所有内容
+        Clear volatile memory content while retaining stable configuration information
+        Retain: data_statistics, schema_file
+        Clear: All other content
         """
         self.initial_sql = None
         self.optimization_advice = None
@@ -55,7 +44,7 @@ class AgentMemoryBuffer:
         self.guide_info = None
     
     def get_status(self):
-        """获取当前状态，用于调试"""
+        """Get current status for debugging"""
         status = {}
         for attr in ['initial_sql', 'data_statistics', 'schema_file', 
                     'optimization_advice', 'produced_sql', 'enhanced_sql',
@@ -66,37 +55,37 @@ class AgentMemoryBuffer:
         return status
 
 class OutputCollector:
-    """收集终端输出的工具类"""
+    """Tool class for collecting terminal output"""
     def __init__(self):
         self.outputs = []
         self.original_stdout = sys.stdout
         self.current_output = ""
     
     def start_collecting(self):
-        """开始收集输出"""
+        """Start collecting output"""
         self.original_stdout = sys.stdout
         sys.stdout = self
     
     def stop_collecting(self):
-        """停止收集输出并返回收集到的内容"""
+        """Stop collecting output and return the collected content"""
         sys.stdout = self.original_stdout
         collected = self.current_output
         self.current_output = ""
         return collected
     
     def write(self, text):
-        """重写write方法以捕获输出"""
+        """Override write method to capture output"""
         self.current_output += text
         self.original_stdout.write(text)
     
     def flush(self):
-        """实现flush方法以满足stdout接口"""
+        """Implement flush method to satisfy stdout interface"""
         self.original_stdout.flush()
 
 
 def create_memory_buffer(data_statistics: str = None, schema_file: str = None) -> AgentMemoryBuffer:
     """
-    创建内存缓冲区的简单工厂函数
+    Simple factory function to create a memory buffer
     """
     return AgentMemoryBuffer(data_statistics, schema_file)
 

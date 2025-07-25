@@ -18,7 +18,7 @@ import textwrap
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[2]))
 LOAD_PATH = PROJECT_ROOT / "config_file" / ".env"
-load_dotenv(dotenv_path= LOAD_PATH)         
+load_dotenv(dotenv_path= LOAD_PATH)   
 
 class Hint_Recommender:
     

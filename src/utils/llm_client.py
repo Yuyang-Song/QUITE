@@ -16,12 +16,9 @@ Usage:
 """
 
 from openai import OpenAI, AsyncOpenAI
-import json
-import asyncio
 import sys
 import json
 import tiktoken
-from dotenv import load_dotenv
 
 # Add parent directories to Python path for relative imports
 sys.path.append('../')
@@ -167,45 +164,45 @@ class GPT:
     
 
     
-    def calc_token(self, in_text, out_text="") -> int:
-        """
-        Calculate the number of tokens for given text using the model's tokenizer.
+    # def calc_token(self, in_text, out_text="") -> int:
+    #     """
+    #     Calculate the number of tokens for given text using the model's tokenizer.
         
-        Args:
-            in_text (str): Input text to tokenize
-            out_text (str, optional): Output text to tokenize. Defaults to "".
+    #     Args:
+    #         in_text (str): Input text to tokenize
+    #         out_text (str, optional): Output text to tokenize. Defaults to "".
             
-        Returns:
-            int: Total number of tokens
-        """
-        enc = tiktoken.encoding_for_model(self.model)
-        return len(enc.encode(str(out_text) + str(in_text)))
+    #     Returns:
+    #         int: Total number of tokens
+    #     """
+    #     enc = tiktoken.encoding_for_model(self.model)
+    #     return len(enc.encode(str(out_text) + str(in_text)))
 
-    def calc_money(self, in_text, out_text) -> float:
-        """
-        Calculate the estimated cost for API usage based on token count.
+    # def calc_money(self, in_text, out_text) -> float:
+    #     """
+    #     Calculate the estimated cost for API usage based on token count.
         
-        Args:
-            in_text (str): Input text
-            out_text (str): Output text
+    #     Args:
+    #         in_text (str): Input text
+    #         out_text (str): Output text
             
-        Returns:
-            float: Estimated cost in USD
+    #     Returns:
+    #         float: Estimated cost in USD
             
-        Note:
-            Pricing is based on OpenAI's pricing as of the implementation date.
-            Actual costs may vary. Please refer to OpenAI's current pricing.
-        """
-        if self.model == "gpt-4o":
-            return (self.calc_token(in_text) * 0.005 + self.calc_token(out_text) * 0.015) / 1000
-        elif self.model == "gpt-4o-mini":
-            return (self.calc_token(in_text) * 0.00015 + self.calc_token(out_text) * 0.0006) / 1000
-        elif self.model == "gpt-4o-2024-08-06":
-            return (self.calc_token(in_text) * 0.0025 + self.calc_token(out_text) * 0.01) / 1000
-        elif self.model == "gpt-4":
-            return (self.calc_token(in_text) * 0.03 + self.calc_token(out_text) * 0.06) / 1000
-        elif self.model == "gpt-3.5-turbo":
-            return (self.calc_token(in_text) * 0.0015 + self.calc_token(out_text) * 0.002) / 1000
+    #     Note:
+    #         Pricing is based on OpenAI's pricing as of the implementation date.
+    #         Actual costs may vary. Please refer to OpenAI's current pricing.
+    #     """
+    #     if self.model == "gpt-4o":
+    #         return (self.calc_token(in_text) * 0.005 + self.calc_token(out_text) * 0.015) / 1000
+    #     elif self.model == "gpt-4o-mini":
+    #         return (self.calc_token(in_text) * 0.00015 + self.calc_token(out_text) * 0.0006) / 1000
+    #     elif self.model == "gpt-4o-2024-08-06":
+    #         return (self.calc_token(in_text) * 0.0025 + self.calc_token(out_text) * 0.01) / 1000
+    #     elif self.model == "gpt-4":
+    #         return (self.calc_token(in_text) * 0.03 + self.calc_token(out_text) * 0.06) / 1000
+    #     elif self.model == "gpt-3.5-turbo":
+    #         return (self.calc_token(in_text) * 0.0015 + self.calc_token(out_text) * 0.002) / 1000
 
 
 

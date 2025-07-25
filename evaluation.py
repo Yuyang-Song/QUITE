@@ -2,9 +2,14 @@ import psycopg2
 import time
 import subprocess
 import json
-import os
 import numpy as np
 import statistics
+import sys
+import os
+from pathlib import Path
+sys.path.append('../')
+sys.path.append('./')
+
 from dotenv import load_dotenv
 from decimal import Decimal
 from datetime import date
@@ -13,23 +18,23 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[2]))
 LOAD_PATH = PROJECT_ROOT / "config_file" / ".env"
-load_dotenv(dotenv_path=LOAD_PATH)
-
+load_dotenv(dotenv_path= LOAD_PATH)   
 
 class Evaluation():
-    def __init__(self,evaluation_queries_path,result_storage_path,filtered_path,dbname,timeout = 300):
+    def __init__(self,evaluation_queries_path,result_storage_path,filtered_path,timeout = 300):
         self.evaluation_queries_path = evaluation_queries_path
         self.result_storage_path = result_storage_path
         self.filtered_path = filtered_path
         self.timeout = timeout
-        self.dbname = dbname
 
     def connect_to_database(self, retries=5, wait_time=5):
-        db_name = self.dbname
+        db_name = os.getenv("DB_NAME")
         db_user= os.getenv("DB_USER")
         db_password= os.getenv("DB_PASSWORD")
         db_host= os.getenv("DB_HOST")
         db_port= os.getenv("DB_PORT")
+        print("Connecting to database with the following parameters:")
+        print(f"DB_NAME: {db_name}, DB_USER: {db_user}, DB_HOST: {db_host}, DB_PORT: {db_port}")
         conn_params = {
             'dbname': db_name,
             'user': db_user,
@@ -52,30 +57,30 @@ class Evaluation():
                     return None
 
     def convert_to_serializable(self,obj):
-        """将数据结构中不可序列化的 Decimal 和 date 转换为可序列化的类型。"""
+        """Convert non-serializable Decimal and date types in the data structure to serializable types."""
         if isinstance(obj, Decimal):
-            return float(obj)  # 或者使用 str(obj) 转换为字符串
+            return float(obj)  # Or use str(obj) to convert to string
         elif isinstance(obj, date):
-            return obj.isoformat()  # 将 date 对象转换为 YYYY-MM-DD 格式的字符串
+            return obj.isoformat()  # Convert date object to string in YYYY-MM-DD format
         elif isinstance(obj, list):
             return [self.convert_to_serializable(item) for item in obj]
         elif isinstance(obj, tuple):
             return tuple(self.convert_to_serializable(item) for item in obj)
         elif isinstance(obj, set):
-            return [self.convert_to_serializable(item) for item in obj]  # 转为列表以序列化
+            return [self.convert_to_serializable(item) for item in obj]  # Convert to list for serialization
         elif isinstance(obj, dict):
             return {key: self.convert_to_serializable(value) for key, value in obj.items()}
         return obj
     
     def restart_postgresql(self):
-        # 使用 subprocess.run 来执行命令并等待其完成
+        # Use subprocess.run to execute the command and wait for it to complete
         # result = subprocess.run(["brew", "services", "restart", "postgresql@14"], capture_output=True, text=True)
         result = subprocess.run(["service", "postgresql", "restart"], capture_output=True, text=True)
-        # 检查命令是否成功执行
+        # Check if the command was successful
         if result.returncode == 0:
             print("PostgreSQL service restarted successfully.")
-            # 等待几秒，确保PostgreSQL服务完全启动
-            time.sleep(3)  # 等待5秒
+            # Wait a few seconds to ensure PostgreSQL service is fully started
+            time.sleep(3)  # Wait for 3 seconds
         else:
             print(f"Failed to restart PostgreSQL service. Error: {result.stderr}")
         
@@ -93,14 +98,8 @@ class Evaluation():
             try:
                 execution_result = cursor.fetchall()  # Fetch all results
             except psycopg2.ProgrammingError as e:
-                # 如果查询没有返回结果，则忽略异常
+                # If the query returns no results, ignore the exception
                 pass            
-            # # Only fetch results if the query is a SELECT statement
-            # if query.strip().lower().startswith("select"):
-            #     execution_result = cursor.fetchall()  # Fetch all results
-            #     conn.commit()  # Commit transaction
-            # else:
-            #     execution_result = None  # No results to fetch for non-SELECT queries 
 
             if return_flag == False:
                 return end_time - start_time
@@ -108,34 +107,34 @@ class Evaluation():
                 return end_time - start_time, execution_result
         
         except psycopg2.OperationalError as e:
-            # 如果超时错误被捕获，回滚事务并返回 -2
+            # If a timeout error is caught, roll back the transaction and return -2
             if "canceling statement due to statement timeout" in str(e):
                 conn.rollback()
                 print(f"Query execution exceeded {timeout} seconds and was terminated.")
                 # self.restart_postgresql()
-                return -2, -2
+                return -2
             else:
-                # 捕获其他数据库错误，回滚事务
+                # Catch other database errors, roll back the transaction
                 conn.rollback()
-                print(f"Error exe cuting query: {e}")
+                print(f"Error executing query: {e}")
                 # self.restart_postgresql()
                 return None
         
         except psycopg2.Error as e:
-            conn.rollback()  # 回滚事务
+            conn.rollback()  # Rollback transaction in case of error
             print(f"Error executing query: {e}")
             if return_flag == False:
-                return -1  # 如果执行失败，返回 -1
+                return -1  # If execution fails, return -1
             else:
                 return None
-            
-        # Exception 是所有异常的基类
+
+        # Exception is the base class for all exceptions
         except Exception as e:
             conn.rollback()  # Rollback transaction in case of error
             raise e
         
         finally:
-            # 确保在任何情况下都取消超时设置（可选）
+            # Ensure statement timeout is canceled in all cases (optional)
             cursor.execute("SET statement_timeout = 0;")
 
     def compare_rewritten(self,original_query,rewritten_query,iteration=1):
@@ -146,13 +145,13 @@ class Evaluation():
         total_rewrite_time = 0.0
         original_result = None
         rewritten_result = None
-        
-        # 执行原始查询并记录时间
+
+        # Execute original query and record time
         for i in range(iteration + 1):
             ORIGINAL_TIME_OUT = False
             if conn is None:
-                return None, None, None, None, None, None  # 无法连接时返回 -1
-            
+                return None, None, None, None, None, None  # Return -1 if unable to connect
+
             if i == 0:
                 print("start init hot database execution")
                 original_time,original_result = self.execute_query(conn, cursor, original_query,timeout, return_flag = True)
@@ -176,8 +175,8 @@ class Evaluation():
 
         if total_original_time == -1:
             print("Original Query Execution Failed")
-            return None, None, None, None, None, None  # 如果原始查询失败，返回 -1
-        
+            return None, None, None, None, None, None  # Return -1 if original query fails
+
         if total_original_time is not None:
             print(f"Original Query Execution Time: {total_original_time:.6f} seconds")
         else:
@@ -185,8 +184,8 @@ class Evaluation():
 
         self.restart_postgresql()
         if conn is None:
-            return None, None, None, None, None, None  # 无法连接时返回 -1
-        # 重新连接数据库
+            return None, None, None, None, None, None  # Return -1 if unable to connect
+        # Reconnect to the database
         conn = self.connect_to_database()
         cursor = conn.cursor()
 
@@ -194,8 +193,8 @@ class Evaluation():
             for i in range(iteration + 1):
                 REWRITTEN_TIME_OUT = False 
                 if conn is None:
-                    return None, None, None, None, None, None  # 无法连接时返回 -1
-                
+                    return None, None, None, None, None, None  # Return -1 if unable to connect
+
                 if i == 0:
                     print("start init hot database execution")
                     rewritten_time,rewritten_result = self.execute_query(conn, cursor, rewritten_query,timeout, return_flag = True)
@@ -213,8 +212,8 @@ class Evaluation():
 
             if total_rewrite_time == -1:
                 print("Rewritten Query Execution Failed")
-                return total_original_time, None, None, None, original_result, None  # 如果重写查询失败，返回 -1
-            
+                return total_original_time, None, None, None, original_result, None  # Return -1 if rewritten query fails
+
             if REWRITTEN_TIME_OUT == False:
                 total_rewrite_time = total_rewrite_time / iteration
             if REWRITTEN_TIME_OUT == True and total_rewrite_time == -1:
@@ -228,11 +227,11 @@ class Evaluation():
 
         except psycopg2.errors.SyntaxError as e:
             print(f"Rewritten query execution failed due to syntax error: {e}")
-            # 设置重写查询的返回值为错误标记值，继续执行下一个查询对
+            # Set the return value of the rewritten query to the error marker value and continue to the next query pair
             return total_original_time, None, None, None, original_result, None
         except Exception as e:
             print(f"Rewritten query execution failed due to unexpected error: {e}")
-            # 设置重写查询的返回值为错误标记值，继续执行下一个查询对
+            # Set the return value of the rewritten query to the error marker value and continue to the next query pair
             return total_original_time, None, None, None, original_result, None
 
         
@@ -252,18 +251,18 @@ class Evaluation():
             
 
     def evaluate(self):
-        # 打开并读取JSON文件
+        # Open and read JSON file
         with open(self.evaluation_queries_path, 'r') as file:
             data = json.load(file)
 
         existing_results = []
 
-        # 检查 result.json 是否存在，存在则加载它
+        # Check if result.json exists, if so, load it
         if os.path.exists(self.result_storage_path):
             with open(self.result_storage_path, 'r') as result_file:
                 try:
                     existing_results = json.load(result_file)
-                    # 确保 existing_results 是一个列表
+                    # Ensure existing_results is a list
                     if isinstance(existing_results, dict):
                         existing_results = [existing_results]
                     elif not isinstance(existing_results, list):
@@ -271,7 +270,7 @@ class Evaluation():
                 except json.JSONDecodeError:
                     existing_results = []
 
-        # 遍历 JSON 数据中的所有 SQL 对
+        # Iterate over all SQL pairs in the JSON data
         for query_pair in data:
             query_id = query_pair.get('id', '')
             original_query = query_pair.get('original_sql', '')
@@ -303,8 +302,8 @@ class Evaluation():
                 existing_results.append(result_data)
 
 
-        existing_results = sorted(existing_results, key=lambda x: int(x.get("id", 0)))  # 按照 id 排序
-        # 将结果写回到 result.json 文件
+        existing_results = sorted(existing_results, key=lambda x: int(x.get("id", 0)))  # Sort by id
+        # Write results back to result.json file
         with open(self.result_storage_path, 'w') as result_file:
             json.dump(existing_results, result_file, indent=4)
 
@@ -335,28 +334,28 @@ class Evaluation():
 
 
 
-            # 计算平均数
+            # Calculate average
         ori_avg = statistics.mean(original_execution_times)
         print(f"The average execution time is: {ori_avg}")
-        # 计算中位数
+        # Calculate median
         ori_median = statistics.median(original_execution_times)
         print(f"The median execution time is: {ori_median}")
-        # 计算75th百分位数
+        # Calculate 75th percentile
         ori_percentile_75 = np.percentile(original_execution_times, 75)
         print(f"The 75th percentile execution time is: {ori_percentile_75}")
-        # 计算95th百分位数
+        # Calculate 95th percentile
         ori_percentile_95 = np.percentile(original_execution_times, 95)
         print(f"The 95th percentile execution time is: {ori_percentile_95}")
 
         re_avg = statistics.mean(rewritten_execution_times)
         print(f"The average execution time is: {re_avg}")
-        # 计算中位数
+        # Calculate median
         re_median = statistics.median(rewritten_execution_times)
         print(f"The median execution time is: {re_median}")
-        # 计算75th百分位数
+        # Calculate 75th percentile
         re_percentile_75 = np.percentile(rewritten_execution_times, 75)
         print(f"The 75th percentile execution time is: {re_percentile_75}")
-        # 计算95th百分位数
+        # Calculate 95th percentile
         re_percentile_95 = np.percentile(rewritten_execution_times, 95)
         print(f"The 95th percentile execution time is: {re_percentile_95}")
         ori_result = {
@@ -389,7 +388,6 @@ def parse_arguments():
     parser.add_argument("-q", "--queries_path", type=str, required=True, help="Path to the queries SQL file (JSON format)")
     parser.add_argument("-s", "--storage_path", type=str, required=True, help="Path to the storage SQL file (JSON format)")
     parser.add_argument("-f", "--filtered_path", type=str, required=True, help="Path to the filtered SQL file (JSON format)")
-    parser.add_argument("-d", "--dbname", type=str, required=True, help="database name")
     parser.add_argument("-t", "--time_out", type=int, required=True, help="timeout")
     return parser.parse_args()     
 
@@ -399,34 +397,29 @@ if __name__ == "__main__":
     storage_path = args.storage_path
     filtered_path = args.filtered_path
     time_out = args.time_out
-    dbname = args.dbname
 
+    
     ensure_file_exists(storage_path)
     ensure_file_exists(filtered_path)
     # test part
-    model = Evaluation(queries_path,storage_path,filtered_path,dbname,time_out)
-    # model.evaluate()
-    # 加载 JSON 数据
+    model = Evaluation(queries_path,storage_path,filtered_path,time_out)
 
     with open(queries_path, 'r') as file:
         json_content = file.read()
     data = json.loads(json_content)
     print("data load sucessfully!")
-    # print(data)
     result = []
-    # 遍历 JSON 中的每个项目
     iteration = 0
     equiv_number = 0
     sucess_run_number = 0
     for i, query_info in enumerate(data, start=0):
         query_id = query_info.get("id","")
-        # query_id = query_info["id"]
-        # 获取 original_query 和 rewritten_query
+        # Get original_query and rewritten_query
         iteration += 1
         print("this is the {}-th iteration".format(iteration))
         original_query = query_info.get("original_query", "No original query found")
         rewritten_query = query_info.get("rewritten_query", "No rewritten query found")
-        # 输出结果
+        # Output results
         print(f"Original Query: {original_query}")
         print(f"Rewritten Query: {rewritten_query}")
         total_original_time,total_rewrite_time,speed_up,times_up,original_result,rewritten_result = model.compare_rewritten(original_query,rewritten_query)
@@ -456,9 +449,8 @@ if __name__ == "__main__":
         result.append(result_data)
 
 
-    # 将结果写回到 result.json 文件
+    # Write results back to result.json file
     with open(storage_path, 'w') as result_file:
-        # json.dump(result, result_file, indent=4)
         json.dump([model.convert_to_serializable(item) for item in result], result_file, indent=4)
         print(f"Experiment results appended to {storage_path}")
         print(f"the number of equivalent query is {equiv_number}")

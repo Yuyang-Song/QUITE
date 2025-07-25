@@ -1,7 +1,5 @@
 """
-####################################################################
-#                       Test Module                               #
-####################################################################
+Test Module                               
 
 Simple unit test for Knowledge Base Tool and DBMS Explain Tool components.
 
@@ -9,7 +7,6 @@ Author: Yuyang Song
 Date: 2025-06-23
 
 For better DBMS tool testing, verify that self.input_sql is a valid SQL query and can correspond to the database specified in the .env file.
-####################################################################
 """
 
 import os
@@ -20,11 +17,16 @@ from pathlib import Path
 sys.path.append('../')
 sys.path.append('./')
 from src.Rewrite_Middleware.middleware import Knowledge_Base_Tool, DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Equivalence_Check_Tool, DBMS
+from src.utils.data_distribution import get_statistics_list, get_available_databases
+from src.utils.get_data_statistics import get_data_statistics
 from dotenv import load_dotenv
 from src.utils.llm_client import GPT
+
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[2]))
 LOAD_PATH = PROJECT_ROOT / "config_file" / ".env"
-load_dotenv(dotenv_path= LOAD_PATH)
+load_dotenv(dotenv_path= LOAD_PATH)   
+
+print(f"Project root: {PROJECT_ROOT}")
 
 class TestRewriteMiddleware(unittest.TestCase):
     """
@@ -35,7 +37,8 @@ class TestRewriteMiddleware(unittest.TestCase):
     
     def setUp(self):
         """Setup test data"""
-        self.input_sql = """
+        self.test_sql = ""
+        self.suggestion_sql = """
         WITH min_supply AS (
             SELECT ps.ps_partkey, MIN(ps.ps_supplycost) AS min_supplycost
             FROM partsupp ps
@@ -71,9 +74,15 @@ class TestRewriteMiddleware(unittest.TestCase):
                 "origin_suggestion": "Replace the correlated subquery that finds the minimum `ps_supplycost` with a more efficient Common Table Expression (CTE)."
             }
         ]
-        
-        # Test SQL for DBMS_EXPLAIN_Tool
-        self.explain_test_sql = "select p_brand, p_type, p_size, count(distinct ps_suppkey) as supplier_cnt from partsupp, part where p_partkey = ps_partkey and p_brand <> 'Brand#43' and p_type not like 'PROMO PLATED%' and p_size in (18, 8, 33, 17, 27, 6, 1, 50) and ps_suppkey not in ( select s_suppkey from supplier where s_comment like '%Customer%Complaints%' ) group by p_brand, p_type, p_size order by supplier_cnt desc, p_brand, p_type, p_size;"
+        # Load test SQL from file
+        test_sql_path = PROJECT_ROOT / "dataset" / "queries" / "test_sql.sql"
+        try:
+            self.test_sql = open(test_sql_path, 'r', encoding='utf-8').read().strip()
+            print(f"Loaded test SQL from: {test_sql_path}")
+        except:
+            # self.test_sql = "select p_brand, p_type, p_size, count(distinct ps_suppkey) as supplier_cnt from partsupp, part where p_partkey = ps_partkey and p_brand <> 'Brand#43' and p_type not like 'PROMO PLATED%' and p_size in (18, 8, 33, 17, 27, 6, 1, 50) and ps_suppkey not in ( select s_suppkey from supplier where s_comment like '%Customer%Complaints%' ) group by p_brand, p_type, p_size order by supplier_cnt desc, p_brand, p_type, p_size;"
+            print(f"Using fallback SQL, {test_sql_path} not found")
+            
         
         # Test SQL Pairs for Euiqvalence_Check_Tool
         # Initialize DBMS instance
@@ -152,6 +161,27 @@ class TestRewriteMiddleware(unittest.TestCase):
 
         print("🧪 All LLM Connection Tests PASSED!")
 
+    def test_dbms_data_distribution(self):
+        """
+        ############################################################
+        #               Test: DBMS Data Distribution                #
+        ############################################################
+        """
+        print("\n" + "="*50)
+        print("🧪 Testing DBMS Data Distribution")
+        print("="*50)
+        
+        # obtain database name and statistics
+        DB_NAME = self.dbms.db_name
+        data_statistics = None
+        if DB_NAME in get_available_databases():
+            print(f"Database {DB_NAME} found, retrieving statistics...")
+            data_statistics = get_statistics_list(DB_NAME)
+        else:
+            print(f"Database {DB_NAME} not found, retrieving statistics from default database...")
+            data_statistics = get_data_statistics()
+        print(f"Current database: {DB_NAME}")
+        print(f"Data statistics: {data_statistics}")
 
     def test_dbms_explain_tool(self):
         """
@@ -164,7 +194,7 @@ class TestRewriteMiddleware(unittest.TestCase):
         print("="*50)
         
         try:
-            result = asyncio.run(DBMS_EXPLAIN_Tool(self.dbms, self.explain_test_sql))
+            result = asyncio.run(DBMS_EXPLAIN_Tool(self.dbms, self.test_sql))
             
             # Basic assertions
             self.assertIsNotNone(result)
@@ -187,7 +217,7 @@ class TestRewriteMiddleware(unittest.TestCase):
         print("="*50)
         
         try:
-            output = asyncio.run(Knowledge_Base_Tool(self.input_sql, self.origin_suggestion_list))
+            output = asyncio.run(Knowledge_Base_Tool(self.suggestion_sql, self.origin_suggestion_list))
             
             # Basic assertions
             self.assertIsNotNone(output)
@@ -210,7 +240,7 @@ class TestRewriteMiddleware(unittest.TestCase):
         
         try:
             # Assuming DBMS has a method to check syntax
-            result = asyncio.run(DBMS_Syntax_Tool(self.dbms, self.input_sql))
+            result = asyncio.run(DBMS_Syntax_Tool(self.dbms, self.test_sql))
             
             # Basic assertions
             self.assertTrue(result, "Syntax check failed")

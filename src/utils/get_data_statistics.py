@@ -1,15 +1,3 @@
-"""
-####################################################################
-#                  Database Statistics Collector                   #
-####################################################################
-
-Collects database table statistics and updates the data distribution file.
-
-Author: Yuyang Song
-Created: 2024-11-12
-Last Modified: 2025-07-23
-####################################################################
-"""
 import sys
 import os
 import json
@@ -21,15 +9,15 @@ sys.path.append('../../')
 sys.path.append('./')
 
 from src.Rewrite_Middleware.middleware import DBMS
-
+from src.utils.data_distribution import DATABASE_STATISTICS
 
 def collect_database_statistics(dbms_instance=None):
     """
-    收集数据库统计信息
+    Collect statistics from the database
     
     Args:
-        dbms_instance: DBMS实例，如果为None则创建新实例
-        
+        dbms_instance: DBMS instance, if None, a new instance will be created
+
     Returns:
         tuple: (db_name, statistics_list)
     """
@@ -77,8 +65,8 @@ def collect_database_statistics(dbms_instance=None):
         
         print("-" * 60)
         print(f"✅ Statistics collection completed for {len(result)} tables")
-        
-        # 显示汇总信息
+
+        # Show summary information
         total_rows = sum(int(count) for _, count in result)
         print(f"📊 Total rows across all tables: {total_rows:,}")
         
@@ -93,44 +81,41 @@ def collect_database_statistics(dbms_instance=None):
 
 def update_data_distribution_file(db_name, statistics):
     """
-    更新 data_distribution.py 文件
-    
+    Update data_distribution.py file
+
     Args:
-        db_name: 数据库名称
-        statistics: 统计数据列表
+        db_name: Database name
+        statistics: List of statistics data
     """
-    try:
-        # Step 1: 导入 DATABASE_STATISTICS
-        from data_distribution import DATABASE_STATISTICS
-        
+    try:        
         print(f"📁 Updating DATABASE_STATISTICS for: {db_name}")
-        
-        # Step 2: 更新字典
+
+        # Step 1: Update the dictionary
         DATABASE_STATISTICS[db_name] = statistics
         print(f"✅ Updated in-memory DATABASE_STATISTICS for '{db_name}'")
-        
-        # Step 3: 获取 data_distribution.py 文件路径
+
+        # Step 2: Get the path to the data_distribution.py file
         distribution_file = Path(__file__).parent / "data_distribution.py"
-        
-        # Step 4: 读取现有文件内容
+
+        # Step 3: Read the existing file content
         with open(distribution_file, 'r', encoding='utf-8') as f:
             content = f.read()
-        
-        # Step 5: 生成新的字典内容
+
+        # Step 4: Generate new dictionary content
         dict_content = "{\n"
         for key, value in DATABASE_STATISTICS.items():
-            # 格式化统计数据
+            # Format statistics data
             formatted_stats = json.dumps(value, ensure_ascii=False)
             dict_content += f'    "{key}": {formatted_stats},\n    \n'
         dict_content = dict_content.rstrip(',\n    \n') + '\n}'
-        
-        # Step 6: 替换 DATABASE_STATISTICS 字典内容
+
+        # Step 5: Replace DATABASE_STATISTICS dictionary content
         pattern = r'DATABASE_STATISTICS = \{[^}]*\}'
         replacement = f'DATABASE_STATISTICS = {dict_content}'
         
         new_content = re.sub(pattern, replacement, content, flags=re.DOTALL)
-        
-        # Step 7: 写回文件
+
+        # Step 6: Write back to the file
         with open(distribution_file, 'w', encoding='utf-8') as f:
             f.write(new_content)
         
@@ -145,32 +130,32 @@ def update_data_distribution_file(db_name, statistics):
 
 def get_data_statistics():
     """
-    主函数：收集数据库统计信息并更新分布文件
-    
+    Main function: Collect database statistics and update distribution file
+
     Returns:
-        str: JSON格式的统计数据
+        str: JSON formatted statistics
     """
-    # 收集统计信息
+    # Collect statistics from the database
     db_name, statistics = collect_database_statistics()
     
     if not statistics:
         print("⚠️  No statistics collected")
         return "[]"
     
-    # 更新分布文件
+    # Update the data_distribution.py file with collected statistics
     success = update_data_distribution_file(db_name, statistics)
     
     if success:
         print("="*60)
         print("🎉 Statistics Collection and Update Complete!")
         print("="*60)
-        print(f"�� Database: {db_name}")
+        print(f"Database: {db_name}")
         print(f"📊 Tables: {len(statistics)}")
         print(f"📄 Updated format:")
         print(f"    \"{db_name}\": {json.dumps(statistics)}")
         print("="*60)
-    
-    # 返回JSON格式
+
+    # Return JSON formatted statistics
     return json.dumps(statistics)
 
 

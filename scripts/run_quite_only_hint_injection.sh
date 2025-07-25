@@ -2,10 +2,19 @@
 
 # QUITE System Run Script - Hint Injection Only
 
+# Load environment variables from .env file
+if [ -f "../config_file/.env" ]; then
+    source "../config_file/.env"
+    echo "✅ Environment variables loaded from .env"
+else
+    echo "❌ Warning: .env file not found"
+fi
+
 # Path variables
-INPUT_QUERIES="/root/syy/QUITE/dataset/queries/tpch_test.json"
-SCHEMA_FILE="/root/syy/QUITE/dataset/schemas/tpch_schemas.sql"
-OUTPUT_DIR="/root/syy/QUITE/output/test"
+
+INPUT_QUERIES="${PROJECT_ROOT}/dataset/queries/tpch_test.json"
+SCHEMA_FILE="${PROJECT_ROOT}/dataset/schemas/tpch_schemas.sql"
+OUTPUT_DIR="${PROJECT_ROOT}/output/test"
 
 # Feature flags - only recommender enabled
 ENABLE_RECOMMENDER="--enable_recommender"

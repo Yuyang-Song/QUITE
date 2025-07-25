@@ -32,17 +32,21 @@ The following instructions have been tested on Ubuntu 22.04 and PostgreSQL v14.1
 
 ### Installation
 
-1. **Clone the repository:**
+<!-- **Clone the repository:**
 ```bash
 git clone https://github.com/your-repo/QUITE.git
 cd QUITE
-```
+``` -->
 
-2. **Install dependencies:**
+**Install dependencies:**
 ```bash
 pip install -r requirements.txt
 ```
 Note: For the Rewrite Middleware dependencies installation, we have simplified and integrated the installation process as much as possible into our workflow. If there still has any error related to this during runtime, you can check the official document to find help. We use [SQLSolver SIGMOD'24](https://github.com/SJTU-IPADS/SQLSolver) as the start point of our hybrid SQL Corrector, [haystack](https://github.com/deepset-ai/haystack) to build our knowledge base.
+
+**Benchmarks:**
+
+We use TPC-H, DSB and Clacite to evaluate our system's performance. You can find the construction methods in the following links: [TPC-H](https://github.com/gregrahn/tpch-kit), [DSB](https://github.com/microsoft/dsb), [Calcite](https://github.com/eidos06/SlabCity/tree/main).
 
 <!-- 3. **Database Setup:**
 ```bash
@@ -77,29 +81,29 @@ psql -d your_database_name -f calcite.sql
 
 #### 1.1 Set up your OpenAI API keys and URL for LLM Agents
 
-Create a `.env` file in the `config_file/` directory. Our default base LLM selection is as follows:
+Find the `.env` file in the `config_file/` directory. Our default base LLM selection is as follows:
 
 ```bash
 # config_file/.env
 # LLM Model API Configuration
-REASONING_MODEL_API_KEY = [your_api_key_here]
-REASONING_MODEL = deepseek-r1
-REASONING_MODEL_URL = [your_model_url_here]
+REASONING_MODEL_API_KEY=[your_api_key_here]
+REASONING_MODEL=deepseek-r1
+REASONING_MODEL_URL=[your_model_url_here]
 
-DECISION_MODEL_API_KEY = [your_api_key_here]
-DECISION_MODEL = claude-3-7-sonnet-20250219
-DECISION_MODEL_URL = [your_model_url_here]
+DECISION_MODEL_API_KEY=[your_api_key_here]
+DECISION_MODEL=claude-3-7-sonnet-20250219
+DECISION_MODEL_URL=[your_model_url_here]
 
-ASSISTANT_MODEL_API_KEY = [your_api_key_here]
-ASSISTANT_MODEL = claude-3-7-sonnet-20250219
-ASSISTANT_MODEL_URL = [your_model_url_here]
+ASSISTANT_MODEL_API_KEY=[your_api_key_here]
+ASSISTANT_MODEL=claude-3-7-sonnet-20250219
+ASSISTANT_MODEL_URL=[your_model_url_here]
 
 # Database Configuration
-DB_HOST=localhost
-DB_PORT=5432
-DB_NAME=your_database_name
-DB_USER=your_username
-DB_PASSWORD=your_password
+DB_HOST=[localhost]
+DB_PORT=[5432]
+DB_NAME=[your_database_name]
+DB_USER=[your_username]
+DB_PASSWORD=[your_password]
 
 # Project Configuration
 PROJECT_ROOT=/path/to/QUITE
@@ -108,8 +112,8 @@ Note: Make sure you have add the **PROJECT_ROOT** path in the `.env` file!
 
 #### 1.2 Test Each Module
 
-Test DBMS connection, LLM platform connection and the Rewrite Middleware Components:
-
+We independently test each component of QUITE to ensure that it would function correctly in the new execution environment. The default database is **TPC-H Benchmark** in our code [test_module.py](test_module.py) and [test_query](dataset/queries/test_sql.sql).
+ If you use your own database benchmarks, exchange the [test_query](dataset/queries/test_sql.sql) to yours and reconfirm the `.env` file.
 ```bash
 # Test database connection and middleware tools
 python test_module.py
@@ -119,112 +123,32 @@ The system will automatically test each unit to make sure the whole rewrite proc
 ============================================================
 🚀 Starting SQL Optimization Tests
 ============================================================
-
-==================================================
-🧪 Testing DBMS Connection
-==================================================
-✅ DBMS Connection Test PASSED!
-.
-==================================================
-🧪 Testing DBMS Explain Tool
-==================================================
-DBMS_EXPLAIN_Tool starts...
 ......
 ```
+| Test Module | Description | Purpose |
+|-------------|-------------|---------|
+| **🔌 DBMS Connection** | Tests PostgreSQL database connectivity | Validates database connection and basic operations |
+| **🤖 LLM Connection** | Tests all three LLM agents connectivity | Validates Reasoning, Decision, and Assistant agent connections |
+| **📊 Data Distribution** | Tests database statistics retrieval | Ensures proper database profiling and statistics collection |
+| **🔍 DBMS Explain Tool** | Tests SQL execution plan generation | Validates query plan analysis capabilities |
+| **📚 Knowledge Base Tool** | Tests knowledge retrieval system | Validates optimization knowledge base functionality |
+| **✅ DBMS Syntax Tool** | Tests SQL syntax validation | Ensures SQL query syntax correctness |
+| **🔄 Equivalence Check Tool** | Tests SQL equivalence verification | Validates rewritten query semantic equivalence |
+
+There may be error messages such as database permission issues, LLM connection problems, or path errors. Please adapt the settings according to the actual operating environment.
 ### Step 2: Prepare Input Queries and Schemas
 
-#### 2.1 Use Provided Query Sets
+#### 2.1 Use Provided Query Sets and Schemas
 
-QUITE includes three benchmark query sets:
+QUITE includes three benchmark query sets and schemas in `dataset/queries/` and `dataset/schemas/`. If you want to use your own query sets and schemas, you can follow the structure of ours.
 
-```bash
-# TPC-H queries
-dataset/queries/tpch_queries.json
-# TPC-H schemas
-dataset/schemas/tpch_schemas.sql
+#### 2.2 Prepare Structured Knowledge Base
 
-# DSB queries  
-dataset/queries/dsb_queries.json
-# DSB schemas
-dataset/queries/dsb_schemas.sql
+You can find our Structured Knowledge Base in [`knowledge_base.json`](src/Rewrite_Middleware/Structured_Knowledge_Base/storage/knowledge_base.json). If you want to construct your own knowledge base, you can refer to our knowledge preparation code in [`data_clean.py`](src/Rewrite_Middleware/Structured_Knowledge_Base/preparation/data_clean.py).
 
-# Calcite queries
-dataset/queries/calcite_queries.json
-# Calcite schemas
-dataset/schemascalcite_schemas.sql
-```
+Here is a detailed guideline: [guideline](src/Rewrite_Middleware/Structured_Knowledge_Base/preparation/guideline.md)
 
-#### 2.2 Prepare Custom Queries
 
-Create your own query file in JSON format:
-
-```json
-[
-    {
-        "id": 1,
-        "query": "SELECT * FROM customer WHERE c_acctbal > 1000",
-        "description": "Simple customer filter query"
-    },
-    {
-        "id": 2, 
-        "query": "SELECT c_name, SUM(o_totalprice) FROM customer JOIN orders ON c_custkey = o_custkey GROUP BY c_name",
-        "description": "Customer order aggregation"
-    }
-]
-```
-Create your own benchmark schemas in sql format:
-```
-CREATE TABLE region (
-    r_regionkey integer  NOT NULL,
-    r_name      char(25) NOT NULL,
-    r_comment   varchar(152),
-    PRIMARY KEY (r_regionkey)
-);
-
-CREATE TABLE nation (
-    n_nationkey integer  NOT NULL,
-    n_name      char(25) NOT NULL,
-    n_regionkey integer  NOT NULL,
-    n_comment   varchar(152),
-    PRIMARY KEY (n_nationkey),
-    FOREIGN KEY (n_regionkey) REFERENCES region (r_regionkey) ON DELETE CASCADE
-);
-```
-
-#### 2.3 Prepare Domain Knowledge Base
-
-You can find our constructed Knowledge Base in [`knowledge_base.json`](src/Rewrite_Middleware/Structured_Knowledge_Base/storage/knowledge_base.json). If you want to construct your own knowledge base, you can refer to our knowledge preparation code in [`data_clean.py`](src/Rewrite_Middleware/Structured_Knowledge_Base/preparation/data_clean.py).
-
-Here is a detailed guideline:
-
-**Option 1: Use Our Pre-built Knowledge Base**
-```bash
-# The knowledge base is ready to use at:
-src/Rewrite_Middleware/Structured_Knowledge_Base/storage/knowledge_base.json
-```
-
-**Option 2: Build Your Own Knowledge Base**
-
-1. **Prepare your data sources:**
-```bash
-# Navigate to preparation directory
-cd src/Rewrite_Middleware/Structured_Knowledge_Base/preparation/
-```
-
-2. **Organize your data files:**
-   - Place StackOverflow markdown files in `data/stackoverflow/`
-   - Place official documentation JSON files in `data/` (e.g., `calcite.json`)
-
-3. **Configure and run the data processing pipeline:**
-```bash
-# Edit the configuration paths in data_clean.py:
-# - input_file_dir: Path to your StackOverflow data
-# - save_file_dir: Output path for knowledge base JSON
-# - save_document_file_dir: Output path for document store
-
-# Run the data cleaning pipeline
-python data_clean.py
-```
 
 ### Step 3: Execute QUITE to Rewrite SQL Queries
 
@@ -234,26 +158,26 @@ We provide three convenient scripts for different scenarios:
 
 **Option 1: Complete Pipeline (Rewriter + Recommender)**
 ```bash
-# Navigate to scripts directory
-cd scripts
+# Navigate to QUITE directory
+cd QUITE
 
 # Run the complete pipeline
-chmod +x run_quite.sh
-./run_quite.sh
+chmod +x ./scripts/run_quite.sh
+bash ./scripts/run_quite.sh
 ```
 
 **Option 2: Query Rewriting Only**
 ```bash
 # Run only the query rewriter
-chmod +x run_quite_only_query_rewrite.sh
-./run_quite_only_query_rewrite.sh
+chmod +x ./scripts/run_quite_only_query_rewrite.sh
+bash ./scripts/run_quite_only_query_rewrite.sh
 ```
 
 **Option 3: Hint Recommendation Only**
 ```bash
 # Run only the hint recommender (requires existing rewritten queries)
-chmod +x run_quite_only_hint_injection.sh
-./run_quite_only_hint_injection.sh
+chmod +x ./scripts/run_quite_only_hint_injection.sh
+bash ./scripts/run_quite_only_hint_injection.sh
 ```
 
 #### 3.2 Direct Python Execution
