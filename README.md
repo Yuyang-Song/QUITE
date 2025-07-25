@@ -154,28 +154,33 @@ Here is a detailed guideline: [guideline](src/Rewrite_Middleware/Structured_Know
 
 #### 3.1 Using Automation Scripts (Recommended)
 
-We provide three convenient scripts for different scenarios:
+We provide three convenient scripts for different scenarios. 
+
+**Note:** You should enter the following `.sh` files to check the **Input Path**, **Output Path** and the **Schema Path**.
 
 **Option 1: Complete Pipeline (Rewriter + Recommender)**
 ```bash
-# Navigate to QUITE directory
-cd QUITE
+# Check the .sh file configureations
 
-# Run the complete pipeline
+# Run the complete pipeline and make sure you are under the QUITE root path
 chmod +x ./scripts/run_quite.sh
 bash ./scripts/run_quite.sh
 ```
 
 **Option 2: Query Rewriting Only**
 ```bash
-# Run only the query rewriter
+# Check the .sh file configureations
+
+# Run only the query rewriter and make sure you are under the QUITE root path
 chmod +x ./scripts/run_quite_only_query_rewrite.sh
 bash ./scripts/run_quite_only_query_rewrite.sh
 ```
 
 **Option 3: Hint Recommendation Only**
 ```bash
-# Run only the hint recommender (requires existing rewritten queries)
+# Check the .sh file configureations
+
+# Run only the hint recommender (requires existing rewritten queries) and make sure you are under the QUITE root path
 chmod +x ./scripts/run_quite_only_hint_injection.sh
 bash ./scripts/run_quite_only_hint_injection.sh
 ```
@@ -311,16 +316,16 @@ output/
 
 ### Step 5: Performance Evaluation
 
+**Note:** You should enter the following `./scripts/evaluation.sh` to check:
+- `Queries Path`: the rewritten queries path from QUITE system.
+- `Storage Path`: the file with SQL output after evaluation.
+- `Filtered Path`: processed experimental data file from storage path.
 #### 5.1 Using Built-in Evaluation Tools
 
 ```bash
 # Evaluate rewrite effectiveness using the provided script
 chmod +x evaluation.sh
 ./evaluation.sh
-
-# Or run evaluation directly on specific output files
-python experiments_evaluation/evaluation.py --input output/rewritten_queries.json
-python experiments_evaluation/evaluation.py --input output/recommended_hints.json
 ```
 
 
