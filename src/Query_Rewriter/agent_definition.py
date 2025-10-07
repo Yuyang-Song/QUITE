@@ -304,7 +304,19 @@ class DecisionAgent(Agent):
         return response
 
     
-    async def evaluate(self, ori_sql: str, enhanced_sql: str, report: str) -> dict:
+    async def evaluate(self, ori_sql: str, enhanced_sql: str, report: str, worker_equivalence_flags: List[bool] = None) -> dict:
+        # Check if all workers failed equivalence check
+        equivalence_failure_info = ""
+        if worker_equivalence_flags is not None and all(not flag for flag in worker_equivalence_flags):
+            equivalence_failure_info = """
+        
+        **IMPORTANT CONTEXT**: 
+        All parallel workers failed equivalence checks and had to fall back to the original SQL. 
+        This means the rewritten queries were not equivalent to the original, not that the original query was already optimal.
+        The system attempted SQL optimization but the rewritten versions failed equivalence validation.
+        Consider this as a failed optimization attempt rather than an indication that no optimization is needed.
+        """
+
         prompt = textwrap.dedent(f"""
         You are responsible for evaluating whether SQL optimization is up to standard.Please decide whether to terminate the optimization process based on the information below:
         Do you want to terminate the process?
@@ -319,7 +331,8 @@ class DecisionAgent(Agent):
 
         [False]:
             enhanced_sql execution time ≥ ori_sql execution time, or enhanced_sql fails to execute without errors.
-
+            {equivalence_failure_info}
+            
         Return your answer strictly in this JSON format:
         {{
             "terminate": True/False,
@@ -368,13 +381,13 @@ class DecisionAgent(Agent):
         """
         Extract content between </sql_candidate> and </sql_candidate> tags.
         """
-        # 首先尝试匹配带```sql的格式
+        # First, try to match the format with ```sql
         pattern1 = r'</sql_candidate>\s*```sql\s*(.*?)\s*```\s*</sql_candidate>'
         match1 = re.search(pattern1, text, re.DOTALL)
         if match1:
             return match1.group(1).strip()
-        
-        # 尝试匹配不带```的格式
+
+        # Try to match the format without ```
         pattern2 = r'</sql_candidate>\s*(.*?)\s*</sql_candidate>'
         match2 = re.search(pattern2, text, re.DOTALL)
         if match2:
@@ -390,13 +403,13 @@ class DecisionAgent(Agent):
         """
         Extract content between </enhanced_sql> and </enhanced_sql> tags.
         """
-        # 首先尝试匹配带```sql的格式
+        # First, try to match the format with ```sql
         pattern1 = r'</enhanced_sql>\s*```sql\s*(.*?)\s*```\s*</enhanced_sql>'
         match1 = re.search(pattern1, text, re.DOTALL)
         if match1:
             return match1.group(1).strip()
-        
-        # 尝试匹配不带```的格式
+
+        # Try to match the format without ```
         pattern2 = r'</enhanced_sql>\s*(.*?)\s*</enhanced_sql>'
         match2 = re.search(pattern2, text, re.DOTALL)
         if match2:
@@ -558,7 +571,7 @@ class AssistantAgent(Agent):
     async def  generate_report(self, ori_explain_result: list, re_explain_result: list, imp_explain_result: list) -> str:
         prompt = textwrap.dedent(f"""
         <Mission>
-        You are a professional database administrator. Your mission is to generate a detailed report based on the original EXPLAIN analysis, the rewritten EXPLAIN analysis, and the enhanced EXPLAIN analysis.
+        You are a professional database administrator. Your mission is to generate a detailed report based on the original EXPLAIN analysis, the rewritten EXPLAIN analysis, 和 the enhanced EXPLAIN analysis.
         You should consider and compare them with a report that contains these parts:
         
 
