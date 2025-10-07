@@ -225,7 +225,8 @@ class QueryRewriter:
             return {
                 "worker_id": worker_id,
                 "status": "error",
-                "error": str(e)
+                "error": str(e),
+                "equivalence_passed": False
             }
         
     async def state_reasoning_parallel(self):
@@ -271,7 +272,7 @@ class QueryRewriter:
             self.current_state = "VERIFICATION"
 
     async def parallel_verification_worker(self, reasoning_result: dict):
-        """并行verification worker"""
+        """verification worker"""
         worker_id = reasoning_result["worker_id"]
         enhanced_sql = reasoning_result["enhanced_sql"]
         produced_sql = reasoning_result["produced_sql"]
@@ -289,15 +290,18 @@ class QueryRewriter:
             if not syntax_check["flag"]:
                 print(f"## Worker {worker_id}: grammar mistake: {syntax_check['error']}, try to correct it ##")
                 CHECK_FLAG = False
+                current_error = syntax_check["error"]  # Record the current error to be corrected
+                
                 while CHECK_FLAG == False and MAX_CORRECT_TIMES < 3:
                     if self._stop_event.is_set():
                         print(f"Worker {worker_id}: interrupted")
                         return None
                         
                     print(f"Worker {worker_id}: ################ Start correct the error ################")
+                    print(f"Worker {worker_id}: Current error to fix: {current_error}")
                     async with self.llm_semaphore:
                         checked_sql = await self.assistant_agent._correct_sql(
-                            self.initial_sql, enhanced_sql, syntax_check["error"]
+                            self.initial_sql, enhanced_sql, current_error  # Always modify the initial version, but use the current error
                         )
                     async with self.db_semaphore:
                         check_result = await DBMS_Syntax_Tool(self.dbms, checked_sql)
@@ -308,12 +312,17 @@ class QueryRewriter:
                         MAX_CORRECT_FLAG = True
                         print(f"-- Worker {worker_id}: ✓ THE GRAMMAR CHECK HAS BEEN PASSED.--")
                         enhanced_sql = checked_sql
+                    else:
+                        # Update the error information to the current attempted error for reference in the next correction
+                        current_error = check_result["error"]
+                        print(f"-- Worker {worker_id}: X Grammar check failed again. New error: {current_error}--")
                 
                 if MAX_CORRECT_FLAG == False:
                     print(f"-- Worker {worker_id}: X The grammar check failed. Please go back and review the reasoning.--")
                     return {
                         "worker_id": worker_id,
-                        "status": "syntax_failed"
+                        "status": "syntax_failed",
+                        "equivalence_passed": False
                     }
             else:
                 print(f"-- Worker {worker_id}: ✓ THE GRAMMAR CHECK HAS BEEN PASSED.--")
@@ -371,7 +380,8 @@ class QueryRewriter:
                 "status": "success",
                 "produced_sql": produced_sql,
                 "enhanced_sql": enhanced_sql,
-                "optimization_advice": optimization_advice
+                "optimization_advice": optimization_advice,
+                "equivalence_passed": MAX_EQUIV_FLAG
             }
             
         except Exception as e:
@@ -379,7 +389,8 @@ class QueryRewriter:
             return {
                 "worker_id": worker_id,
                 "status": "error",
-                "error": str(e)
+                "error": str(e),
+                "equivalence_passed": False
             }
     
 
@@ -510,11 +521,18 @@ class QueryRewriter:
         print(f"## Report generation completed ##")
 
         # Step 2: Make a decision
+        # Collect equivalence flags from all verification results
+        worker_equivalence_flags = []
+        for result in self.parallel_verification_results:
+            equivalence_passed = result.get("equivalence_passed", True)  # Default to True for backward compatibility
+            worker_equivalence_flags.append(equivalence_passed)
+        
         async with self.llm_semaphore:
             decision = await self.decision_agent.evaluate(
                 self.initial_sql,
                 self.enhanced_sql,
-                self.report
+                self.report,
+                worker_equivalence_flags
             )
         
         if self.iteration < self.MAX_ITERATION_LOOP:
