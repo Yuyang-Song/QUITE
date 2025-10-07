@@ -226,9 +226,13 @@ async def Knowledge_Base_Tool(input_sql: str, origin_suggestion_list: str) -> st
             try:
                 suggestion = future.result()
                 formatted_suggestion = rag.format_suggestion(suggestion)
+                
+                # Handle both 'origin_suggestion' and 'produced_suggestion' keys for compatibility
+                origin_suggestion = bn_item.get("origin_suggestion") or bn_item.get("produced_suggestion", "")
+                
                 results.append({
                     "group": bn_item["group"],
-                    "origin_suggestion": bn_item["origin_suggestion"],
+                    "origin_suggestion": origin_suggestion,
                     "retrieval_suggestion": formatted_suggestion
                 })
             except Exception as exc:
