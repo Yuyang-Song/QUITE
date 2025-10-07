@@ -13,12 +13,13 @@ from pathlib import Path
 import pickle
 import time
 import textwrap
+import logging
 from typing import List, Dict
 from dotenv import load_dotenv
 
 PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[3]))
 LOAD_PATH = PROJECT_ROOT / "config_file" / ".env"
-load_dotenv(dotenv_path= LOAD_PATH)
+load_dotenv(dotenv_path=LOAD_PATH)
 
 class Structured_Knowledge_Base:
     def __init__(self, folder_path, json_file_path, document_store_path=None):
@@ -64,21 +65,41 @@ class Structured_Knowledge_Base:
         try:
             # Create metadata containing document content hash
             json_hash = self._compute_json_file_hash()
+            
+            # Optimize: Get documents once and use list comprehension
+            documents = self.document_store.filter_documents()
+            document_count = len(documents)
+            
+            # # For large document sets, consider using a more efficient approach
+            # if document_count > 1000:
+            #     print(f"Large document set detected ({document_count} docs), optimizing cache process...")
+            
+            # Use list comprehension for better performance
+            documents_data = [
+                {
+                    "id": doc.id,
+                    "content": doc.content,
+                    "meta": getattr(doc, 'meta', {})
+                }
+                for doc in documents
+            ]
+            
             cache_data = {
-                "document_store": self.document_store,
+                "documents_data": documents_data,
                 "metadata": {
                     "json_hash": json_hash,
                     "created_at": datetime.now().isoformat(),
-                    "document_count": len(self.document_store.filter_documents())
+                    "document_count": document_count
                 }
             }
 
-            # Save to file
+            # Save to file with optimization for large files
+            print(f"Saving {document_count} documents to cache...")
             with open(self.document_store_path, 'wb') as f:
-                pickle.dump(cache_data, f)
+                pickle.dump(cache_data, f, protocol=pickle.HIGHEST_PROTOCOL)
                 
             print(f"Saved document store to {self.document_store_path}")
-            print(f"Document count: {len(self.document_store.filter_documents())}")
+            print(f"Document count: {document_count}")
             return True
         except Exception as e:
             print(f"Error saving document store: {e}")
@@ -95,17 +116,51 @@ class Structured_Knowledge_Base:
             with open(self.document_store_path, 'rb') as f:
                 cache_data = pickle.load(f)
             
-            document_store = cache_data["document_store"]
-            metadata = cache_data["metadata"]
+            # Check if it's the old format (with document_store) or new format (with documents_data)
+            if "document_store" in cache_data:
+                # Old format - try to use it but it might be empty
+                document_store = cache_data["document_store"]
+                metadata = cache_data["metadata"]
+                
+                # Check if the old document store actually has documents
+                if len(document_store.filter_documents()) == 0:
+                    print("Cached document store is empty, rebuilding...")
+                    return False
+                    
+                self.document_store = document_store
+            elif "documents_data" in cache_data:
+                # New format - rebuild document store from documents data
+                documents_data = cache_data["documents_data"]
+                metadata = cache_data["metadata"]
+                
+                # Verify if JSON file hash matches
+                current_json_hash = self._compute_json_file_hash()
+                if current_json_hash != metadata["json_hash"]:
+                    print("JSON file has changed since document store was cached. Rebuilding store.")
+                    return False
 
-            # Verify if JSON file hash matches
-            current_json_hash = self._compute_json_file_hash()
-            if current_json_hash != metadata["json_hash"]:
-                print("JSON file has changed since document store was cached. Rebuilding store.")
+                # Rebuild document store from cached documents
+                self.document_store = InMemoryDocumentStore()
+                document_count = len(documents_data)
+                
+                # Optimize: Use list comprehension for better performance
+                if document_count > 1000:
+                    print(f"Loading large document set ({document_count} docs)...")
+                
+                documents = [
+                    Document(
+                        id=doc_data["id"], 
+                        content=doc_data["content"],
+                        meta=doc_data.get("meta", {})
+                    )
+                    for doc_data in documents_data
+                ]
+                
+                # Write all documents at once
+                self.document_store.write_documents(documents)
+            else:
+                print("Invalid cache format")
                 return False
-
-            # Set document store
-            self.document_store = document_store
             
             print(f"Loaded document store from cache with {metadata['document_count']} documents.")
             print(f"Cache created at: {metadata['created_at']}")
@@ -259,8 +314,11 @@ class Structured_Knowledge_Base:
 
     def retrieval(self,input_sql, suggestion_tuple):
         # Establish RAG pipeline
+        # Handle both 'origin_suggestion' and 'produced_suggestion' keys for compatibility
+        suggestion_text = suggestion_tuple.get("origin_suggestion") or suggestion_tuple.get("produced_suggestion", "")
+        
         question = textwrap.dedent(f"""
-        find the potential rewrite strageties for the sql query: {input_sql} and its suggestions are: {suggestion_tuple["origin_suggestion"]}.
+        find the potential rewrite strageties for the sql query: {input_sql} and its suggestions are: {suggestion_text}.
         Please notice that the suggestion group reffered to the rewritten strataegie classification: {suggestion_tuple["group"]}.
         """)
 
@@ -273,18 +331,18 @@ class Structured_Knowledge_Base:
         Note that you should summarize and return the most relevant and efficient stratages no more than two in the answer. Make your explain clear and simple.
 
                    
-        # Documents:
-        # {% for doc in documents %}
-        #     {{ doc.content }}
-        # {% endfor %}
-        # Question: {{question}}
+        Documents:
+        {% for doc in documents %}
+            {{ doc.content }}
+        {% endfor %}
+        Question: {{question}}
 
         Answer:
         You must return the answer in the following json format:
-        # {
-        #         "suggestion": //   
-        # },
-        #     ... //If more suggestions are needed, add more objects in the json array.          
+        {
+                "suggestion": //   
+        },
+            ... //If more suggestions are needed, add more objects in the json array.          
         """)
 
         retriever = InMemoryBM25Retriever(document_store=self.document_store)
@@ -299,10 +357,42 @@ class Structured_Knowledge_Base:
         rag_pipeline.connect("retriever", "prompt_builder.documents")
         rag_pipeline.connect("prompt_builder", "llm")
 
+        # First get retriever results separately for logging
+        retriever_results = retriever.run(query=question)
+        retrieved_docs = retriever_results.get("documents", [])
+        
+        # Write retrieved document IDs to log file
+        try:
+            log_file = PROJECT_ROOT / "output" / "knowledge_retrieval.log"
+            log_file.parent.mkdir(exist_ok=True)
+            
+            with open(log_file, 'a', encoding='utf-8') as f:
+                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                f.write(f"{timestamp} - Knowledge retrieval executed\n")
+                f.write(f"{timestamp} - Query: {question}\n")
+                
+                doc_ids = [doc.id for doc in retrieved_docs if hasattr(doc, 'id') and doc.id]
+                if doc_ids:
+                    f.write(f"{timestamp} - Retrieved document IDs: {doc_ids}\n")
+                else:
+                    f.write(f"{timestamp} - No document IDs found, doc count: {len(retrieved_docs)}\n")
+                    f.write(f"{timestamp} - Retriever results keys: {list(retriever_results.keys())}\n")
+                    if retrieved_docs:
+                        f.write(f"{timestamp} - First doc sample: {str(retrieved_docs[0])[:100]}...\n")
+                    
+        except Exception as e:
+            print(f"Logging error: {e}")
+            log_file = PROJECT_ROOT / "output" / "knowledge_retrieval.log"
+            log_file.parent.mkdir(exist_ok=True)
+            with open(log_file, 'a', encoding='utf-8') as f:
+                f.write(f"{timestamp} - Logging error: {str(e)}\n")
+
+        # Run the full pipeline
         results = rag_pipeline.run(
             {
                 "retriever": {"query": question},
                 "prompt_builder": {"question": question},
             }
         )
+        
         return results["llm"]["replies"]
