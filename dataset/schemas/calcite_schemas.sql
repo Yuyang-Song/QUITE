@@ -1,50 +1,67 @@
-CREATE TABLE `account`
-(
-    `acctno`  int         not null,
-    `type`    varchar(20) not null,
-    `balance` int         not null
-);
-CREATE TABLE `bonus`
-(
-    `ename` varchar(20) not null,
-    `job`   varchar(10) not null,
-    `sal`   int         not null,
-    `comm`  int         not null
+CREATE TABLE bonus (
+    ename VARCHAR NOT NULL,
+    job VARCHAR NOT NULL,
+    sal INTEGER NOT NULL,
+    comm INTEGER NOT NULL
 );
 
-CREATE TABLE `dept`
-(
-    `deptno` int primary key not null,
-    `name`   varchar(10)     not null
+CREATE TABLE dept (
+    deptno INTEGER NOT NULL,
+    name VARCHAR NOT NULL
 );
 
-CREATE TABLE `emp`
-(
-    `empno`    int primary key not null,
-    `ename`    varchar(20)     not null,22
-    `job`      varchar(10)     not null,
-    `mgr`      int             null,
-    `hiredate` int             not null,
-    `sal`      int             not null,
-    `comm`     int             not null,
-    `deptno`   int not null references dept (deptno),
-    `slacker`  tinyint
+CREATE TABLE emp (
+    empno INTEGER NOT NULL,
+    deptno INTEGER NOT NULL,
+    ename VARCHAR NOT NULL,
+    job VARCHAR NOT NULL,
+    mgr INTEGER,
+    hiredate DATE NOT NULL,
+    sal INTEGER NOT NULL,
+    comm INTEGER NOT NULL,
+    slacker BOOLEAN NOT NULL
 );
 
-CREATE TABLE `t`
-(
-    `K0`    varchar(20) not null,
-    `C1`    varchar(20),
-    `F1_A0` int         not null,
-    `F2_A0` tinyint     not null,
-    `F0_C0` int         not null,
-    `F1_C0` int,
-    `F0_C1` int         not null,
-    `F1_C2` int         not null,
-    `F2_C3` int         not null
+CREATE TABLE emp_b (
+    empno INTEGER NOT NULL,
+    deptno INTEGER NOT NULL,
+    ename VARCHAR NOT NULL,
+    job VARCHAR NOT NULL,
+    mgr INTEGER,
+    hiredate DATE NOT NULL,
+    sal INTEGER NOT NULL,
+    comm INTEGER NOT NULL,
+    slacker BOOLEAN NOT NULL,
+    birthdate DATE NOT NULL
 );
 
-CREATE TABLE ANON
-(
-    c INT
+CREATE TABLE empnullables (
+    empno INTEGER NOT NULL,
+    deptno INTEGER,
+    ename VARCHAR,
+    job VARCHAR,
+    mgr INTEGER,
+    hiredate DATE,
+    sal INTEGER,
+    comm INTEGER,
+    slacker BOOLEAN
 );
+
+CREATE TABLE empnullables_20 (
+    empno INTEGER NOT NULL,
+    deptno INTEGER,
+    ename VARCHAR,
+    job VARCHAR,
+    mgr INTEGER,
+    hiredate DATE,
+    sal INTEGER,
+    comm INTEGER,
+    slacker BOOLEAN
+);
+
+
+ALTER TABLE dept ADD CONSTRAINT dept_pkey PRIMARY KEY (deptno);
+ALTER TABLE emp ADD CONSTRAINT emp_pkey PRIMARY KEY (empno);
+ALTER TABLE emp_b ADD CONSTRAINT emp_b_pkey PRIMARY KEY (empno);
+ALTER TABLE empnullables ADD CONSTRAINT empnullables_pkey PRIMARY KEY (empno);
+ALTER TABLE empnullables_20 ADD CONSTRAINT empnullables_20_pkey PRIMARY KEY (empno);
