@@ -325,7 +325,7 @@ output/
 ```bash
 # Evaluate the rewrite effectiveness using the provided script
 chmod +x evaluation.sh
-./evaluation.sh
+bash ./scripts/evaluation.sh
 ```
 
 
