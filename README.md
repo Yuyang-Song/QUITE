@@ -334,7 +334,7 @@ bash ./scripts/evaluation.sh
 We compare QUITE with state-of-the-art methods:
 - **[LearnedRewrite SIGMOD'22](https://www.vldb.org/pvldb/vol15/p46-li.pdf)**: A machine learning-based query rewrite system leverages MCTS to search the optimized set of rewrite rules in [Apache Calcite](https://github.com/apache/calcite).
 - **[LLM-R² VLDB'24](https://www.vldb.org/pvldb/vol18/p53-yuan.pdf)**: An LLM-based query rewrite system that prepares high-quality rewrite demonstrations for LLM to select the optimized set of rewrite rules in [Apache Calcite](https://github.com/apache/calcite).
-- **[R-Bot ArXiv'25](https://arxiv.org/pdf/2412.01661)**: An LLM-based query rewrite system
+- **[R-Bot VLDB'25](https://arxiv.org/pdf/2412.01661)**: An LLM-based query rewrite system
 - **LLM Agent (SOTA Models)**: Pure agent approach compared to our system's agent template in [`src/utils/LLM_Agent`](src/utils/LLM_Agent).
 
 
