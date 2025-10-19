@@ -323,7 +323,7 @@ output/
 #### 5.1 Using Built-in Evaluation Tools
 
 ```bash
-# Evaluate the rewrite effectiveness using the provided script
+# Evaluate the rewrite effectiveness using the provided script in QUITE root path
 chmod +x evaluation.sh
 bash ./scripts/evaluation.sh
 ```
