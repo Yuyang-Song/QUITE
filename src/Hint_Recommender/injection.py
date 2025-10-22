@@ -383,7 +383,7 @@ class Hint_Recommender:
                 print(f"Warning: No SQL found for query {query_id}")
                 continue
             
-            result = self.process_single_query(input_sql, original_query , query_id)
+            result = self.process_single_query(original_query, input_sql, query_id)
             
             print("********************************")
             print(json.dumps(result, indent=4))
