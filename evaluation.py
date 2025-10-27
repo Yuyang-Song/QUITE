@@ -431,13 +431,13 @@ if __name__ == "__main__":
     iteration = 0
     equiv_number = 0
     sucess_run_number = 0
-    for i, query_info 在 enumerate(data, start=0):
-        query_id = query_info.get("id"，"")
+    for i, query_info in enumerate(data, start=0):
+        query_id = query_info.get("id", "")
         iteration += 1
-        print("this is the {}-th iteration"。format(iteration))
+        print("this is the {}-th iteration".format(iteration))
         print(f"the query id is {query_id}")
-        original_query = query_info.get("original_query"， "No original query found")
-        rewritten_query = query_info.get("rewritten_query"， "No rewritten query found")
+        original_query = query_info.get("original_query", "No original query found")
+        rewritten_query = query_info.get("rewritten_query", "No rewritten query found")
         print(f"Original Query: {original_query}")
         print(f"Rewritten Query: {rewritten_query}")
         total_original_time,total_rewrite_time,speed_up,times_up,original_result,rewritten_result = model.compare_rewritten(original_query,rewritten_query)
