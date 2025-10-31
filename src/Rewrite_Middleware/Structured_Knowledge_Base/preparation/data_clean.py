@@ -161,15 +161,15 @@ class cleaner():
         Let's think step by step:
         
         <steps>
-        1. determine whether this document is useful for query rewrite accrording to the <doc>.
-        2. if useful, divide the document into different groups based on the content.The groups are as follows:
-            - [Predicate_Pushdown_and_Sinmplification]: The document contains the information about Predicate Pushdown and Sinmplification.
-            - [Constant_Folding]: The document contains the information about Constant Folding.
-            - [Query_Merging_and_Flattening]: The document contains the information about Query merging and Flattening.
-            - [Join_Optimization]: The document contains the information about Join optimization.
-            - [Subquery_Optimization]: The document contains the information about Subquery optimization.
-            if not useful, fill null instead.
-        3. return the answer strickly according to the <json format>.
+        1. Determine whether this document is useful for query rewrite according to the <doc>.
+        2. If useful, categorize the document into one of the following groups based on its primary optimization focus:
+            - [Predicate]: Filter pushdown, predicate simplification, WHERE clause optimization, or boolean expression rewriting.
+            - [CTE]: Common Table Expression optimizations including materialization, inlining, or WITH clause transformations.
+            - [Constant]: Constant folding, static expression evaluation, redundant CAST removal, or compile-time computation.
+            - [Join]: Join reordering, join method selection, join elimination, or subquery-to-join conversions.
+            - [Others]: Other optimizations like subquery unnesting, view merging, query flattening, or aggregation pushdown.
+            If the document doesn't fit any category or is not useful, fill null instead.
+        3. Return the answer strictly according to the <json format>.
         
         <doc>
         {json.dumps(data, indent=2, ensure_ascii=False)}
@@ -198,11 +198,11 @@ class cleaner():
             
         Note:
             The prompt defines 5 main categories for SQL optimization:
-            - Predicate_Pushdown_and_Simplification
-            - Constant_Folding  
-            - Query_Merging_and_Flattening
-            - Join_Optimization
-            - Subquery_Optimization
+            - Predicate
+            - CTE
+            - Constant  
+            - Join
+            - Others
         """
         prompt = textwrap.dedent(f"""
         <mission>
@@ -212,15 +212,15 @@ class cleaner():
         Let's think step by step:
         
         <steps>
-        1. determine whether this document is useful for query rewrite accrording to the <doc>.
-        2. if useful, divide the document into different groups based on the content.The groups are as follows:
-            - [Predicate_Pushdown_and_Sinmplification]: The document contains the information about Predicate Pushdown and Sinmplification.
-            - [Constant_Folding]: The document contains the information about Constant Folding.
-            - [Query_Merging_and_Flattening]: The document contains the information about Query merging and Flattening.
-            - [Join_Optimization]: The document contains the information about Join optimization.
-            - [Subquery_Optimization]: The document contains the information about Subquery optimization.
-            if not useful, fill null instead.
-        3. return the answer strickly according to the <json format>.
+        1. Determine whether this document is useful for query rewrite according to the <doc>.
+        2. If useful, categorize the document into one of the following groups based on its primary optimization focus:
+            - [Predicate]: Filter pushdown, predicate simplification, WHERE clause optimization, or boolean expression rewriting.
+            - [CTE]: Common Table Expression optimizations including materialization, inlining, or WITH clause transformations.
+            - [Constant]: Constant folding, static expression evaluation, redundant CAST removal, or compile-time computation.
+            - [Join]: Join reordering, join method selection, join elimination, or subquery-to-join conversions.
+            - [Others]: Other optimizations like subquery unnesting, view merging, query flattening, or aggregation pushdown.
+            If the document doesn't fit any category or is not useful, fill null instead.
+        3. Return the answer strictly according to the <json format>.
         
         <doc>
         {data}
@@ -553,20 +553,35 @@ class cleaner():
         useful_files = 0
         total_files = 0
         
-        if os.path.exists(self.input_file_dir):
-            files = [f for f in os.listdir(self.input_file_dir) if f.endswith(".md")]
-            # Sort files to ensure consistent processing order (question_0, question_1, etc.)
-            files.sort(key=lambda x: int(x.split('_')[1].split('.')[0]) if x.startswith('question_') and '_' in x else float('inf'))
-            total_files = len(files)
+        # Support multiple input directories
+        input_dirs = []
+        stackoverflow_dir = os.path.join(self.input_file_dir, 'stackoverflow')
+        if os.path.exists(stackoverflow_dir):
+            input_dirs.append(stackoverflow_dir)
+        
+        # Collect all markdown files from stackoverflow subdirectory only
+        file_paths = []
+        for input_dir in input_dirs:
+            if os.path.exists(input_dir):
+                for f in os.listdir(input_dir):
+                    if f.endswith(".md"):
+                        file_paths.append(os.path.join(input_dir, f))
+        
+        # Sort files to ensure consistent processing order
+        file_paths.sort(key=lambda x: int(os.path.basename(x).split('_')[1].split('.')[0]) if os.path.basename(x).startswith('question_') and '_' in os.path.basename(x) else float('inf'))
+        total_files = len(file_paths)
+        
+        if total_files > 0:
             
             # Main progress bar for all files
             with tqdm(total=total_files, desc="📄 Processing files", unit="file") as pbar:
-                for filename in files:
+                for file_path in file_paths:
+                    filename = os.path.basename(file_path)
                     pbar.set_description(f"📄 Processing: {filename[:30]}...")
                     iteration += 1
                     
                     # Read markdown file content
-                    data = self.read_md_files(os.path.join(self.input_file_dir, filename))
+                    data = self.read_md_files(file_path)
                     
                     if not data:
                         failed_files += 1
@@ -687,7 +702,7 @@ class cleaner():
                         except Exception as e:
                             tqdm.write(f"⚠️ Error saving intermediate results: {e}")
         else:
-            print(f"❌ StackOverflow directory not found: {self.input_file_dir}")
+            print(f"❌ No markdown files found in: {self.input_file_dir} or its subdirectories")
 
         # Combine all results and provide final summary
         result.extend(stackoverflow_results)
@@ -716,7 +731,7 @@ class cleaner():
                 
 # Configuration and execution section
 # Default paths for processing StackOverflow markdown files and official docs
-input_file_dir = './data/ur_folder'  # Modify this to your own data directory
+input_file_dir = './data'  # Modify this to your own data directory
 save_file_dir = '../storage/ur_knowledge_base.json'  # Output JSON file path, modify to your own knowledge base file
 save_document_file_dir = '../storage/ur_document_store.json'  # Document store cache file path, modify to your own document store file
 
