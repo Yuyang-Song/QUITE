@@ -6,19 +6,19 @@
         "time_cost": 230.50770449638367,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Changed the query structure to start with RecentActiveUsers instead of Users table, which significantly reduces the dataset size early in the query execution"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Changed LEFT JOIN to INNER JOIN between RecentActiveUsers and Users, since we only want users with recent activity"
             },
             {
-                "group": "Predicate_simplification",
+                "group": "Predicate",
                 "produced_suggestion": "Removed the WHERE clause filter (RecentPostCount > 0) as it's now redundant because we're starting with active users"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Predicate",
                 "produced_suggestion": "Limited the badge statistics calculation to only users with recent activity instead of all users"
             }
         ]
@@ -28,25 +28,25 @@
         "original_query": "WITH UserBadges AS (\n    SELECT \n        U.Id AS UserId,\n        COUNT(B.Id) AS TotalBadges,\n        SUM(CASE WHEN B.Class = 1 THEN 1 ELSE 0 END) AS GoldBadges,\n        SUM(CASE WHEN B.Class = 2 THEN 1 ELSE 0 END) AS SilverBadges,\n        SUM(CASE WHEN B.Class = 3 THEN 1 ELSE 0 END) AS BronzeBadges\n    FROM \n        Users U\n    LEFT JOIN \n        Badges B ON U.Id = B.UserId\n    GROUP BY \n        U.Id\n),\nUserPosts AS (\n    SELECT \n        P.OwnerUserId,\n        COUNT(P.Id) AS TotalPosts,\n        SUM(CASE WHEN P.PostTypeId = 1 THEN 1 ELSE 0 END) AS TotalQuestions,\n        SUM(CASE WHEN P.PostTypeId = 2 THEN 1 ELSE 0 END) AS TotalAnswers,\n        AVG(P.Score) AS AvgScore\n    FROM \n        Posts P\n    GROUP BY \n        P.OwnerUserId\n),\nRankedUsers AS (\n    SELECT \n        U.Id,\n        U.DisplayName,\n        UB.TotalBadges,\n        UP.TotalPosts,\n        UP.TotalQuestions,\n        UP.TotalAnswers,\n        UP.AvgScore,\n        ROW_NUMBER() OVER (ORDER BY UB.TotalBadges DESC, UP.TotalPosts DESC) AS UserRank\n    FROM \n        Users U\n    LEFT JOIN \n        UserBadges UB ON U.Id = UB.UserId\n    LEFT JOIN \n        UserPosts UP ON U.Id = UP.OwnerUserId\n)\nSELECT \n    R.UserRank,\n    R.DisplayName,\n    COALESCE(R.TotalBadges, 0) AS TotalBadges,\n    COALESCE(R.TotalPosts, 0) AS TotalPosts,\n    COALESCE(R.TotalQuestions, 0) AS TotalQuestions,\n    COALESCE(R.TotalAnswers, 0) AS TotalAnswers,\n    COALESCE(R.AvgScore, 0) AS AvgScore,\n    CASE \n        WHEN R.AvgScore IS NULL THEN 'No Posts'\n        WHEN R.AvgScore > 10 THEN 'High Scorer'\n        WHEN R.AvgScore BETWEEN 1 AND 10 THEN 'Average Scorer'\n        ELSE 'Low Scorer'\n    END AS ScoreCategory\nFROM \n    RankedUsers R\nWHERE \n    R.TotalPosts > 5\nORDER BY \n    R.UserRank\nOFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY",
         "rewritten_query": "SELECT \n    ROW_NUMBER() OVER (ORDER BY COALESCE(UB.TotalBadges,0) DESC, COALESCE(UP.TotalPosts,0) DESC) AS UserRank,\n    U.DisplayName,\n    COALESCE(UB.TotalBadges, 0) AS TotalBadges,\n    COALESCE(UP.TotalPosts, 0) AS TotalPosts,\n    COALESCE(UP.TotalQuestions, 0) AS TotalQuestions,\n    COALESCE(UP.TotalAnswers, 0) AS TotalAnswers,\n    COALESCE(UP.AvgScore, 0) AS AvgScore,\n    CASE \n        WHEN UP.AvgScore IS NULL THEN 'No Posts'\n        WHEN UP.AvgScore > 10 THEN 'High Scorer'\n        WHEN UP.AvgScore BETWEEN 1 AND 10 THEN 'Average Scorer'\n        ELSE 'Low Scorer'\n    END AS ScoreCategory\nFROM \n    Users U\nLEFT JOIN (\n    SELECT \n        UserId,\n        COUNT(*) AS TotalBadges\n    FROM \n        Badges\n    GROUP BY \n        UserId\n) UB ON U.Id = UB.UserId\nLEFT JOIN (\n    SELECT \n        OwnerUserId,\n        COUNT(*) AS TotalPosts,\n        COUNT(*) FILTER (WHERE PostTypeId = 1) AS TotalQuestions,\n        COUNT(*) FILTER (WHERE PostTypeId = 2) AS TotalAnswers,\n        AVG(Score) AS AvgScore\n    FROM \n        Posts\n    GROUP BY \n        OwnerUserId\n) UP ON U.Id = UP.OwnerUserId\nWHERE \n    COALESCE(UP.TotalPosts, 0) > 5\nORDER BY \n    UserRank\nOFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY;",
         "time_cost": 239.18584084510803,
-        "rewrite_suggestion": [
+                "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Eliminated CTEs and used subqueries to allow the optimizer to merge operations"
             },
             {
-                "group": "Query_optimization",
+                "group": "Join",
                 "produced_suggestion": "Pushed the filter condition (TotalPosts > 5) earlier in the query execution by applying it in the HAVING clause of the Posts subquery"
             },
             {
-                "group": "Query_optimization",
+                "group": "Others",
                 "produced_suggestion": "Applied the window function only on the filtered set of users with more than 5 posts, reducing the number of rows processed"
             },
             {
-                "group": "Predicate_simplification",
+                "group": "Predicate",
                 "produced_suggestion": "Removed unused badge class breakdowns (GoldBadges, SilverBadges, BronzeBadges) that were calculated but not used in the final output"
             },
             {
-                "group": "Query_optimization",
+                "group": "Others",
                 "produced_suggestion": "Used the FILTER clause for conditional aggregation instead of CASE expressions, which is more efficient"
             }
         ]
@@ -58,19 +58,19 @@
         "time_cost": 263.52472448349,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Removed the unused RankedPosts CTE which was defined but never referenced in the query."
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Join",
                 "produced_suggestion": "Eliminated the redundant subquery 'rb' by adding the necessary columns (PostCountType1And2 and AvgScoreType1And2) to the UserStats CTE."
             },
             {
-                "group": "Query_optimization",
+                "group": "Constant",
                 "produced_suggestion": "Changed COUNT(DISTINCT p.Id) to COUNT(p.Id) for TotalPosts calculation since post IDs are unique."
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Included the PostCountType1And2 and AvgScoreType1And2 columns in the TopUsers CTE to avoid an additional join in the main query."
             }
         ]
@@ -82,23 +82,23 @@
         "time_cost": 218.30610585212708,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Added FilteredPosts CTE to filter posts by date early in the query execution"
             },
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Created CommentCounts CTE to pre-aggregate comment counts only for filtered posts"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Restructured the query to join pre-aggregated comment counts to filtered posts"
             },
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Added RelevantPosts CTE to filter votes by only the posts that are needed"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Predicate",
                 "produced_suggestion": "Limited vote aggregation to only posts that appear in the result set"
             }
         ]
@@ -110,23 +110,23 @@
         "time_cost": 219.31302165985107,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Replaced ROW_NUMBER() and filtering with LIMIT 10 in UserReputation CTE to avoid sorting the entire Users table"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Added early filtering in RecentPosts by joining with UserReputation to reduce the number of posts processed"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Eliminated correlated subqueries for vote counts by creating a VoteCounts CTE that pre-aggregates votes for relevant posts only"
             },
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Removed unnecessary TopPosts CTE by incorporating its logic into RecentPosts and the main query"
             },
             {
-                "group": "Predicate_simplification",
+                "group": "Predicate",
                 "produced_suggestion": "Simplified CommentCount calculation from COUNT(CASE WHEN C.Id IS NOT NULL THEN 1 END) to COUNT(C.Id)"
             }
         ]
@@ -138,15 +138,15 @@
         "time_cost": 307.2690715789795,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Changed the RankedPosts CTE to pre-aggregate comments to avoid the group by on the entire post. This reduces the overhead of grouping by multiple columns."
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Join",
                 "produced_suggestion": "Added a subquery to pre-aggregate comments by PostId, which is more efficient than grouping by all post columns."
             },
             {
-                "group": "Predicate_simplification",
+                "group": "Predicate",
                 "produced_suggestion": "Added a filter to the PostVoteSummary CTE to only include 'UpMod' and 'DownMod' vote types, reducing the amount of data processed."
             }
         ]
@@ -158,23 +158,23 @@
         "time_cost": 227.42883563041687,
         "rewrite_suggestion": [
             {
-                "group": "Subquery_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Replaced correlated subqueries for vote counts with pre-aggregated CTEs (VoteAgg) to avoid repeated execution for each row"
             },
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Added FilteredPosts CTE to filter posts by date once and reuse the results in multiple places"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Pre-aggregated comments in CommentAgg CTE instead of using LEFT JOIN and GROUP BY in the main query"
             },
             {
-                "group": "Query_optimization",
+                "group": "Predicate",
                 "produced_suggestion": "Limited MaxScores CTE to only consider users with posts in the last 30 days"
             },
             {
-                "group": "Query_optimization",
+                "group": "Predicate",
                 "produced_suggestion": "Limited PostHistoryAggregation to only consider posts from the last 30 days"
             }
         ]
@@ -186,24 +186,24 @@
         "time_cost": 505.6103630065918,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Restructured the query to first identify the top 10 users by post count before calculating vote metrics, reducing the amount of data processed"
             },
             {
-                "group": "Subquery_optimization",
-                "produced_suggestion": "Used DISTINCT ON in PostgreSQL to efficiently get the most recent post per user instead of using ROW_NUMBER and filtering"
+                "group": "CTE",
+                "produced_suggestion": "Split the query into multiple CTEs to process data incrementally, improving efficiency"
             },
             {
-                "group": "Predicate_simplification",
-                "produced_suggestion": "Simplified vote counting expressions by using COUNT with CASE instead of SUM with COALESCE"
-            },
-            {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Added filtering to the recent_posts CTE to only include posts from top users, reducing the amount of data processed"
             },
             {
-                "group": "Query_optimization",
-                "produced_suggestion": "Split the query into multiple CTEs to process data incrementally, improving efficiency"
+                "group": "Predicate",
+                "produced_suggestion": "Simplified vote counting expressions by using COUNT with CASE instead of SUM with COALESCE"
+            },
+            {
+                "group": "Others",
+                "produced_suggestion": "Used DISTINCT ON in PostgreSQL to efficiently get the most recent post per user instead of using ROW_NUMBER and filtering"
             }
         ]
     },
@@ -214,16 +214,16 @@
         "time_cost": 229.34984874725342,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "Predicate",
+                "produced_suggestion": "Moved the WHERE Reputation > 1000 filter from the final query to the initial FilteredUsers CTE"
+            },
+            {
+                "group": "CTE",
                 "produced_suggestion": "Added a FilteredUsers CTE to filter users with reputation > 1000 early in the query execution"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Modified BadgeStats CTE to join with FilteredUsers instead of processing all badges"
-            },
-            {
-                "group": "Predicate_simplification",
-                "produced_suggestion": "Moved the WHERE Reputation > 1000 filter from the final query to the initial FilteredUsers CTE"
             }
         ]
     },
@@ -234,7 +234,7 @@
         "time_cost": 148.87654733657837,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "Predicate",
                 "produced_suggestion": "Added filters to PostVoteCounts and PostCommentCounts CTEs to only aggregate votes and comments for posts in TopPosts, rather than aggregating the entire tables."
             }
         ]
@@ -246,23 +246,23 @@
         "time_cost": 209.7977955341339,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Created a FilteredPosts CTE to first filter the Posts table by creation date, improving readability and potentially helping the query planner push down the filter."
             },
             {
-                "group": "Subquery_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Created a CommentCounts CTE to pre-aggregate comment counts only for filtered posts, avoiding the expensive join and group by operation in the original query."
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Changed LEFT JOINs for Votes and VoteTypes to INNER JOINs and removed the WHERE clause condition 'vt.Id IS NOT NULL', which is equivalent but more efficient as it allows the planner to optimize the join order."
             },
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Simplified the RankedPosts CTE by removing the need for GROUP BY since comment counts are now precomputed in a separate CTE."
             },
             {
-                "group": "Constant_folding",
+                "group": "Constant",
                 "produced_suggestion": "Added COALESCE for CommentCount to handle posts with no comments, ensuring consistent results."
             }
         ]
@@ -274,19 +274,19 @@
         "time_cost": 222.09266924858093,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Added OwnerUserId to RankedPosts CTE to fix the join logic"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Fixed incorrect join conditions by joining on OwnerUserId instead of PostId"
             },
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Added TopPosts and TopOwners CTEs to filter data early and reduce processing"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Others",
                 "produced_suggestion": "Restructured UserBadges and UserTopPost CTEs to only process relevant users"
             }
         ]
@@ -298,11 +298,11 @@
         "time_cost": 174.28732466697693,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Optimized the PostVoteSummary CTE to only aggregate votes for the top posts (from ~3.8M posts to ~45K posts) by moving the aggregation after the TopPosts CTE and joining with Votes only for those specific posts."
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Changed the grouping in PostVoteSummary to use tp.PostId instead of p.Id to ensure all top posts are included in the results, even those without votes."
             }
         ]
@@ -314,11 +314,11 @@
         "time_cost": 143.9678716659546,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "Join",
                 "produced_suggestion": "Removed the unnecessary LEFT JOIN to Votes table and the COUNT(v.Id) aggregation since VoteCount is not used in the final output."
             },
             {
-                "group": "Query_optimization",
+                "group": "Others",
                 "produced_suggestion": "Eliminated the GROUP BY clause which was only needed for the VoteCount aggregation, simplifying the query structure."
             }
         ]
@@ -330,27 +330,27 @@
         "time_cost": 200.83758425712585,
         "rewrite_suggestion": [
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Fixed the join condition in TopUsers CTE by including OwnerUserId in PopularPosts and joining on the correct columns (ur.UserId = pp.OwnerUserId instead of ur.UserId = pp.PostId)"
             },
             {
-                "group": "Query_optimization",
+                "group": "Others",
                 "produced_suggestion": "Split the PopularPosts CTE into separate aggregations (PostComments and PostVotes) to reduce data early before joining"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Others",
                 "produced_suggestion": "Added UserActivePosts CTE to pre-aggregate active posts by user, reducing data for the join in TopUsers"
             },
             {
-                "group": "Predicate_simplification",
+                "group": "Predicate",
                 "produced_suggestion": "Removed unnecessary columns (Title, CreationDate) from PopularPosts CTE as they were not used in subsequent steps"
             },
             {
-                "group": "Query_optimization",
+                "group": "Others",
                 "produced_suggestion": "Added Top10Users CTE to defer the join to Users table until after filtering to top 10 users"
             },
             {
-                "group": "Constant_folding",
+                "group": "Constant",
                 "produced_suggestion": "Eliminated redundant AVG(ur.Reputation) since reputation is constant per user"
             }
         ]
@@ -362,11 +362,11 @@
         "time_cost": 171.4239785671234,
         "rewrite_suggestion": [
             {
-                "group": "Subquery_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Replaced the correlated subquery in the LEFT JOIN with a pre-computed aggregation in a CTE (LastEdits) to avoid scanning the PostHistory table for each row in RankedPosts."
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Used an INNER JOIN between PostHistory and the LastEdits CTE to efficiently retrieve the last editor information instead of using a correlated subquery."
             }
         ]
@@ -378,7 +378,7 @@
         "time_cost": 200.95821380615234,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Added a filter to PostHistorySummary CTE to only process posts that are in TopPosts, rather than aggregating the entire PostHistory table."
             }
         ]
@@ -390,11 +390,11 @@
         "time_cost": 169.223961353302,
         "rewrite_suggestion": [
             {
-                "group": "Subquery_optimization",
+                "group": "Others",
                 "produced_suggestion": "Replace correlated subqueries for vote counts with a single aggregation CTE and join"
             },
             {
-                "group": "Query_optimization",
+                "group": "Predicate",
                 "produced_suggestion": "Added WHERE VoteTypeId IN (2, 3) filter to the VotesAgg CTE to reduce the number of rows processed"
             }
         ]
@@ -406,15 +406,15 @@
         "time_cost": 177.7525336742401,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Restructure the query to first identify the top 100 posts by score and view count, then only calculate aggregations for those specific posts rather than the entire tables"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use separate CTEs for TopPosts, CommentCounts, and VoteCounts to improve readability and potentially allow the optimizer to better handle each component"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Filter the Comments and Votes tables using the PostId values from TopPosts before performing aggregations, significantly reducing the amount of data processed"
             }
         ]
@@ -424,7 +424,12 @@
         "original_query": "WITH PostStats AS (\n    SELECT \n        p.Id AS PostId,\n        p.Title,\n        p.CreationDate,\n        p.ViewCount,\n        p.Score,\n        COUNT(c.Id) AS CommentCount,\n        COUNT(DISTINCT v.Id) AS VoteCount,\n        COUNT(DISTINCT bh.Id) AS BadgeCount\n    FROM \n        Posts p\n    LEFT JOIN \n        Comments c ON c.PostId = p.Id\n    LEFT JOIN \n        Votes v ON v.PostId = p.Id\n    LEFT JOIN \n        Badges bh ON bh.UserId = p.OwnerUserId\n    WHERE \n        p.CreationDate >= CAST('2024-10-01 12:34:56' AS TIMESTAMP) - INTERVAL '1' YEAR\n    GROUP BY \n        p.Id, p.Title, p.CreationDate, p.ViewCount, p.Score\n),\nUserStats AS (\n    SELECT \n        u.Id AS UserId,\n        u.DisplayName,\n        COUNT(DISTINCT p.Id) AS PostsCount,\n        MAX(u.UpVotes) AS TotalUpVotes,\n        MAX(u.DownVotes) AS TotalDownVotes,\n        MAX(u.Views) AS TotalViews\n    FROM \n        Users u\n    LEFT JOIN \n        Posts p ON p.OwnerUserId = u.Id\n    WHERE \n        u.CreationDate >= CAST('2024-10-01 12:34:56' AS TIMESTAMP) - INTERVAL '1' YEAR\n    GROUP BY \n        u.Id, u.DisplayName\n)\nSELECT \n    ps.PostId,\n    ps.Title,\n    ps.CreationDate,\n    ps.ViewCount,\n    ps.Score,\n    ps.CommentCount,\n    ps.VoteCount,\n    us.UserId,\n    us.DisplayName,\n    us.PostsCount,\n    us.TotalUpVotes,\n    us.TotalDownVotes,\n    us.TotalViews\nFROM \n    PostStats ps\nJOIN \n    UserStats us ON ps.PostId = us.UserId\nORDER BY \n    ps.ViewCount DESC, ps.Score DESC  \nLIMIT 100",
         "rewritten_query": "WITH PostStats AS (\n    SELECT \n        p.Id AS PostId,\n        p.Title,\n        p.CreationDate,\n        p.ViewCount,\n        p.Score,\n        COUNT(c.Id) AS CommentCount,\n        COUNT(DISTINCT v.Id) AS VoteCount,\n        COUNT(DISTINCT bh.Id) AS BadgeCount\n    FROM \n        Posts p\n    LEFT JOIN \n        Comments c ON c.PostId = p.Id\n    LEFT JOIN \n        Votes v ON v.PostId = p.Id\n    LEFT JOIN \n        Badges bh ON bh.UserId = p.OwnerUserId\n    WHERE \n        p.CreationDate >= CAST('2024-10-01 12:34:56' AS TIMESTAMP) - INTERVAL '1' YEAR\n    GROUP BY \n        p.Id, p.Title, p.CreationDate, p.ViewCount, p.Score\n),\nUserStats AS (\n    SELECT \n        u.Id AS UserId,\n        u.DisplayName,\n        COUNT(DISTINCT p.Id) AS PostsCount,\n        MAX(u.UpVotes) AS TotalUpVotes,\n        MAX(u.DownVotes) AS TotalDownVotes,\n        MAX(u.Views) AS TotalViews\n    FROM \n        Users u\n    LEFT JOIN \n        Posts p ON p.OwnerUserId = u.Id\n    WHERE \n        u.CreationDate >= CAST('2024-10-01 12:34:56' AS TIMESTAMP) - INTERVAL '1' YEAR\n    GROUP BY \n        u.Id, u.DisplayName\n)\nSELECT \n    ps.PostId,\n    ps.Title,\n    ps.CreationDate,\n    ps.ViewCount,\n    ps.Score,\n    ps.CommentCount,\n    ps.VoteCount,\n    us.UserId,\n    us.DisplayName,\n    us.PostsCount,\n    us.TotalUpVotes,\n    us.TotalDownVotes,\n    us.TotalViews\nFROM \n    PostStats ps\nJOIN \n    UserStats us ON ps.PostId = us.UserId\nORDER BY \n    ps.ViewCount DESC, ps.Score DESC  \nLIMIT 100",
         "time_cost": 685.2714030742645,
-        "rewrite_suggestion": "No need to optimize"
+        "rewrite_suggestion": [
+            {
+                "group": "No need to optimize",
+                "produced_suggestion": "No need to optimize"
+            }
+        ]
     },
     {
         "id": 21,
@@ -433,19 +438,19 @@
         "time_cost": 179.14401078224182,
         "rewrite_suggestion": [
             {
-                "group": "Subquery_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Replace correlated subqueries with a CTE that pre-aggregates vote counts by PostId and VoteTypeId"
             },
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Restructure the query to first get the top 100 PostHistory records, then join to other tables"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Use a DISTINCT CTE to identify unique PostIds before joining to the Votes table"
             },
             {
-                "group": "Constant_folding",
+                "group": "Constant",
                 "produced_suggestion": "Use COALESCE to handle NULL values in vote counts for posts with no votes"
             }
         ]
@@ -457,23 +462,23 @@
         "time_cost": 162.96156311035156,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use CTEs to pre-filter the 100 most recent posts before joining with other tables"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Join",
                 "produced_suggestion": "Pre-aggregate comments and votes counts separately to avoid the cross product between these tables"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Limit the aggregation of comments and votes to only the 100 posts of interest"
             },
             {
-                "group": "Predicate_simplification",
+                "group": "Predicate",
                 "produced_suggestion": "Replace COUNT(DISTINCT c.Id) with COUNT(*) since comment IDs are unique per post"
             },
             {
-                "group": "Query_optimization",
+                "group": "Constant",
                 "produced_suggestion": "Use COALESCE to handle NULL values for posts without comments or votes"
             }
         ]
@@ -485,15 +490,15 @@
         "time_cost": 142.22803163528442,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use a CTE to first identify the top 10 users by reputation before performing aggregations"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Predicate",
                 "produced_suggestion": "Filter the Posts, Comments, and Badges tables to only include data for the top 10 users before aggregation"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Reduce the amount of data being joined by pre-filtering to only the relevant users"
             }
         ]
@@ -505,19 +510,19 @@
         "time_cost": 148.10786485671997,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use CTEs to pre-aggregate data from Votes, Comments, and Badges tables to reduce the number of rows that need to be joined."
             },
             {
-                "group": "Predicate_simplification",
+                "group": "Predicate",
                 "produced_suggestion": "Fix the column name from b.Date to b.date based on the error message."
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Filter posts first using a FilteredPosts CTE and then join to the aggregated data to improve performance."
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Predicate",
                 "produced_suggestion": "Use IN clause with a subquery to limit badge processing to only users who own filtered posts."
             }
         ]
@@ -529,11 +534,11 @@
         "time_cost": 135.79987263679504,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Group by PostTypeId (integer) instead of PostType name (string) in the CTE to make aggregation more efficient"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Move the join with PostTypes table from the CTE to the outer query to reduce the amount of data processed during aggregation"
             }
         ]
@@ -545,19 +550,19 @@
         "time_cost": 163.05855751037598,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use CTEs to break down the query into smaller, more manageable parts"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Join",
                 "produced_suggestion": "Pre-aggregate comment and vote counts separately before joining"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Push the ORDER BY and FETCH FIRST clauses earlier in the query to reduce the amount of data processed"
             },
             {
-                "group": "Query_optimization",
+                "group": "Predicate",
                 "produced_suggestion": "Filter posts early and only aggregate comments and votes for the filtered posts"
             }
         ]
@@ -569,19 +574,19 @@
         "time_cost": 191.3628213405609,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use CTEs to pre-filter posts by date before joining with other tables"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Pre-aggregate Comments and Votes data before joining to reduce the number of rows processed"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Predicate",
                 "produced_suggestion": "Filter Comments and Votes tables to only include data for relevant posts"
             },
             {
-                "group": "Query_optimization",
+                "group": "Others",
                 "produced_suggestion": "Use COALESCE to handle NULL values for posts without comments or votes"
             }
         ]
@@ -593,15 +598,15 @@
         "time_cost": 160.00684309005737,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use a CTE to first get the top 10 posts by creation date, then calculate comment and vote counts separately to avoid the multiplicative effect of joining large tables."
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Perform aggregations separately for comments and votes to avoid the multiplicative effect that occurs when joining both tables before aggregation."
             },
             {
-                "group": "Subquery_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use separate CTEs for comment counts and vote counts to ensure accurate counting without duplication."
             }
         ]
@@ -613,11 +618,11 @@
         "time_cost": 131.22687435150146,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use a CTE to first fetch the 10 most recent posts of type 1, then join with Users and Comments tables to reduce the number of rows processed in joins and aggregation from 695K to just 10."
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Perform joins only on the 10 most recent posts rather than joining all 695K filtered posts with the large Users (1.2M rows) and Comments (7.2M rows) tables."
             }
         ]
@@ -629,15 +634,15 @@
         "time_cost": 133.30567717552185,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Pre-aggregate the Comments table in a CTE to reduce the size of the join and avoid a GROUP BY on a large intermediate result"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Replace the large LEFT JOIN to Comments followed by GROUP BY with a smaller LEFT JOIN to pre-aggregated comment counts"
             },
             {
-                "group": "Constant_folding",
+                "group": "Constant",
                 "produced_suggestion": "Use COALESCE to handle NULL values from the LEFT JOIN, ensuring posts without comments get a count of 0"
             }
         ]
@@ -649,15 +654,15 @@
         "time_cost": 329.68405175209045,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "Join",
                 "produced_suggestion": "Pre-aggregate comment and vote counts in separate subqueries before joining to avoid Cartesian products that would lead to incorrect counts"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Use LEFT JOIN with pre-aggregated subqueries instead of joining entire tables and then grouping"
             },
             {
-                "group": "Predicate_simplification",
+                "group": "Predicate",
                 "produced_suggestion": "Apply filtering on Posts table before joining with other tables to reduce the amount of data processed"
             }
         ]
@@ -669,19 +674,19 @@
         "time_cost": 186.67582416534424,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use CTEs to pre-filter the Posts table to only the 10 most recent posts before joining with other tables"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Avoid the Cartesian product between Comments and Votes by pre-aggregating them separately"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Others",
                 "produced_suggestion": "Pre-aggregate comments and votes only for the relevant posts instead of the entire tables"
             },
             {
-                "group": "Query_optimization",
+                "group": "Others",
                 "produced_suggestion": "Use COALESCE to handle NULL values from LEFT JOINs to ensure proper counting"
             }
         ]
@@ -693,15 +698,15 @@
         "time_cost": 162.6817262172699,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "Join",
                 "produced_suggestion": "Pre-aggregate the comments and votes before joining to avoid the combinatorial explosion of rows"
             },
             {
-                "group": "Join_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use CTEs to pre-aggregate data from Comments and Votes tables before joining"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Join",
                 "produced_suggestion": "Replace multiple LEFT JOINs with pre-aggregated CTEs to reduce intermediate result size"
             }
         ]
@@ -713,15 +718,15 @@
         "time_cost": 173.6976842880249,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use CTEs to pre-aggregate comment and vote counts separately before joining to avoid the multiplicative effect (fanout) of joining large tables"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "First retrieve only the 10 most recent posts and then join with pre-aggregated comment and vote counts instead of joining all tables first"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Join",
                 "produced_suggestion": "Pre-aggregate Comments and Votes tables by PostId to reduce the size of data being joined"
             }
         ]
@@ -733,15 +738,15 @@
         "time_cost": 140.06178617477417,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use a CTE to first fetch only the top 10 posts by creation date before joining with other tables"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Reduce the amount of data being processed by joining only 10 posts with Users and Comments tables instead of all posts"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Others",
                 "produced_suggestion": "Filter and limit the data early in the query execution process to minimize the number of rows being processed"
             }
         ]
@@ -753,19 +758,19 @@
         "time_cost": 174.4893560409546,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Use a CTE to first get the top 10 posts by CreationDate instead of processing the entire dataset"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Join",
                 "produced_suggestion": "Pre-aggregate comments for only the relevant posts instead of joining the entire Comments table"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Reduce data movement by selecting only necessary columns in the CTE"
             },
             {
-                "group": "Query_optimization",
+                "group": "Join",
                 "produced_suggestion": "Eliminate the need for window functions by using LIMIT directly"
             }
         ]
@@ -777,19 +782,19 @@
         "time_cost": 234.30117893218994,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Created ActivePostIds CTE to centralize filtering of posts from the last 30 days, which is reused across multiple parts of the query"
             },
             {
-                "group": "Predicate_simplification",
+                "group": "Predicate",
                 "produced_suggestion": "Removed unused ROW_NUMBER() column from UserReputation CTE which was not referenced in the final query"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Join",
                 "produced_suggestion": "Replaced correlated subqueries in ActivePosts CTE with pre-aggregated joins for comment counts and vote counts"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Added JOIN to ActivePostIds in PostHistoryDetails to filter history records early, reducing the amount of data processed"
             }
         ]
@@ -801,27 +806,27 @@
         "time_cost": 435.82574105262756,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "Others",
                 "produced_suggestion": "Removed unused window functions (ROW_NUMBER and COUNT) from RankedPosts CTE to reduce computation overhead"
             },
             {
-                "group": "Predicate_simplification",
+                "group": "Constant",
                 "produced_suggestion": "Simplified EngagementScore calculation using GREATEST and COALESCE functions instead of multiple CASE statements"
             },
             {
-                "group": "Query_optimization",
+                "group": "Predicate",
                 "produced_suggestion": "Pushed the EngagementScore > 10 filter up to the RankedPosts CTE to filter rows earlier in the execution"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Simplified ClosedPosts CTE to use DISTINCT instead of GROUP BY and COUNT since we only need to check existence"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Simplified ActiveUsers CTE by removing unnecessary LEFT JOINs and COUNT operations"
             },
             {
-                "group": "Query_optimization",
+                "group": "Others",
                 "produced_suggestion": "Removed unnecessary GROUP BY and MIN aggregations in the final query since each PostID is already unique"
             }
         ]
@@ -833,15 +838,15 @@
         "time_cost": 351.9446380138397,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Optimize the query by first selecting the top 10 users by reputation, then calculating statistics only for those users instead of processing all 1.2 million users."
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Reduce the amount of data processed in joins by first filtering to the top 10 users before joining with the Posts and Votes tables."
             },
             {
-                "group": "Subquery_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Restructure the CTEs to first identify the top 10 users and then calculate their statistics, rather than calculating statistics for all users and then filtering."
             }
         ]
@@ -853,19 +858,19 @@
         "time_cost": 258.3162717819214,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Created a FilteredPosts CTE to avoid scanning the Posts table multiple times"
             },
             {
-                "group": "Subquery_optimization",
+                "group": "Join",
                 "produced_suggestion": "Removed unnecessary VoteCount calculation and JOIN with Votes table since it's not used in the final result"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Added JOIN between PostHistory and FilteredPosts in RecentActivity CTE to reduce the amount of data processed"
             },
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Simplified RankedPosts CTE by removing unnecessary GROUP BY since VoteCount is no longer needed"
             }
         ]
@@ -877,23 +882,23 @@
         "time_cost": 507.5101933479309,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Restructured the query using multiple CTEs to precompute aggregations and avoid redundant calculations."
             },
             {
-                "group": "Predicate_simplification",
+                "group": "Predicate",
                 "produced_suggestion": "Fixed column name case sensitivity issue by changing b.Date to b.date."
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Changed LEFT JOIN to INNER JOIN for UserBadges to filter posts earlier in the execution plan."
             },
             {
-                "group": "Subquery_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Replaced correlated subquery for AvgViewCountByType with a pre-computed CTE (RankInTypeAvg)."
             },
             {
-                "group": "Query_optimization",
+                "group": "Others",
                 "produced_suggestion": "Used column alias in ORDER BY clause instead of repeating the CASE expression."
             }
         ]
@@ -905,23 +910,23 @@
         "time_cost": 284.6708686351776,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "CTE",
                 "produced_suggestion": "Break down the large RankedPosts CTE into smaller, more focused CTEs (EligiblePosts, PostVotes, PostClosed) to reduce data volume before joins"
             },
             {
-                "group": "Join_optimization",
+                "group": "Join",
                 "produced_suggestion": "Use DISTINCT ON to efficiently get the top post per user instead of computing ROW_NUMBER() for all posts and then filtering"
             },
             {
-                "group": "Predicate_simplification",
+                "group": "Predicate",
                 "produced_suggestion": "Filter badges aggregation to only include users that appear in the final result set"
             },
             {
-                "group": "Constant_folding",
+                "group": "Constant",
                 "produced_suggestion": "Remove unused column (TagsAggregated) from the original query"
             },
             {
-                "group": "Query_optimization",
+                "group": "Predicate",
                 "produced_suggestion": "Push the reputation filter earlier in the query to reduce the number of rows processed"
             }
         ]
@@ -933,7 +938,7 @@
         "time_cost": 203.59366083145142,
         "rewrite_suggestion": [
             {
-                "group": "Query_optimization",
+                "group": "Others",
                 "produced_suggestion": "The query is already well-optimized. The use of CTEs improves readability and the planner is already inlining them. The aggregations are necessary and cannot be avoided. The window function and the sorts are also necessary for the required functionality."
             }
         ]
