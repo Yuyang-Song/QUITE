@@ -207,7 +207,6 @@ FROM emp;
 | :--- | :--- | :--- | :--- | :--- |
 | 1 | **Predicate Pushdown** | Push `WHERE` filters (or `JOIN` conditions) down into CTEs, UNION ALL branches, or subqueries, or move them from `HAVING` to `WHERE` to filter earlier. | DSB_5, DSB_79, DSB_81, TPC-H_55, Calcite_44, Calcite_51, Calcite_53, SQLStorm_24, SQLStorm_27, SQLStorm_41 | 26.99197 |
 | 2 | **Predicate or Expression Simplification** | Simplify arithmetic or multi-column expressions (especially in JOIN conditions) into simpler, equivalent predicates, or reduce redundant calculations in the SELECT list. | DSB_6, DSB_57, Calcite_40, SQLStorm_8 | 50.63979 |
-| 3 | **Use EXISTS Instead of JOIN** | Replace full `JOIN` operations with `EXISTS` (semi-join) when only checking for the existence of related rows to avoid large intermediate result sets. | Calcite_6 | 20.43797 |
 
 #### **1. Predicate Pushdown**
 ```sql
@@ -248,31 +247,3 @@ WHERE d_year = 2000
 ```
 **Explanation:**
 - Replace sr_return_amt / sr_return_quantity with multiplication — avoids division, prevents divide-by-zero
-
-#### **3. Use EXISTS Instead of JOIN**
-```sql
---Before
-SELECT t6.ENAME
-FROM (
-  SELECT JOB FROM EMP WHERE ENAME = 'A' GROUP BY JOB
-) AS t5
-LEFT JOIN (
-  SELECT ENAME, JOB FROM EMP GROUP BY ENAME, JOB
-) AS t6
-ON t5.JOB = t6.JOB
-GROUP BY t6.ENAME;
-
-
---After
-SELECT DISTINCT E.ENAME
-FROM EMP E
-WHERE EXISTS (
-  SELECT 1
-  FROM EMP A
-  WHERE A.ENAME = 'A'
-    AND A.JOB = E.JOB
-);
-```
-**Explanation:**
-- Use EXISTS (semi-join) to check for matching jobs directly to
-avoids building large intermediate join results and simplifies logic.
