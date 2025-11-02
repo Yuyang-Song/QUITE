@@ -1,0 +1,213 @@
+[
+    {
+        "category": 1,
+        "dsb": [
+            {
+                "id": "38",
+                "equivalence": true,
+                "original_query": "select   i_item_id  ,i_item_desc  ,s_store_id  ,s_store_name  ,min(ss_net_profit) as store_sales_profit  ,min(sr_net_loss) as store_returns_loss  ,min(cs_net_profit) as catalog_sales_profit  from  store_sales  ,store_returns  ,catalog_sales  ,date_dim d1  ,date_dim d2  ,date_dim d3  ,store  ,item  where  d1.d_moy = 6  and d1.d_year = 2002  and d1.d_date_sk = ss_sold_date_sk  and i_item_sk = ss_item_sk  and s_store_sk = ss_store_sk  and ss_customer_sk = sr_customer_sk  and ss_item_sk = sr_item_sk  and ss_ticket_number = sr_ticket_number  and sr_returned_date_sk = d2.d_date_sk  and d2.d_moy               between 6 and  6 + 2  and d2.d_year              = 2002  and sr_customer_sk = cs_bill_customer_sk  and sr_item_sk = cs_item_sk  and cs_sold_date_sk = d3.d_date_sk  and d3.d_moy               between 6 and  6 + 2  and d3.d_year              = 2002  group by  i_item_id  ,i_item_desc  ,s_store_id  ,s_store_name  order by  i_item_id  ,i_item_desc  ,s_store_id  ,s_store_name  limit 100;",
+                "rewritten_query": "SELECT \n    i_item_id,\n    i_item_desc,\n    s_store_id,\n    s_store_name,\n    MIN(ss_net_profit) AS store_sales_profit,\n    MIN(sr_net_loss) AS store_returns_loss,\n    MIN(cs_agg.min_cs_net_profit) AS catalog_sales_profit\nFROM store_sales\nJOIN date_dim d1 ON d1.d_date_sk = store_sales.ss_sold_date_sk\n    AND d1.d_moy = 6\n    AND d1.d_year = 2002\nJOIN item ON item.i_item_sk = store_sales.ss_item_sk\nJOIN store ON store.s_store_sk = store_sales.ss_store_sk\nJOIN store_returns ON store_sales.ss_customer_sk = store_returns.sr_customer_sk\n    AND store_sales.ss_item_sk = store_returns.sr_item_sk\n    AND store_sales.ss_ticket_number = store_returns.sr_ticket_number\nJOIN date_dim d2 ON store_returns.sr_returned_date_sk = d2.d_date_sk\n    AND d2.d_moy BETWEEN 6 AND 8\n    AND d2.d_year = 2002\nJOIN (\n    SELECT \n        cs_bill_customer_sk,\n        cs_item_sk,\n        MIN(cs_net_profit) AS min_cs_net_profit\n    FROM catalog_sales\n    JOIN date_dim d3 ON catalog_sales.cs_sold_date_sk = d3.d_date_sk\n        AND d3.d_moy BETWEEN 6 AND 8\n        AND d3.d_year = 2002\n    GROUP BY cs_bill_customer_sk, cs_item_sk\n) cs_agg ON store_returns.sr_customer_sk = cs_agg.cs_bill_customer_sk\n    AND store_returns.sr_item_sk = cs_agg.cs_item_sk\nGROUP BY \n    i_item_id,\n    i_item_desc,\n    s_store_id,\n    s_store_name\nORDER BY \n    i_item_id,\n    i_item_desc,\n    s_store_id,\n    s_store_name\nLIMIT 100;",
+                "original_execution_time": 55.03643345832825,
+                "rewrite_execution_time": 3.86816676457723,
+                "speed_up": 0.9297162530070907,
+                "times_up": 14.228040518398755,
+                "rewrite_suggestion": [
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Convert implicit joins in the `FROM` clause (e.g., `FROM table1, table2`) to explicit ANSI `JOIN` syntax (`FROM table1 JOIN table2 ON ...`). This improves readability and clearly separates join logic from filtering predicates."
+                    },
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Introduce a subquery `cs_agg` to pre-aggregate `MIN(cs_net_profit)` from the `catalog_sales` table, grouped by `cs_bill_customer_sk` and `cs_item_sk`. This significantly reduces the data volume before joining with the `store_returns` table in the main query, improving join performance."
+                    },
+                    {
+                        "group": "Constant",
+                        "produced_suggestion": "Simplify the constant arithmetic in the `WHERE` clause predicates. The expressions `d_moy between 6 and 6 + 2` were evaluated and replaced with the simpler, equivalent `d_moy BETWEEN 6 AND 8`."
+                    }
+                ]
+            },
+            {
+                "id": "80",
+                "equivalence": true,
+                "original_query": "with my_customers as (  select distinct c_customer_sk         , c_current_addr_sk  from         ( select cs_sold_date_sk sold_date_sk,                  cs_bill_customer_sk customer_sk,                  cs_item_sk item_sk,                  cs_wholesale_cost wholesale_cost           from   catalog_sales           union all           select ws_sold_date_sk sold_date_sk,                  ws_bill_customer_sk customer_sk,                  ws_item_sk item_sk,                  ws_wholesale_cost wholesale_cost           from   web_sales          ) cs_or_ws_sales,          item,          date_dim,          customer  where   sold_date_sk = d_date_sk          and item_sk = i_item_sk          and i_category = 'Sports'          and i_class = 'camping'          and c_customer_sk = cs_or_ws_sales.customer_sk          and d_moy = 6          and d_year = 2001          and wholesale_cost BETWEEN 18 AND 48          and c_birth_year BETWEEN 1932 AND 1945  )  , my_revenue as (  select c_customer_sk,         sum(ss_ext_sales_price) as revenue  from   my_customers,         store_sales,         customer_address,         store,         date_dim  where  c_current_addr_sk = ca_address_sk         and ca_county = s_county         and ca_state = s_state         and ss_sold_date_sk = d_date_sk         and c_customer_sk = ss_customer_sk         and ss_wholesale_cost BETWEEN 18 AND 48         and s_state in ('IA','MD','MO'                     ,'MS','NE','NY'                     ,'OK','TN','TX'                     ,'VA')         and d_month_seq between (select distinct d_month_seq+1                                  from   date_dim where d_year = 2001 and d_moy = 6)                            and  (select distinct d_month_seq+3                                  from   date_dim where d_year = 2001 and d_moy = 6)  group by c_customer_sk  )  , segments as  (select cast((revenue/50) as int) as segment   from   my_revenue  )   select  segment, count(*) as num_customers, segment*50 as segment_base  from segments  group by segment  order by segment, num_customers  limit 100;",
+                "rewritten_query": "WITH base_date AS (\n  SELECT d_month_seq\n  FROM date_dim\n  WHERE d_year = 2001 AND d_moy = 6\n  LIMIT 1\n), my_customers AS (\n  SELECT DISTINCT c.c_customer_sk, c.c_current_addr_sk\n  FROM (\n    SELECT cs.cs_bill_customer_sk AS customer_sk\n    FROM catalog_sales cs\n    JOIN item i ON cs.cs_item_sk = i.i_item_sk\n    JOIN date_dim d ON cs.cs_sold_date_sk = d.d_date_sk\n    WHERE i.i_category = 'Sports'\n      AND i.i_class = 'camping'\n      AND d.d_moy = 6\n      AND d.d_year = 2001\n      AND cs.cs_wholesale_cost BETWEEN 18 AND 48\n    UNION ALL\n    SELECT ws.ws_bill_customer_sk AS customer_sk\n    FROM web_sales ws\n    JOIN item i ON ws.ws_item_sk = i.i_item_sk\n    JOIN date_dim d ON ws.ws_sold_date_sk = d.d_date_sk\n    WHERE i.i_category = 'Sports'\n      AND i.i_class = 'camping'\n      AND d.d_moy = 6\n      AND d.d_year = 2001\n      AND ws.ws_wholesale_cost BETWEEN 18 AND 48\n  ) sales\n  JOIN customer c ON c.c_customer_sk = sales.customer_sk\n  WHERE c.c_birth_year BETWEEN 1932 AND 1945\n), my_revenue AS (\n  SELECT mc.c_customer_sk, SUM(ss.ss_ext_sales_price) AS revenue\n  FROM my_customers mc\n  JOIN store_sales ss ON mc.c_customer_sk = ss.ss_customer_sk\n  JOIN customer_address ca ON mc.c_current_addr_sk = ca.ca_address_sk\n  JOIN store s ON ca.ca_county = s.s_county AND ca.ca_state = s.s_state\n  JOIN date_dim d ON ss.ss_sold_date_sk = d.d_date_sk\n  CROSS JOIN base_date b\n  WHERE ss.ss_wholesale_cost BETWEEN 18 AND 48\n    AND s.s_state IN ('IA','MD','MO','MS','NE','NY','OK','TN','TX','VA')\n    AND d.d_month_seq BETWEEN b.d_month_seq + 1 AND b.d_month_seq + 3\n  GROUP BY mc.c_customer_sk\n), segments AS (\n  SELECT (revenue / 50)::INT AS segment\n  FROM my_revenue\n)\nSELECT segment, COUNT(*) AS num_customers, segment * 50 AS segment_base\nFROM segments\nGROUP BY segment\nORDER BY segment, num_customers\nLIMIT 100;",
+                "original_execution_time": 210.9402736822764,
+                "rewrite_execution_time": 2.091187000274658,
+                "speed_up": 0.9900863549488683,
+                "times_up": 100.87107162323184,
+                "rewrite_suggestion": [
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Push item and date_dim joins into each UNION ALL subquery in the `my_customers` CTE. This applies filters early, reducing the amount of data processed by the union and subsequent customer join."
+                    },
+                    {
+                        "group": "CTE",
+                        "produced_suggestion": "Replace two correlated `SELECT DISTINCT` subqueries in the `my_revenue` CTE's WHERE clause with a new `base_date` CTE and a `CROSS JOIN`. This avoids redundant scans on the date_dim table by calculating the date range once."
+                    }
+                ]
+            },
+            {
+                "id": "136",
+                "equivalence": true,
+                "original_query": "select     sum(ws_ext_discount_amt)  as \"Excess Discount Amount\" from     web_sales    ,item    ,date_dim where (i_manufact_id BETWEEN 394 and 593 or i_category IN ('Books', 'Home', 'Sports')) and i_item_sk = ws_item_sk and d_date between '2002-02-11' and         cast('2002-02-11' as date) + interval '90' day and d_date_sk = ws_sold_date_sk and ws_wholesale_cost BETWEEN 68 AND 88 and ws_ext_discount_amt      > (          SELECT             1.3 * avg(ws_ext_discount_amt)          FROM             web_sales            ,date_dim          WHERE               ws_item_sk = i_item_sk           and d_date between '2002-02-11' and                              cast('2002-02-11' as date) + interval '90' day           and d_date_sk = ws_sold_date_sk           and ws_wholesale_cost BETWEEN 68 AND 88           and ws_sales_price / ws_list_price BETWEEN 85 * 0.01 AND 100 * 0.01   ) order by sum(ws_ext_discount_amt) limit 100;",
+                "rewritten_query": "WITH avg_discount AS (\n    SELECT \n        ws_item_sk,\n        1.3 * AVG(ws_ext_discount_amt) AS avg_disc\n    FROM web_sales\n    JOIN date_dim ON ws_sold_date_sk = d_date_sk\n    WHERE \n        d_date BETWEEN '2002-02-11' AND '2002-02-11'::date + INTERVAL '90' DAY\n        AND ws_wholesale_cost BETWEEN 68 AND 88\n        AND (ws_sales_price / ws_list_price) BETWEEN 0.85 AND 1.00\n    GROUP BY ws_item_sk\n)\nSELECT \n    SUM(ws.ws_ext_discount_amt) AS \"Excess Discount Amount\"\nFROM web_sales ws\nJOIN item i ON ws.ws_item_sk = i.i_item_sk\nJOIN date_dim d ON ws.ws_sold_date_sk = d.d_date_sk\nJOIN avg_discount ad ON ws.ws_item_sk = ad.ws_item_sk\nWHERE \n    d.d_date BETWEEN '2002-02-11' AND '2002-02-11'::date + INTERVAL '90' DAY\n    AND (i.i_manufact_id BETWEEN 394 AND 593 OR i.i_category IN ('Books', 'Home', 'Sports'))\n    AND ws.ws_wholesale_cost BETWEEN 68 AND 88\n    AND ws.ws_ext_discount_amt > ad.avg_disc\nORDER BY SUM(ws.ws_ext_discount_amt)\nLIMIT 100;",
+                "original_execution_time": 300,
+                "rewrite_execution_time": 8.612542867660522,
+                "speed_up": 0.9712915237744649,
+                "times_up": 34.832918060295334,
+                "rewrite_suggestion": [
+                    {
+                        "group": "CTE",
+                        "produced_suggestion": "Replace the correlated subquery with a CTE that precomputes the average discount per item, which avoids executing the subquery for each row."
+                    },
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Create a date_range CTE to filter date_dim once and reuse it in both the main query and the average discount calculation."
+                    }
+                ]
+            },
+            {
+                "id": "137",
+                "equivalence": true,
+                "original_query": "select     sum(ws_ext_discount_amt)  as \"Excess Discount Amount\" from     web_sales    ,item    ,date_dim where (i_manufact_id BETWEEN 749 and 948 or i_category IN ('Books', 'Home', 'Sports')) and i_item_sk = ws_item_sk and d_date between '2001-01-31' and         cast('2001-01-31' as date) + interval '90' day and d_date_sk = ws_sold_date_sk and ws_wholesale_cost BETWEEN 57 AND 77 and ws_ext_discount_amt      > (          SELECT             1.3 * avg(ws_ext_discount_amt)          FROM             web_sales            ,date_dim          WHERE               ws_item_sk = i_item_sk           and d_date between '2001-01-31' and                              cast('2001-01-31' as date) + interval '90' day           and d_date_sk = ws_sold_date_sk           and ws_wholesale_cost BETWEEN 57 AND 77           and ws_sales_price / ws_list_price BETWEEN 17 * 0.01 AND 32 * 0.01   ) order by sum(ws_ext_discount_amt) limit 100;",
+                "rewritten_query": "WITH date_range AS (\n    SELECT d_date_sk\n    FROM date_dim\n    WHERE d_date BETWEEN '2001-01-31' AND CAST('2001-01-31' AS DATE) + INTERVAL '90' DAY\n), \navg_discounts AS (\n    SELECT\n        ws_item_sk,\n        AVG(ws_ext_discount_amt) AS avg_disc\n    FROM\n        web_sales\n        JOIN date_range ON web_sales.ws_sold_date_sk = date_range.d_date_sk\n    WHERE\n        web_sales.ws_wholesale_cost BETWEEN 57 AND 77\n        AND (web_sales.ws_sales_price / web_sales.ws_list_price) BETWEEN 0.17 AND 0.32\n    GROUP BY\n        ws_item_sk\n)\nSELECT\n    SUM(ws.ws_ext_discount_amt) AS \"Excess Discount Amount\"\nFROM\n    web_sales ws\n    JOIN item i ON ws.ws_item_sk = i.i_item_sk\n    JOIN date_range dr ON ws.ws_sold_date_sk = dr.d_date_sk\n    JOIN avg_discounts ad ON ws.ws_item_sk = ad.ws_item_sk\nWHERE\n    (i.i_manufact_id BETWEEN 749 AND 948 OR i.i_category IN ('Books', 'Home', 'Sports'))\n    AND ws.ws_wholesale_cost BETWEEN 57 AND 77\n    AND ws.ws_ext_discount_amt > 1.3 * ad.avg_disc\nORDER BY SUM(ws.ws_ext_discount_amt)\nLIMIT 100;",
+                "original_execution_time": 300,
+                "rewrite_execution_time": 9.495962540308634,
+                "speed_up": 0.9683467915323045,
+                "times_up": 31.592373993321328,
+                "rewrite_suggestion": [
+                    {
+                        "group": "CTE",
+                        "produced_suggestion": "Replaced the correlated subquery with a CTE to calculate average discount amounts per item once, instead of recalculating for each row."
+                    },
+                    {
+                        "group": "CTE",
+                        "produced_suggestion": "Created a date_range CTE to precompute the date range once and reuse it in both the main query and the avg_discounts calculation."
+                    },
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Changed the query structure to use explicit joins with the precomputed CTEs, reducing redundant calculations."
+                    }
+                ]
+            }
+        ],
+        "calcite": [
+            {
+                "id": 40,
+                "equivalence": true,
+                "original_query": "SELECT t4.NAME FROM (SELECT NAME, DEPTNO, DEPTNO - 10 AS DEPTNOMINUS FROM DEPT) AS t4 INNER JOIN (SELECT DEPTNO, SAL + 1 AS f9 FROM EMP GROUP BY DEPTNO, SAL + 1) AS t6 ON t4.DEPTNOMINUS = t6.f9 AND t4.DEPTNO = t6.DEPTNO",
+                "rewritten_query": "SELECT d.NAME\nFROM DEPT d\nINNER JOIN (\n    SELECT DISTINCT DEPTNO\n    FROM EMP\n    WHERE SAL = DEPTNO - 11\n) e ON d.DEPTNO = e.DEPTNO",
+                "original_execution_time": 34.90629760424296,
+                "rewrite_execution_time": 0.7375326951344808,
+                "speed_up": 0.9788710706733665,
+                "times_up": 47.328474838499446,
+                "rewrite_suggestion": [
+                    {
+                        "group": "Predicate",
+                        "produced_suggestion": "Simplified the complex join condition by transforming t4.DEPTNOMINUS = t6.f9 AND t4.DEPTNO = t6.DEPTNO into the equivalent WHERE SAL = DEPTNO - 11"
+                    },
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Eliminated unnecessary derived tables by directly joining DEPT with a filtered subquery"
+                    },
+                    {
+                        "group": "Others",
+                        "produced_suggestion": "Replaced GROUP BY with DISTINCT on DEPTNO to reduce the number of groups from 3 million to at most 300K"
+                    }
+                ]
+            },
+            {
+                "id": 53,
+                "equivalence": true,
+                "original_query": "with e2 as (   select empno, case when true then deptno else null end as deptno   from emp) select empno,   deptno in (select deptno from e2 where empno < 20) as d from e2",
+                "rewritten_query": "WITH deptno_set AS (\n    SELECT deptno\n    FROM emp\n    WHERE empno < 20\n)\nSELECT e.empno,\n       e.deptno IN (SELECT deptno FROM deptno_set) AS d\nFROM emp AS e;",
+                "original_execution_time": 300,
+                "rewrite_execution_time": 8.236356019973755,
+                "speed_up": 0.9725454799334208,
+                "times_up": 36.42387474175211,
+                "rewrite_suggestion": [
+                    {
+                        "group": "Predicate",
+                        "produced_suggestion": "Precompute the filtered set of department numbers for rows where empno < 20 to avoid scanning the entire CTE twice"
+                    },
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Replace the double scan of the CTE with a more efficient approach that only materializes the necessary subset of data"
+                    }
+                ]
+            }
+        ],
+        "sqlstorm": [
+            {
+                "id": 25,
+                "equivalence": true,
+                "original_query": "SELECT \n    p.Id AS PostId,\n    p.Title,\n    u.DisplayName AS OwnerDisplayName,\n    COUNT(DISTINCT c.Id) AS CommentCount,\n    COUNT(DISTINCT v.Id) AS VoteCount,\n    p.CreationDate,\n    p.LastEditDate,\n    p.Score,\n    p.ViewCount,\n    p.Tags AS TagName\nFROM \n    Posts p\nLEFT JOIN \n    Users u ON p.OwnerUserId = u.Id\nLEFT JOIN \n    Comments c ON p.Id = c.PostId\nLEFT JOIN \n    Votes v ON p.Id = v.PostId\nWHERE \n    p.PostTypeId = 1 \nGROUP BY \n    p.Id, \n    p.Title, \n    u.DisplayName, \n    p.CreationDate, \n    p.LastEditDate, \n    p.Score, \n    p.ViewCount, \n    p.Tags\nORDER BY \n    p.CreationDate DESC\nLIMIT 100",
+                "rewritten_query": "WITH RecentPosts AS (\n    SELECT \n        p.Id,\n        p.Title,\n        p.OwnerUserId,\n        p.CreationDate,\n        p.LastEditDate,\n        p.Score,\n        p.ViewCount,\n        p.Tags\n    FROM Posts p\n    WHERE p.PostTypeId = 1\n    ORDER BY p.CreationDate DESC\n    LIMIT 100\n),\nCommentAgg AS (\n    SELECT c.PostId, COUNT(DISTINCT c.Id) AS CommentCount\n    FROM Comments c\n    JOIN RecentPosts rp ON c.PostId = rp.Id\n    GROUP BY c.PostId\n),\nVoteAgg AS (\n    SELECT v.PostId, COUNT(DISTINCT v.Id) AS VoteCount\n    FROM Votes v\n    JOIN RecentPosts rp ON v.PostId = rp.Id\n    GROUP BY v.PostId\n)\nSELECT \n    rp.Id AS PostId,\n    rp.Title,\n    u.DisplayName AS OwnerDisplayName,\n    COALESCE(ca.CommentCount, 0) AS CommentCount,\n    COALESCE(va.VoteCount, 0) AS VoteCount,\n    rp.CreationDate,\n    rp.LastEditDate,\n    rp.Score,\n    rp.ViewCount,\n    rp.Tags AS TagName\nFROM \n    RecentPosts rp\nLEFT JOIN \n    Users u ON rp.OwnerUserId = u.Id\nLEFT JOIN \n    CommentAgg ca ON rp.Id = ca.PostId\nLEFT JOIN \n    VoteAgg va ON rp.Id = va.PostId\nORDER BY \n    rp.CreationDate DESC",
+                "original_execution_time": 33.011358896891274,
+                "rewrite_execution_time": 2.7617009480794272,
+                "speed_up": 0.916340888701207,
+                "times_up": 11.953270653670304,
+                "rewrite_suggestion": [
+                    {
+                        "group": "CTE",
+                        "produced_suggestion": "Group by PostTypeId (integer) instead of PostType name (string) in the CTE to make aggregation more efficient"
+                    },
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Move the join with PostTypes table from the CTE to the outer query to reduce the amount of data processed during aggregation"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "category": 2,
+        "calcite": [
+            {
+                "id": 6,
+                "equivalence": true,
+                "original_query": "SELECT t6.ENAME FROM (SELECT JOB FROM EMP WHERE ENAME = 'A' GROUP BY JOB) AS t5 LEFT JOIN (SELECT ENAME, JOB FROM EMP GROUP BY ENAME, JOB) AS t6 ON t5.JOB = t6.JOB GROUP BY t6.ENAME",
+                "rewritten_query": "SELECT DISTINCT E.ENAME\nFROM EMP E\nWHERE EXISTS (\n  SELECT 1 \n  FROM EMP A \n  WHERE A.ENAME = 'A' \n    AND A.JOB = E.JOB\n)",
+                "original_execution_time": 38.01041579246521,
+                "rewrite_execution_time": 1.8597941398620605,
+                "speed_up": 0.951071460254041,
+                "times_up": 20.437969438533887,
+                "rewrite_suggestion": [
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Replace the complex LEFT JOIN between two derived tables with an EXISTS semi-join to avoid unnecessary intermediate result sets"
+                    },
+                    {
+                        "group": "Predicate",
+                        "produced_suggestion": "Use correlated subquery with EXISTS to directly check for matching jobs instead of building large intermediate tables"
+                    },
+                    {
+                        "group": "Others",
+                        "produced_suggestion": "Replace final GROUP BY with DISTINCT to achieve the same result with clearer intent"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "category": 3,
+        "calcite": [
+            {
+                "id": 50,
+                "equivalence": true,
+                "original_query": "select e.mgr, d.mgr from emp as e full outer join emp as d on e.mgr = d.mgr group by d.mgr, e.mgr",
+                "rewritten_query": "SELECT DISTINCT mgr, mgr FROM emp;",
+                "original_execution_time": 300,
+                "rewrite_execution_time": 10.737765868504843,
+                "speed_up": 0.964207447104984,
+                "times_up": 27.93877270875649,
+                "rewrite_suggestion": [
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Replace the FULL OUTER JOIN with GROUP BY using a simpler DISTINCT operation, as both operations are returning the same set of unique manager values."
+                    }
+                ]
+            }
+        ]
+    }
+]
