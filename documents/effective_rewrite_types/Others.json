@@ -1,0 +1,181 @@
+[
+    {
+        "category": 1,
+        "calcite": [
+            {
+                "id": 6,
+                "equivalence": true,
+                "original_query": "SELECT t6.ENAME FROM (SELECT JOB FROM EMP WHERE ENAME = 'A' GROUP BY JOB) AS t5 LEFT JOIN (SELECT ENAME, JOB FROM EMP GROUP BY ENAME, JOB) AS t6 ON t5.JOB = t6.JOB GROUP BY t6.ENAME",
+                "rewritten_query": "SELECT DISTINCT E.ENAME\nFROM EMP E\nWHERE EXISTS (\n  SELECT 1 \n  FROM EMP A \n  WHERE A.ENAME = 'A' \n    AND A.JOB = E.JOB\n)",
+                "original_execution_time": 38.01041579246521,
+                "rewrite_execution_time": 1.8597941398620605,
+                "speed_up": 0.951071460254041,
+                "times_up": 20.437969438533887,
+                "rewrite_suggestion": [
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Replace the complex LEFT JOIN between two derived tables with an EXISTS semi-join to avoid unnecessary intermediate result sets"
+                    },
+                    {
+                        "group": "Predicate",
+                        "produced_suggestion": "Use correlated subquery with EXISTS to directly check for matching jobs instead of building large intermediate tables"
+                    },
+                    {
+                        "group": "Others",
+                        "produced_suggestion": "Replace final GROUP BY with DISTINCT to achieve the same result with clearer intent"
+                    }
+                ]
+            },
+            {
+                "id": 40,
+                "equivalence": true,
+                "original_query": "SELECT t4.NAME FROM (SELECT NAME, DEPTNO, DEPTNO - 10 AS DEPTNOMINUS FROM DEPT) AS t4 INNER JOIN (SELECT DEPTNO, SAL + 1 AS f9 FROM EMP GROUP BY DEPTNO, SAL + 1) AS t6 ON t4.DEPTNOMINUS = t6.f9 AND t4.DEPTNO = t6.DEPTNO",
+                "rewritten_query": "SELECT d.NAME\nFROM DEPT d\nINNER JOIN (\n    SELECT DISTINCT DEPTNO\n    FROM EMP\n    WHERE SAL = DEPTNO - 11\n) e ON d.DEPTNO = e.DEPTNO",
+                "original_execution_time": 34.90629760424296,
+                "rewrite_execution_time": 0.7375326951344808,
+                "speed_up": 0.9788710706733665,
+                "times_up": 47.328474838499446,
+                "rewrite_suggestion": [
+                    {
+                        "group": "Predicate",
+                        "produced_suggestion": "Simplified the complex join condition by transforming t4.DEPTNOMINUS = t6.f9 AND t4.DEPTNO = t6.DEPTNO into the equivalent WHERE SAL = DEPTNO - 11"
+                    },
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Eliminated unnecessary derived tables by directly joining DEPT with a filtered subquery"
+                    },
+                    {
+                        "group": "Others",
+                        "produced_suggestion": "Replaced GROUP BY with DISTINCT on DEPTNO to reduce the number of groups from 3 million to at most 300K"
+                    }
+                ]
+            }
+        ],
+        "sqlstorm": [
+            {
+                "id": 8,
+                "equivalence": true,
+                "original_query": "WITH RankedPosts AS (    SELECT       p.Id AS PostId,      p.Title,      p.CreationDate,      p.OwnerUserId,      p.Score,      ROW_NUMBER() OVER (PARTITION BY p.OwnerUserId ORDER BY p.Score DESC) AS RankByScore,      COUNT(c.Id) AS CommentCount,      (SELECT COUNT(*) FROM Votes v WHERE v.PostId = p.Id AND v.VoteTypeId = 2) AS UpVoteCount,      (SELECT COUNT(*) FROM Votes v WHERE v.PostId = p.Id AND v.VoteTypeId = 3) AS DownVoteCount    FROM       Posts p    LEFT JOIN       Comments c ON p.Id = c.PostId    WHERE       p.CreationDate >= cast('2024-10-01 12:34:56' as timestamp) - INTERVAL '30' DAY    GROUP BY       p.Id, p.Title, p.CreationDate, p.OwnerUserId, p.Score ), MaxScores AS (    SELECT       OwnerUserId,      MAX(Score) AS MaxScore    FROM       Posts    GROUP BY       OwnerUserId ), PostHistoryAggregation AS (    SELECT       ph.PostId,      SUM(CASE WHEN ph.PostHistoryTypeId IN (10, 11, 12) THEN 1 ELSE 0 END) AS CloseActionCount    FROM       PostHistory ph    GROUP BY       ph.PostId ) SELECT     rp.PostId,    rp.Title,    rp.CreationDate,    u.DisplayName AS OwnerDisplayName,    rp.Score,    rp.CommentCount,    rp.UpVoteCount,    rp.DownVoteCount,    CASE       WHEN mp.MaxScore IS NOT NULL THEN         CASE           WHEN rp.Score = mp.MaxScore THEN 'Top Performer'          ELSE 'Regular Performer'        END       ELSE 'No Posts'    END AS PerformanceLabel,    COALESCE(pa.CloseActionCount, 0) AS CloseActionCount FROM     RankedPosts rp LEFT JOIN     Users u ON rp.OwnerUserId = u.Id LEFT JOIN     MaxScores mp ON rp.OwnerUserId = mp.OwnerUserId LEFT JOIN     PostHistoryAggregation pa ON rp.PostId = pa.PostId WHERE     rp.RankByScore <= 5 ORDER BY     rp.Score DESC, rp.CreationDate DESC;",
+                "rewritten_query": "WITH FilteredPosts AS (\n    SELECT\n        Id,\n        Title,\n        CreationDate,\n        OwnerUserId,\n        Score\n    FROM\n        Posts\n    WHERE\n        CreationDate >= cast('2024-10-01 12:34:56' as timestamp) - INTERVAL '30' DAY\n),\nVoteAgg AS (\n    SELECT\n        v.PostId,\n        SUM(CASE WHEN v.VoteTypeId = 2 THEN 1 ELSE 0 END) AS UpVoteCount,\n        SUM(CASE WHEN v.VoteTypeId = 3 THEN 1 ELSE 0 END) AS DownVoteCount\n    FROM\n        Votes v\n    JOIN\n        FilteredPosts fp ON v.PostId = fp.Id\n    WHERE\n        v.VoteTypeId IN (2, 3)\n    GROUP BY\n        v.PostId\n),\nCommentAgg AS (\n    SELECT\n        c.PostId,\n        COUNT(*) AS CommentCount\n    FROM\n        Comments c\n    JOIN\n        FilteredPosts fp ON c.PostId = fp.Id\n    GROUP BY\n        c.PostId\n),\nPostHistoryAggregation AS (\n    SELECT\n        ph.PostId,\n        SUM(CASE WHEN ph.PostHistoryTypeId IN (10,11,12) THEN 1 ELSE 0 END) AS CloseActionCount\n    FROM\n        PostHistory ph\n    GROUP BY\n        ph.PostId\n),\nRankedPosts AS (\n    SELECT\n        fp.Id AS PostId,\n        fp.Title,\n        fp.CreationDate,\n        fp.OwnerUserId,\n        fp.Score,\n        ROW_NUMBER() OVER (PARTITION BY fp.OwnerUserId ORDER BY fp.Score DESC) AS RankByScore,\n        COALESCE(ca.CommentCount, 0) AS CommentCount,\n        COALESCE(va.UpVoteCount, 0) AS UpVoteCount,\n        COALESCE(va.DownVoteCount, 0) AS DownVoteCount\n    FROM\n        FilteredPosts fp\n    LEFT JOIN\n        CommentAgg ca ON fp.Id = ca.PostId\n    LEFT JOIN\n        VoteAgg va ON fp.Id = va.PostId\n),\nMaxScores AS (\n    SELECT\n        p.OwnerUserId,\n        MAX(p.Score) AS MaxScore\n    FROM\n        Posts p\n    GROUP BY\n        p.OwnerUserId\n)\nSELECT\n    rp.PostId,\n    rp.Title,\n    rp.CreationDate,\n    u.DisplayName AS OwnerDisplayName,\n    rp.Score,\n    rp.CommentCount,\n    rp.UpVoteCount,\n    rp.DownVoteCount,\n    CASE\n        WHEN mp.MaxScore IS NOT NULL THEN\n            CASE\n                WHEN rp.Score = mp.MaxScore THEN 'Top Performer'\n                ELSE 'Regular Performer'\n            END\n        ELSE 'No Posts'\n    END AS PerformanceLabel,\n    COALESCE(pa.CloseActionCount, 0) AS CloseActionCount\nFROM\n    RankedPosts rp\nLEFT JOIN\n    Users u ON rp.OwnerUserId = u.Id\nLEFT JOIN\n    MaxScores mp ON rp.OwnerUserId = mp.OwnerUserId\nLEFT JOIN\n    PostHistoryAggregation pa ON rp.PostId = pa.PostId\nWHERE\n    rp.RankByScore <= 5\nORDER BY\n    rp.Score DESC, rp.CreationDate DESC;",
+                "original_execution_time": 300,
+                "rewrite_execution_time": 12.299552321434021,
+                "speed_up": 0.9590014922618866,
+                "times_up": 24.39113165746691,
+                "rewrite_suggestion": [
+                    {
+                        "group": "CTE",
+                        "produced_suggestion": "Restructured the query to first identify the top 10 users by post count before calculating vote metrics, reducing the amount of data processed"
+                    },
+                    {
+                        "group": "CTE",
+                        "produced_suggestion": "Split the query into multiple CTEs to process data incrementally, improving efficiency"
+                    },
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Added filtering to the recent_posts CTE to only include posts from top users, reducing the amount of data processed"
+                    },
+                    {
+                        "group": "Predicate",
+                        "produced_suggestion": "Simplified vote counting expressions by using COUNT with CASE instead of SUM with COALESCE"
+                    },
+                    {
+                        "group": "Others",
+                        "produced_suggestion": "Used DISTINCT ON in PostgreSQL to efficiently get the most recent post per user instead of using ROW_NUMBER and filtering"
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "category": 2,
+        "calcite": [
+            {
+                "id": 51,
+                "equivalence": true,
+                "original_query": "select dname, ddeptno, c from              (select name dname, deptno ddeptno, count(*) as c              from dept group by grouping sets ((name,deptno),(name))) t               where dname = 'Charlie'",
+                "rewritten_query": "select name as dname, deptno as ddeptno, count(*) as c\nfrom dept\nwhere name = 'Charlie'\ngroup by grouping sets ((name, deptno), (name));",
+                "original_execution_time": 0.3795905113220215,
+                "rewrite_execution_time": 0.014961560567220053,
+                "speed_up": 0.9605849985156042,
+                "times_up": 25.37105067459896,
+                "rewrite_suggestion": [
+                    {
+                        "group": "Predicate",
+                        "produced_suggestion": "Push the filter condition 'dname = 'Charlie'' into the subquery to reduce the amount of data processed in the aggregation"
+                    },
+                    {
+                        "group": "Others",
+                        "produced_suggestion": "Eliminate the unnecessary subquery since the filter can be applied directly"
+                    }
+                ]
+            }
+        ],
+        "sqlstorm": [
+            {
+                "id": 41,
+                "equivalence": true,
+                "original_query": "WITH UserReputation AS (\n    SELECT \n        U.Id AS UserId,\n        U.DisplayName,\n        U.Reputation,\n        U.CreationDate,\n        U.LastAccessDate,\n        U.Views,\n        ROW_NUMBER() OVER (PARTITION BY U.Id ORDER BY U.CreationDate DESC) AS RecentView,\n        LAG(U.Reputation, 1, 0) OVER (PARTITION BY U.Id ORDER BY U.CreationDate DESC) AS PreviousReputation\n    FROM \n        Users U\n    WHERE \n        U.Reputation > 100\n), \nActivePosts AS (\n    SELECT \n        P.Id AS PostId,\n        P.OwnerUserId,\n        P.PostTypeId,\n        P.Title,\n        P.CreationDate,\n        COALESCE(P.AcceptedAnswerId, -1) AS AcceptedAnswerId,\n        (SELECT COUNT(*) FROM Comments C WHERE C.PostId = P.Id) AS CommentCount,\n        (SELECT COUNT(*) FROM Votes V WHERE V.PostId = P.Id AND V.VoteTypeId = 2) AS UpVotes,\n        (SELECT COUNT(*) FROM Votes V WHERE V.PostId = P.Id AND V.VoteTypeId = 3) AS DownVotes\n    FROM \n        Posts P\n    WHERE \n        P.CreationDate > TIMESTAMP '2024-10-01 12:34:56' - INTERVAL '30' DAY\n), \nPostHistoryDetails AS (\n    SELECT \n        H.PostId,\n        H.UserId,\n        PH.Name AS HistoryType,\n        COUNT(*) AS RevisionCount,\n        MAX(H.CreationDate) AS LastRevisionDate\n    FROM \n        PostHistory H\n    JOIN \n        PostHistoryTypes PH ON H.PostHistoryTypeId = PH.Id\n    GROUP BY \n        H.PostId, H.UserId, PH.Name\n)\nSELECT \n    U.UserId,\n    U.DisplayName,\n    U.Reputation,\n    U.LastAccessDate,\n    S.PostId,\n    S.Title as PostTitle,\n    S.CommentCount,\n    S.UpVotes,\n    S.DownVotes,\n    COALESCE(PH.HistoryType, 'No Modifications') AS LastHistoryType,\n    PH.RevisionCount,\n    PH.LastRevisionDate,\n    CASE \n        WHEN (U.Reputation - U.PreviousReputation) > 0 THEN 'Increased'\n        WHEN (U.Reputation - U.PreviousReputation) < 0 THEN 'Decreased'\n        ELSE 'No Change'\n    END as ReputationChange\nFROM \n    UserReputation U\nLEFT JOIN \n    ActivePosts S ON U.UserId = S.OwnerUserId\nLEFT JOIN \n    PostHistoryDetails PH ON S.PostId = PH.PostId\nWHERE \n    (PH.RevisionCount > 5 OR S.CommentCount > 0)\nORDER BY \n    U.Reputation DESC, S.CreationDate DESC\nFETCH FIRST 100 ROWS ONLY;",
+                "rewritten_query": "WITH ActivePostIds AS (\n    SELECT Id\n    FROM Posts\n    WHERE CreationDate > TIMESTAMP '2024-10-01 12:34:56' - INTERVAL '30' DAY\n),\nUserReputation AS (\n    SELECT \n        U.Id AS UserId,\n        U.DisplayName,\n        U.Reputation,\n        U.CreationDate,\n        U.LastAccessDate,\n        U.Views,\n        LAG(U.Reputation, 1, 0) OVER (PARTITION BY U.Id ORDER BY U.CreationDate DESC) AS PreviousReputation\n    FROM \n        Users U\n    WHERE \n        U.Reputation > 100\n), \nActivePosts AS (\n    SELECT \n        P.Id AS PostId,\n        P.OwnerUserId,\n        P.PostTypeId,\n        P.Title,\n        P.CreationDate,\n        COALESCE(P.AcceptedAnswerId, -1) AS AcceptedAnswerId,\n        COALESCE(CC.CommentCount, 0) AS CommentCount,\n        COALESCE(UV.UpVotes, 0) AS UpVotes,\n        COALESCE(DV.DownVotes, 0) AS DownVotes\n    FROM \n        Posts P\n    JOIN ActivePostIds A ON P.Id = A.Id\n    LEFT JOIN (\n        SELECT C.PostId, COUNT(*) AS CommentCount\n        FROM Comments C\n        JOIN ActivePostIds A ON C.PostId = A.Id\n        GROUP BY C.PostId\n    ) CC ON P.Id = CC.PostId\n    LEFT JOIN (\n        SELECT V.PostId, COUNT(*) AS UpVotes\n        FROM Votes V\n        JOIN ActivePostIds A ON V.PostId = A.Id\n        WHERE V.VoteTypeId = 2\n        GROUP BY V.PostId\n    ) UV ON P.Id = UV.PostId\n    LEFT JOIN (\n        SELECT V.PostId, COUNT(*) AS DownVotes\n        FROM Votes V\n        JOIN ActivePostIds A ON V.PostId = A.Id\n        WHERE V.VoteTypeId = 3\n        GROUP BY V.PostId\n    ) DV ON P.Id = DV.PostId\n), \nPostHistoryDetails AS (\n    SELECT \n        H.PostId,\n        H.UserId,\n        PH.Name AS HistoryType,\n        COUNT(*) AS RevisionCount,\n        MAX(H.CreationDate) AS LastRevisionDate\n    FROM \n        PostHistory H\n    JOIN \n        PostHistoryTypes PH ON H.PostHistoryTypeId = PH.Id\n    JOIN \n        ActivePostIds A ON H.PostId = A.Id\n    GROUP BY \n        H.PostId, H.UserId, PH.Name\n)\nSELECT \n    U.UserId,\n    U.DisplayName,\n    U.Reputation,\n    U.LastAccessDate,\n    S.PostId,\n    S.Title as PostTitle,\n    S.CommentCount,\n    S.UpVotes,\n    S.DownVotes,\n    COALESCE(PH.HistoryType, 'No Modifications') AS LastHistoryType,\n    PH.RevisionCount,\n    PH.LastRevisionDate,\n    CASE \n        WHEN (U.Reputation - U.PreviousReputation) > 0 THEN 'Increased'\n        WHEN (U.Reputation - U.PreviousReputation) < 0 THEN 'Decreased'\n        ELSE 'No Change'\n    END as ReputationChange\nFROM \n    UserReputation U\nLEFT JOIN \n    ActivePosts S ON U.UserId = S.OwnerUserId\nLEFT JOIN \n    PostHistoryDetails PH ON S.PostId = PH.PostId\nWHERE \n    (PH.RevisionCount > 5 OR S.CommentCount > 0)\nORDER BY \n    U.Reputation DESC, S.CreationDate DESC\nFETCH FIRST 100 ROWS ONLY;",
+                "original_execution_time": 300,
+                "rewrite_execution_time": 10.761465787887573,
+                "speed_up": 0.9641284473737081,
+                "times_up": 27.877243296880717,
+                "rewrite_suggestion": [
+                    {
+                        "group": "CTE",
+                        "produced_suggestion": "Restructured the query using multiple CTEs to precompute aggregations and avoid redundant calculations."
+                    },
+                    {
+                        "group": "Predicate",
+                        "produced_suggestion": "Fixed column name case sensitivity issue by changing b.Date to b.date."
+                    },
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Changed LEFT JOIN to INNER JOIN for UserBadges to filter posts earlier in the execution plan."
+                    },
+                    {
+                        "group": "CTE",
+                        "produced_suggestion": "Replaced correlated subquery for AvgViewCountByType with a pre-computed CTE (RankInTypeAvg)."
+                    },
+                    {
+                        "group": "Others",
+                        "produced_suggestion": "Used column alias in ORDER BY clause instead of repeating the CASE expression."
+                    }
+                ]
+            }
+        ]
+    },
+    {
+        "category": 3,
+        "sqlstorm": [
+            {
+                "id": 27,
+                "equivalence": true,
+                "original_query": "SELECT     p.Id AS PostId,    p.Title,    p.CreationDate AS PostCreationDate,    p.ViewCount,    p.Score,    p.AnswerCount,    u.DisplayName AS OwnerDisplayName,    COUNT(DISTINCT v.Id) AS VoteCount,    COUNT(DISTINCT c.Id) AS CommentCount,    MAX(b.Date) AS LastBadgeDate,    COUNT(DISTINCT b.Id) AS BadgeCount FROM     Posts p JOIN     Users u ON p.OwnerUserId = u.Id LEFT JOIN     Votes v ON p.Id = v.PostId LEFT JOIN     Comments c ON p.Id = c.PostId LEFT JOIN     Badges b ON u.Id = b.UserId WHERE     p.CreationDate >= '2023-01-01'  GROUP BY     p.Id, p.Title, p.CreationDate, p.ViewCount, p.Score, p.AnswerCount, u.DisplayName ORDER BY     p.CreationDate DESC;",
+                "rewritten_query": "WITH FilteredPosts AS (\n    SELECT *\n    FROM Posts\n    WHERE CreationDate >= '2023-01-01'\n),\nVoteCounts AS (\n    SELECT \n        v.PostId, \n        COUNT(DISTINCT v.Id) AS VoteCount\n    FROM Votes v\n    JOIN FilteredPosts fp ON v.PostId = fp.Id\n    GROUP BY v.PostId\n),\nCommentCounts AS (\n    SELECT \n        c.PostId, \n        COUNT(DISTINCT c.Id) AS CommentCount\n    FROM Comments c\n    JOIN FilteredPosts fp ON c.PostId = fp.Id\n    GROUP BY c.PostId\n),\nBadgeInfo AS (\n    SELECT \n        b.UserId, \n        MAX(b.date) AS LastBadgeDate, \n        COUNT(DISTINCT b.Id) AS BadgeCount\n    FROM Badges b\n    WHERE b.UserId IN (SELECT DISTINCT p.OwnerUserId FROM FilteredPosts p)\n    GROUP BY b.UserId\n)\nSELECT \n    p.Id AS PostId, \n    p.Title, \n    p.CreationDate AS PostCreationDate, \n    p.ViewCount, \n    p.Score, \n    p.AnswerCount, \n    u.DisplayName AS OwnerDisplayName, \n    COALESCE(v.VoteCount, 0) AS VoteCount, \n    COALESCE(c.CommentCount, 0) AS CommentCount, \n    b.LastBadgeDate, \n    COALESCE(b.BadgeCount, 0) AS BadgeCount\nFROM FilteredPosts p\nJOIN Users u ON p.OwnerUserId = u.Id\nLEFT JOIN VoteCounts v ON p.Id = v.PostId\nLEFT JOIN CommentCounts c ON p.Id = c.PostId\nLEFT JOIN BadgeInfo b ON u.Id = b.UserId\nORDER BY p.CreationDate DESC;",
+                "original_execution_time": 300,
+                "rewrite_execution_time": 14.661059379577637,
+                "speed_up": 0.9511298020680745,
+                "times_up": 20.46236852555757,
+                "rewrite_suggestion": [
+                    {
+                        "group": "CTE",
+                        "produced_suggestion": "Use CTEs to pre-filter posts by date before joining with other tables"
+                    },
+                    {
+                        "group": "Join",
+                        "produced_suggestion": "Pre-aggregate Comments and Votes data before joining to reduce the number of rows processed"
+                    },
+                    {
+                        "group": "Predicate",
+                        "produced_suggestion": "Filter Comments and Votes tables to only include data for relevant posts"
+                    },
+                    {
+                        "group": "Others",
+                        "produced_suggestion": "Use COALESCE to handle NULL values for posts without comments or votes"
+                    }
+                ]
+            }
+        ]
+    }
+]
