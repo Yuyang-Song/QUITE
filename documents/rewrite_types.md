@@ -1,4 +1,4 @@
-# Effective SQL Rewrite Strategies — QUITE Benchmark Study
+# Effective SQL Rewrite Strategies 
 
 To analyze the **most effective rewrite types** observed in the **QUITE benchmark**,  
 we collected all queries across four benchmark suites (`DSB`, `TPC-H`, `Calcite`, and `SQLStorm`)   where the **rewrite speedup exceeded 10×** and **query equivalence = true**.  
