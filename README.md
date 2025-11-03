@@ -227,7 +227,7 @@ python run.py \
 | Parameter | Description | Default |
 |-----------|-------------|---------|
 | `--input_path` | Input JSON file path containing queries | Required |
-| `--output_dir` | Output directory for results | `/root/syy/QUITE/output` |
+| `--output_dir` | Output directory for results | `/root/QUITE/output` |
 | `--schema_file` | Path to the database schema file | Required |
 | `--enable_rewriter` | Enable query rewriter module | False |
 | `--enable_recommender` | Enable hint recommender module | False |
@@ -242,48 +242,48 @@ The system will display real-time progress with tqdm progress bars:
 
 ```
 🚀 QUITE System Starting...
-📂 Input: /root/syy/QUITE/dataset/queries/tpch_test.json
-📁 Output: /root/syy/QUITE/output/test
+📂 Input: /root/QUITE/dataset/queries/tpch_test.json
+📁 Output: /root/QUITE/output/test
 🔄 Rewriter: Enabled
 💡 Recommender: Enabled
 📝 Rewriter logs: Enabled (batch size forced to 1)
 
 📁 Directory structure created:
-   rewriter_temp: /root/syy/QUITE/output/test/rewriter_temp
-   recommender_temp: /root/syy/QUITE/output/test/recommender_temp
-   output: /root/syy/QUITE/ofutput/test
+   rewriter_temp: /root/QUITE/output/test/rewriter_temp
+   recommender_temp: /root/QUITE/output/test/recommender_temp
+   output: /root/QUITE/ofutput/test
 
 ============================================================
 🔄 Starting Query Rewriter
 ============================================================
 📊 Processing 10 queries with batch size 1
-📁 Temp directory: /root/syy/QUITE/output/test/rewriter_temp
+📁 Temp directory: /root/QUITE/output/test/rewriter_temp
 📝 Save logs: Yes
 
 🔄 Processing Query 1/10 (ID: query_1): 100%|██████████| 10/10 [02:34<00:00, 15.4s/query]
 
 ✅ Query Rewriter completed! Processed 10 queries in 10 batches
-✅ Merged 10 batch files into /root/syy/QUITE/output/test/rewritten_queries.json
+✅ Merged 10 batch files into /root/QUITE/output/test/rewritten_queries.json
 📊 Total queries processed: 10
 
 ============================================================
 💡 Starting Hint Recommender
 ============================================================
-📖 Loading data from /root/syy/QUITE/output/test/rewritten_queries.json
+📖 Loading data from /root/QUITE/output/test/rewritten_queries.json
 📊 Processing 10 queries with batch size 3
 
 💡 Processing Hint 1/10 (ID: query_1): 100%|██████████| 10/10 [01:45<00:00, 10.5s/hint]
 
 ✅ Hint Recommender completed! Processed 10 queries in 4 batches
-✅ Merged 4 batch files into /root/syy/QUITE/output/test/recommended_hints.json
+✅ Merged 4 batch files into /root/QUITE/output/test/recommended_hints.json
 📊 Total queries processed: 10
 
 ============================================================
 🎉 QUITE System Completed!
 ============================================================
-📝 Query Rewriter Output: /root/syy/QUITE/output/test/rewritten_queries.json
-💡 Hint Recommender Output: /root/syy/QUITE/output/test/recommended_hints.json
-📁 Output Directory: /root/syy/QUITE/output/test
+📝 Query Rewriter Output: /root/QUITE/output/test/rewritten_queries.json
+💡 Hint Recommender Output: /root/QUITE/output/test/recommended_hints.json
+📁 Output Directory: /root/QUITE/output/test
 
 📊 Final output files:
    rewritten_queries.json: 3,396 bytes
