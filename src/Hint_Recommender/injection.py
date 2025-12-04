@@ -111,7 +111,7 @@ class Hint_Recommender:
         <Steps>
         1. Analyze the SQL physical plan and identify the most impactful costly operations that can be addressed using pg_hint_plan hints. Do not modify the query structure, scans, indexes, parallelism, or other advanced features—focus only on hints.
 
-        2. Concentrate on the following hint categories. Report only the most critical items (Recommend MAX 3 hints):
+        2. Concentrate on the following hint categories. Report only the most critical items (as few as possible):
             ## Join Methods:  (NestLoop is used for small table driving large table, HashJoin is used for large data volume)
                 Hash join, /*+ NoHashJoin(table table[ table...]) */ 
                 No Nested loop join, /*+ NoNestLoop(table table[ table...]) */
@@ -350,7 +350,7 @@ class Hint_Recommender:
             hint_cost, hint_operation = self.get_cost_estimation(pg_hint_query)
             print(f"hint_cost is : {hint_cost}")
 
-            if hint_cost > original_cost * 1.1:
+            if hint_cost > original_cost:
                 pg_hint_query = input_sql  # If the cost of the hint is higher than the original cost, then do not use the hint
                 hint_cost = original_cost
             else:
