@@ -320,12 +320,63 @@ output/
 - `Queries Path`: the rewritten queries path from QUITE system.
 - `Storage Path`: the file with SQL output after evaluation.
 - `Filtered Path`: processed experimental data file from storage path.
-#### 5.1 Using Built-in Evaluation Tools
+
+#### 5.1 Database Restart Requirement
+
+⚠️ **Important:** The evaluation script restarts PostgreSQL between query executions to clear database caches for fair performance comparison. This requires system permissions:
 
 ```bash
-# Evaluate the rewrite effectiveness using the provided script in QUITE root path
-chmod +x evaluation.sh
+# Linux (systemd)
+sudo systemctl restart postgresql
+
+# Linux (init.d)  
+sudo service postgresql restart
+
+# macOS (Homebrew)
+brew services restart postgresql
+```
+
+If you don't have permission to restart PostgreSQL (e.g., shared database, cloud database, or restricted environment), use the `--no_restart` mode.
+
+#### 5.2 Using Built-in Evaluation Tools
+
+**Option 1: Normal Mode (with database restart)**
+```bash
+# Requires database restart permission
+chmod +x ./scripts/evaluation.sh
 bash ./scripts/evaluation.sh
+```
+
+**Option 2: No-Restart Mode (for restricted environments)**
+```bash
+# Use this if you cannot restart PostgreSQL
+chmod +x ./scripts/evaluation.sh
+bash ./scripts/evaluation.sh --no_restart
+```
+
+The `--no_restart` mode:
+- Skips database restart operations
+- Runs each query **5 times** instead of 3
+- Removes the **highest and lowest** execution times
+- Averages the remaining 3 runs to mitigate cold-start effects
+
+#### 5.3 Direct Python Execution
+
+```bash
+# Normal mode
+python evaluation.py \
+    -q output/test/rewritten_queries.json \
+    -s experiments_results/EXP_result.json \
+    -f experiments_results/filtered_result.json \
+    -t 300
+
+# No-restart mode
+python evaluation.py \
+    -q output/test/rewritten_queries.json \
+    -s experiments_results/EXP_result.json \
+    -f experiments_results/filtered_result.json \
+    -t 300 \
+    --no_restart
 ```
 
 
