@@ -28,27 +28,27 @@
         "original_query": "WITH UserBadges AS (\n    SELECT \n        U.Id AS UserId,\n        COUNT(B.Id) AS TotalBadges,\n        SUM(CASE WHEN B.Class = 1 THEN 1 ELSE 0 END) AS GoldBadges,\n        SUM(CASE WHEN B.Class = 2 THEN 1 ELSE 0 END) AS SilverBadges,\n        SUM(CASE WHEN B.Class = 3 THEN 1 ELSE 0 END) AS BronzeBadges\n    FROM \n        Users U\n    LEFT JOIN \n        Badges B ON U.Id = B.UserId\n    GROUP BY \n        U.Id\n),\nUserPosts AS (\n    SELECT \n        P.OwnerUserId,\n        COUNT(P.Id) AS TotalPosts,\n        SUM(CASE WHEN P.PostTypeId = 1 THEN 1 ELSE 0 END) AS TotalQuestions,\n        SUM(CASE WHEN P.PostTypeId = 2 THEN 1 ELSE 0 END) AS TotalAnswers,\n        AVG(P.Score) AS AvgScore\n    FROM \n        Posts P\n    GROUP BY \n        P.OwnerUserId\n),\nRankedUsers AS (\n    SELECT \n        U.Id,\n        U.DisplayName,\n        UB.TotalBadges,\n        UP.TotalPosts,\n        UP.TotalQuestions,\n        UP.TotalAnswers,\n        UP.AvgScore,\n        ROW_NUMBER() OVER (ORDER BY UB.TotalBadges DESC, UP.TotalPosts DESC) AS UserRank\n    FROM \n        Users U\n    LEFT JOIN \n        UserBadges UB ON U.Id = UB.UserId\n    LEFT JOIN \n        UserPosts UP ON U.Id = UP.OwnerUserId\n)\nSELECT \n    R.UserRank,\n    R.DisplayName,\n    COALESCE(R.TotalBadges, 0) AS TotalBadges,\n    COALESCE(R.TotalPosts, 0) AS TotalPosts,\n    COALESCE(R.TotalQuestions, 0) AS TotalQuestions,\n    COALESCE(R.TotalAnswers, 0) AS TotalAnswers,\n    COALESCE(R.AvgScore, 0) AS AvgScore,\n    CASE \n        WHEN R.AvgScore IS NULL THEN 'No Posts'\n        WHEN R.AvgScore > 10 THEN 'High Scorer'\n        WHEN R.AvgScore BETWEEN 1 AND 10 THEN 'Average Scorer'\n        ELSE 'Low Scorer'\n    END AS ScoreCategory\nFROM \n    RankedUsers R\nWHERE \n    R.TotalPosts > 5\nORDER BY \n    R.UserRank\nOFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY",
         "rewritten_query": "SELECT \n    ROW_NUMBER() OVER (ORDER BY COALESCE(UB.TotalBadges,0) DESC, COALESCE(UP.TotalPosts,0) DESC) AS UserRank,\n    U.DisplayName,\n    COALESCE(UB.TotalBadges, 0) AS TotalBadges,\n    COALESCE(UP.TotalPosts, 0) AS TotalPosts,\n    COALESCE(UP.TotalQuestions, 0) AS TotalQuestions,\n    COALESCE(UP.TotalAnswers, 0) AS TotalAnswers,\n    COALESCE(UP.AvgScore, 0) AS AvgScore,\n    CASE \n        WHEN UP.AvgScore IS NULL THEN 'No Posts'\n        WHEN UP.AvgScore > 10 THEN 'High Scorer'\n        WHEN UP.AvgScore BETWEEN 1 AND 10 THEN 'Average Scorer'\n        ELSE 'Low Scorer'\n    END AS ScoreCategory\nFROM \n    Users U\nLEFT JOIN (\n    SELECT \n        UserId,\n        COUNT(*) AS TotalBadges\n    FROM \n        Badges\n    GROUP BY \n        UserId\n) UB ON U.Id = UB.UserId\nLEFT JOIN (\n    SELECT \n        OwnerUserId,\n        COUNT(*) AS TotalPosts,\n        COUNT(*) FILTER (WHERE PostTypeId = 1) AS TotalQuestions,\n        COUNT(*) FILTER (WHERE PostTypeId = 2) AS TotalAnswers,\n        AVG(Score) AS AvgScore\n    FROM \n        Posts\n    GROUP BY \n        OwnerUserId\n) UP ON U.Id = UP.OwnerUserId\nWHERE \n    COALESCE(UP.TotalPosts, 0) > 5\nORDER BY \n    UserRank\nOFFSET 0 ROWS FETCH NEXT 10 ROWS ONLY;",
         "time_cost": 239.18584084510803,
-                "rewrite_suggestion": [
-            {
-                "group": "CTE",
-                "produced_suggestion": "Eliminated CTEs and used subqueries to allow the optimizer to merge operations"
-            },
-            {
-                "group": "Join",
-                "produced_suggestion": "Pushed the filter condition (TotalPosts > 5) earlier in the query execution by applying it in the HAVING clause of the Posts subquery"
-            },
-            {
-                "group": "Others",
-                "produced_suggestion": "Applied the window function only on the filtered set of users with more than 5 posts, reducing the number of rows processed"
-            },
-            {
-                "group": "Predicate",
-                "produced_suggestion": "Removed unused badge class breakdowns (GoldBadges, SilverBadges, BronzeBadges) that were calculated but not used in the final output"
-            },
-            {
-                "group": "Others",
-                "produced_suggestion": "Used the FILTER clause for conditional aggregation instead of CASE expressions, which is more efficient"
-            }
+            "rewrite_suggestion": [
+                {
+                    "group": "CTE",
+                    "produced_suggestion": "Eliminated CTEs and used subqueries to allow the optimizer to merge operations"
+                },
+                {
+                    "group": "Join",
+                    "produced_suggestion": "Pushed the filter condition (TotalPosts > 5) earlier in the query execution by applying it in the HAVING clause of the Posts subquery"
+                },
+                {
+                    "group": "Others",
+                    "produced_suggestion": "Applied the window function only on the filtered set of users with more than 5 posts, reducing the number of rows processed"
+                },
+                {
+                    "group": "Predicate",
+                    "produced_suggestion": "Removed unused badge class breakdowns (GoldBadges, SilverBadges, BronzeBadges) that were calculated but not used in the final output"
+                },
+                {
+                    "group": "Others",
+                    "produced_suggestion": "Used the FILTER clause for conditional aggregation instead of CASE expressions, which is more efficient"
+                }
         ]
     },
     {

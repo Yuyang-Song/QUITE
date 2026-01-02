@@ -351,7 +351,7 @@ We compare QUITE with state-of-the-art methods on different benchmarks (TPC-H, D
 ## Rewrite Beyond Rules Discussion
 We have collected and analyzed a set of high-impact rewrite examples and integrated them into our [TPC-H examples](./documents/examples/TPC-H), [DSB examples](./documents/examples/DSB) and [Calcite examples](./documents/examples/Calcite)
 
-In the course of rewriting with QUITE, we discovered a range of strategies previously unmodeled by our rule set. These newly identified techniques can be found in our more detailed [Appendix](./documents/Detailed_Appendix.pdf).
+In the course of rewriting with QUITE, we discovered a range of strategies previously unmodeled by our rule set. These newly identified techniques can be found in our more detailed [Appendix](./documents/QUITE_Appendix.pdf).
 
 
 
@@ -359,14 +359,20 @@ In the course of rewriting with QUITE, we discovered a range of strategies previ
 ## Code Structure
 #### 📊 Data & Configuration
 - **`config_file/`**: Environment configuration and API keys
-  - `.env`: LLM API keys, database connection settings
+  - `.env`: LLM API keys, database connection settings, project root path
 - **`dataset/`**: Benchmark datasets and schemas for evaluation
   - `queries/`: Query sets for TPC-H, DSB, and Calcite benchmarks
   - `schemas/`: Database schemas for different benchmarks
 
-#### 📁 Documents % Examples
-- **`documents/Detailed_Appendix.pdf`**: Detailed MDP-based Reasoning Agent construction and rewritten examples beyond rule expressions
-- **`documents/examples/`**: Analysis of Rewirtten queries in experiment for representative examples
+#### 📁 Documents & Examples
+- **`documents/`**: Documentation and analysis materials
+  - `QUITE_Appendix.pdf`: Detailed MDP-based Reasoning Agent construction and rewritten examples beyond rule expressions
+  - `rewrite_types.md`: Classification and description of SQL rewrite types
+  - `effective_rewrite_types/`: JSON files categorizing effective rewrite strategies (CTE, Constant, Join, Predicate, Others)
+  - `examples/`: Analysis of rewritten queries for representative examples
+    - `TPC-H/`: TPC-H benchmark query examples
+    - `DSB/`: DSB benchmark query examples  
+    - `Calcite/`: Calcite benchmark query examples
 
 #### 📋 Automation Scripts
 - **`scripts/`**: Execution scripts for different scenarios
