@@ -46,7 +46,7 @@ Note: For the Rewrite Middleware dependencies installation, we have simplified a
 
 **Benchmarks:**
 
-We use TPC-H, DSB and Clacite to evaluate our system's performance. You can find the construction methods in the following links: [TPC-H](https://github.com/gregrahn/tpch-kit), [DSB](https://github.com/microsoft/dsb), [Calcite](https://github.com/eidos06/SlabCity/tree/main).
+We use TPC-H, DSB, Clacite and SQLStorm to evaluate our system's performance. You can find the construction methods in the following links: [TPC-H](https://github.com/gregrahn/tpch-kit), [DSB](https://github.com/microsoft/dsb), [Calcite](https://github.com/eidos06/SlabCity/tree/main), [SQLStorm](https://github.com/SQL-Storm/SQLStorm).
 
 <!-- 3. **Database Setup:**
 ```bash
