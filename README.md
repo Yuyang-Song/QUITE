@@ -427,10 +427,11 @@ In the course of rewriting with QUITE, we discovered a range of strategies previ
 
 #### 📋 Automation Scripts
 - **`scripts/`**: Execution scripts for different scenarios
+  - `setup_env.sh`: Common environment setup script (auto-detects project root)
   - `run_quite.sh`: Complete pipeline with both rewriter and recommender
   - `run_quite_only_query_rewrite.sh`: Query rewriting only
   - `run_quite_only_hint_injection.sh`: Hint recommendation only
-  - `performance_evaluation.sh`: Evaluate the rewrite result in real DBMS
+  - `evaluation.sh`: Evaluate the rewrite result in real DBMS 
 
 #### 🔧 LLM Agent-based Query Rewriter
 - **`src/Query_Rewriter/`**: Main query rewriting engine
@@ -450,6 +451,7 @@ In the course of rewriting with QUITE, we discovered a range of strategies previ
 
 #### 🔧 Utilities
 - **`src/utils/`**: Shared utilities and base classes
+  - `path_config.py`: ensures scripts run correctly from any location within the project
   - `agent_template.py`: Base classes for LLM agents (MessageQueue, MemoryWindow, etc.)
   - `llm_client.py`: Unified LLM client interface supporting multiple models
   - `data_distribution.py`: Database statistics storage and management
