@@ -6,22 +6,25 @@ import asyncio
 import time
 import argparse
 import glob
-sys.path.append('../')
-sys.path.append('./')
+from pathlib import Path
+
+# Setup project paths first
+_current_file = Path(__file__).resolve()
+_project_root = _current_file.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+from src.utils.path_config import PROJECT_ROOT, setup_python_path, load_project_env
+setup_python_path()
+load_project_env()
 
 from tqdm import tqdm
-from pathlib import Path
-from dotenv import load_dotenv
 from src.utils.data_distribution import get_statistics_list, get_available_databases
 from src.utils.get_data_statistics import get_data_statistics
 from src.Rewrite_Middleware.middleware import DBMS
 from src.utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue
 from src.Query_Rewriter.finite_state_machine import QueryRewriter
-from src.Hint_Recommender.injection import Hint_Recommender
-
-PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[2]))
-LOAD_PATH = PROJECT_ROOT / "config_file" / ".env"
-load_dotenv(dotenv_path= LOAD_PATH)   
+from src.Hint_Recommender.injection import Hint_Recommender   
 
 def parse_arguments():
     """Parse parameters from command line or use default values"""

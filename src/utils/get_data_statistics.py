@@ -4,9 +4,9 @@ import json
 import re
 from pathlib import Path
 
-sys.path.append('../')
-sys.path.append('../../')
-sys.path.append('./')
+# Setup project paths
+from src.utils.path_config import setup_python_path
+setup_python_path()
 
 from src.Rewrite_Middleware.middleware import DBMS
 from src.utils.data_distribution import DATABASE_STATISTICS

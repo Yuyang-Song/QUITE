@@ -1,9 +1,10 @@
 import asyncio
 import sys
-sys.path.append('../')
-sys.path.append('../../')
-sys.path.append('./')
 import threading
+
+# Setup project paths
+from src.utils.path_config import setup_python_path
+setup_python_path()
 
 from src.Rewrite_Middleware.middleware import DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Knowledge_Base_Tool, Equivalence_Check_Tool, DBMS
 from src.Rewrite_Middleware.Agent_Memory_Buffer.memory_buffer import AgentMemoryBuffer, OutputCollector, create_memory_buffer

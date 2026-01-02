@@ -15,11 +15,11 @@ import time
 import textwrap
 import logging
 from typing import List, Dict
-from dotenv import load_dotenv
 
-PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[3]))
-LOAD_PATH = PROJECT_ROOT / "config_file" / ".env"
-load_dotenv(dotenv_path=LOAD_PATH)
+# Setup project paths
+from src.utils.path_config import PROJECT_ROOT, setup_python_path, load_project_env
+setup_python_path()
+load_project_env()
 
 class Structured_Knowledge_Base:
     def __init__(self, folder_path, json_file_path, document_store_path=None):

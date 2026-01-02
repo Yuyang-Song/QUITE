@@ -15,8 +15,6 @@ from dataclasses import dataclass
 from pydantic import BaseModel
 from dataclasses import replace
 
-sys.path.append('../')
-sys.path.append('./')
 from src.utils.llm_client import GPT
     
 class MessageContent(BaseModel):

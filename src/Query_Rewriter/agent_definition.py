@@ -1,6 +1,5 @@
 
 from openai import OpenAI, AsyncOpenAI
-from dotenv import load_dotenv
 import json
 import os
 import re
@@ -9,13 +8,14 @@ import sys
 import json
 import textwrap
 from typing import List, Dict, Set, Optional, Union
-sys.path.append('../')
-sys.path.append('./')
+
+# Setup project paths
+from src.utils.path_config import setup_python_path, load_project_env
+setup_python_path()
+load_project_env()
 
 from src.utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue,  Agent
 from src.utils.llm_client import GPT
-
-from dotenv import load_dotenv
 
 class ReasoningAgent(Agent):
     """MDP-based Reasoning Agent"""

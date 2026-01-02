@@ -8,18 +8,16 @@ import tempfile
 import signal
 from pathlib import Path
 import sys
-sys.path.append('../')
-sys.path.append('../../')
-sys.path.append('./')
-from dotenv import load_dotenv
+
+# Setup project paths
+from src.utils.path_config import PROJECT_ROOT, setup_python_path, load_project_env
+setup_python_path()
+load_project_env()
+
 from typing import List, Dict,Any, Optional,Tuple
 from psycopg2.extras import RealDictCursor
 from src.Rewrite_Middleware.Structured_Knowledge_Base.knowledge_base import Structured_Knowledge_Base
-from typing import List, Dict, Any
-
-PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[2]))
-LOAD_PATH = PROJECT_ROOT / "config_file" / ".env"
-load_dotenv(dotenv_path= LOAD_PATH)   
+from typing import List, Dict, Any   
 
 
 class DBMS:

@@ -2,12 +2,14 @@
 
 # QUITE Performance Evaluation Script
 
-# Make sure you execute this script in the QUITE root directory like: /root/exp/QUITE/
+# Source the common environment setup
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+source "$SCRIPT_DIR/setup_env.sh"
 
-# Usage: bash ./scripts/evaluation.sh
-QUERIES_PATH="./output/test/rewritten_queries.json"
-STORAGE_PATH="./experiments_results/EXP_result_test.json"
-FILTERED_PATH="./experiments_results/filtered_result_test.json"
+# Path variables (now using PROJECT_ROOT from setup_env.sh)
+QUERIES_PATH="${PROJECT_ROOT}/output/test/rewritten_queries.json"
+STORAGE_PATH="${PROJECT_ROOT}/experiments_results/EXP_result_test.json"
+FILTERED_PATH="${PROJECT_ROOT}/experiments_results/filtered_result_test.json"
 TIMEOUT=300
 
 # Execute evaluation

@@ -1,16 +1,22 @@
 import json
 from openai import OpenAI
-from dotenv import load_dotenv
 import sys
 import os
+from pathlib import Path
 from psycopg2.extras import RealDictCursor
 from typing import List, Dict,Any, Optional,Tuple
 import textwrap
 from tqdm import tqdm 
 
-current_dir = os.path.dirname(os.path.abspath(__file__))
-project_root = os.path.join(current_dir, '..', '..', '..')
-sys.path.insert(0, project_root)
+# Setup project paths
+_current_file = Path(__file__).resolve()
+_project_root = _current_file.parents[3]
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+from src.utils.path_config import setup_python_path, load_project_env
+setup_python_path()
+load_project_env()
 
 from src.utils.llm_client import GPT
 from src.utils.data_distribution import get_statistics_list, get_available_databases

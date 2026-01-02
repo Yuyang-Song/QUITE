@@ -11,17 +11,21 @@ import sys
 import unittest
 import asyncio
 from pathlib import Path
-sys.path.append('../')
-sys.path.append('./')
+
+# Setup project paths first
+_current_file = Path(__file__).resolve()
+_project_root = _current_file.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
+
+from src.utils.path_config import PROJECT_ROOT, setup_python_path, load_project_env
+setup_python_path()
+load_project_env()
+
 from src.Rewrite_Middleware.middleware import Knowledge_Base_Tool, DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Equivalence_Check_Tool, DBMS
 from src.utils.data_distribution import get_statistics_list, get_available_databases
 from src.utils.get_data_statistics import get_data_statistics
-from dotenv import load_dotenv
 from src.utils.llm_client import GPT
-
-PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[2]))
-LOAD_PATH = PROJECT_ROOT / "config_file" / ".env"
-load_dotenv(dotenv_path= LOAD_PATH)   
 
 print(f"Project root: {PROJECT_ROOT}")
 

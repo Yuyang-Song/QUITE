@@ -1,24 +1,21 @@
 import sys
-sys.path.append("../")
-sys.path.append("./")
-sys.path.append("../../")   
 import re
 import json
 import os
 from pathlib import Path
-from dotenv import load_dotenv
 from typing import List, Dict, Any, Tuple, Optional
+import textwrap
+
+# Setup project paths
+from src.utils.path_config import PROJECT_ROOT, setup_python_path, load_project_env
+setup_python_path()
+load_project_env()
+
 from src.utils.llm_client import GPT
 from src.Rewrite_Middleware.middleware import DBMS
 from src.utils.data_distribution import get_statistics_list, get_available_databases
 from src.utils.get_data_statistics import get_data_statistics
-from src.Rewrite_Middleware.Agent_Memory_Buffer.memory_buffer import OutputCollector
-import textwrap
-
-
-PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[2]))
-LOAD_PATH = PROJECT_ROOT / "config_file" / ".env"
-load_dotenv(dotenv_path= LOAD_PATH)   
+from src.Rewrite_Middleware.Agent_Memory_Buffer.memory_buffer import OutputCollector   
 
 class Hint_Recommender:
     

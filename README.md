@@ -162,7 +162,7 @@ We provide three convenient scripts for different scenarios.
 ```bash
 # Check the .sh file configurations
 
-# Run the complete pipeline and make sure you are under the QUITE root path
+# Run the complete pipeline (can be executed from any location within QUITE)
 chmod +x ./scripts/run_quite.sh
 bash ./scripts/run_quite.sh
 ```
@@ -171,7 +171,7 @@ bash ./scripts/run_quite.sh
 ```bash
 # Check the .sh file configurations
 
-# Run only the query rewriter and make sure you are under the QUITE root path
+# Run only the query rewriter (can be executed from any location within QUITE)
 chmod +x ./scripts/run_quite_only_query_rewrite.sh
 bash ./scripts/run_quite_only_query_rewrite.sh
 ```
@@ -180,7 +180,7 @@ bash ./scripts/run_quite_only_query_rewrite.sh
 ```bash
 # Check the .sh file configurations
 
-# Run only the hint recommender (requires existing rewritten queries) and make sure you are under the QUITE root path
+# Run only the hint recommender (can be executed from any location within QUITE)
 chmod +x ./scripts/run_quite_only_hint_injection.sh
 bash ./scripts/run_quite_only_hint_injection.sh
 ```

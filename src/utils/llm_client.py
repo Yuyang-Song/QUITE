@@ -16,11 +16,6 @@ import sys
 import json
 import tiktoken
 
-# Add parent directories to Python path for relative imports
-sys.path.append('../')
-sys.path.append('./utils')
-sys.path.append('./')
-
 
 
 class GPT:
