@@ -8,50 +8,102 @@ import sys
 import os
 from pathlib import Path
 import collections
+import re
+sys.path.append('../')
+sys.path.append('./')
 
-# Setup project paths first
-_current_file = Path(__file__).resolve()
-_project_root = _current_file.parent
-if str(_project_root) not in sys.path:
-    sys.path.insert(0, str(_project_root))
-
-from src.utils.path_config import PROJECT_ROOT, setup_python_path, load_project_env
-setup_python_path()
-load_project_env()
-
+from dotenv import load_dotenv
 from decimal import Decimal
 from datetime import date
-import argparse 
+import argparse
+from pathlib import Path
 
-# ============================================================================
-# IMPORTANT: Database Restart Warning
-# ============================================================================
-# This evaluation script uses `systemctl restart postgresql` (or similar) to 
-# restart the PostgreSQL database between query executions to ensure fair 
-# comparison by clearing database caches.
-#
-# If you don't have permission to restart PostgreSQL (e.g., shared database, 
-# cloud database, or restricted environment), use the --no_restart flag:
-#   python evaluation.py ... --no_restart
-#
-# The --no_restart mode will:
-#   - Skip database restart operations
-#   - Run each query 5 times instead of 3
-#   - Remove the highest and lowest execution times
-# ============================================================================
+PROJECT_ROOT = Path(os.getenv("PROJECT_ROOT", Path(__file__).resolve().parents[0]))
+LOAD_PATH = PROJECT_ROOT / "config_file" / ".env"
+load_dotenv(dotenv_path= LOAD_PATH)   
+
+print(f"Project root: {PROJECT_ROOT}") 
 
 class Evaluation():
-    def __init__(self, evaluation_queries_path, result_storage_path, filtered_path, timeout=300, no_restart=False):
+    def __init__(self,evaluation_queries_path,result_storage_path,filtered_path,timeout = 300):
         self.evaluation_queries_path = evaluation_queries_path
         self.result_storage_path = result_storage_path
         self.filtered_path = filtered_path
         self.timeout = timeout
-        self.no_restart = no_restart
+
+    def has_outer_order_by(self, sql):
+        """
+        Detect if the outermost level of SQL has ORDER BY, excluding ORDER BY in subqueries and window functions.
+        Determines the presence of ORDER BY at the outermost level by removing content within parentheses.
+        """
+        # Remove string literals (single and double quotes)
+        sql_no_strings = re.sub(r"'[^']*'", '', sql)
+        sql_no_strings = re.sub(r'"[^"]*"', '', sql_no_strings)
         
-        # Set iteration count based on restart mode
-        # no_restart mode: 5 iterations, remove max/min, average remaining 3
-        # normal mode: 3 iterations, average all
-        self.iteration_count = 5 if no_restart else 3
+        # Remove comments
+        sql_no_comments = re.sub(r'--.*?$', '', sql_no_strings, flags=re.MULTILINE)
+        sql_no_comments = re.sub(r'/\*.*?\*/', '', sql_no_comments, flags=re.DOTALL)
+        
+        # Remove all content within parentheses (including subqueries, window functions, etc.)
+        # Recursively remove until no parentheses remain
+        prev_sql = None
+        outer_sql = sql_no_comments
+        while prev_sql != outer_sql:
+            prev_sql = outer_sql
+            outer_sql = re.sub(r'\([^()]*\)', '', outer_sql)
+        
+        # Detect ORDER BY in the remaining outermost SQL
+        return bool(re.search(r'\bORDER\s+BY\b', outer_sql, re.IGNORECASE))
+
+    def make_hashable(self, obj):
+        """
+        Convert unhashable types (dict, list) to hashable types (frozenset, tuple).
+        Used for collections.Counter comparison.
+        """
+        if isinstance(obj, dict):
+            return frozenset((k, self.make_hashable(v)) for k, v in sorted(obj.items()))
+        elif isinstance(obj, list):
+            return tuple(self.make_hashable(item) for item in obj)
+        elif isinstance(obj, tuple):
+            return tuple(self.make_hashable(item) for item in obj)
+        elif isinstance(obj, set):
+            return frozenset(self.make_hashable(item) for item in obj)
+        return obj
+
+    def convert_results_for_comparison(self, results):
+        """
+        Convert query results to a format suitable for Counter comparison.
+        """
+        if results is None:
+            return None
+        return [self.make_hashable(row) for row in results]
+
+    def check_equivalence(self, original_query, original_result, rewritten_result):
+        """
+        Check if two query results are equivalent.
+        - If the original query has ORDER BY at the outermost level, strictly compare order
+        - Otherwise, only compare content (ignoring order)
+        """
+        if original_result is None or rewritten_result is None:
+            return False
+        
+        try:
+            if self.has_outer_order_by(original_query):
+                # Has outermost ORDER BY, need to strictly compare order
+                original_converted = self.convert_results_for_comparison(original_result)
+                rewritten_converted = self.convert_results_for_comparison(rewritten_result)
+                return original_converted == rewritten_converted
+            else:
+                # No outermost ORDER BY, only compare set content (ignoring order)
+                original_converted = self.convert_results_for_comparison(original_result)
+                rewritten_converted = self.convert_results_for_comparison(rewritten_result)
+                original_counts = collections.Counter(original_converted)
+                rewritten_counts = collections.Counter(rewritten_converted)
+                return original_counts == rewritten_counts
+        except TypeError as e:
+            # If there are still unhashable types, log the error and return False
+            print(f"Error during equivalence check (unhashable type): {e}")
+            return False
 
     def connect_to_database(self, retries=5, wait_time=5):
         db_name = os.getenv("DB_NAME")
@@ -99,42 +151,14 @@ class Evaluation():
         return obj
     
     def restart_postgresql(self):
-        """
-        Restart PostgreSQL to clear database caches.
-        
-        This function requires appropriate system permissions:
-        - On Linux: sudo systemctl restart postgresql
-        - On macOS: brew services restart postgresql
-        - On Windows: net stop postgresql && net start postgresql
-        
-        If you don't have restart permissions, use --no_restart flag.
-        """
-        if self.no_restart:
-            print("⚠️  Database restart skipped (--no_restart mode)")
-            return
-            
-        print("🔄 Restarting PostgreSQL to clear caches...")
-        # Try different restart commands based on the system
-        commands = [
-            ["systemctl", "restart", "postgresql"],      # Linux with systemd
-            ["service", "postgresql", "restart"],         # Linux with init.d
-            ["brew", "services", "restart", "postgresql"], # macOS with Homebrew
-        ]
-        
-        for cmd in commands:
-            try:
-                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
-                if result.returncode == 0:
-                    print(f"✅ PostgreSQL restarted successfully using: {' '.join(cmd)}")
-                    time.sleep(3)  # wait for PostgreSQL to be fully up
-                    return
-            except (subprocess.TimeoutExpired, FileNotFoundError):
-                continue
-        
-        print("⚠️  Warning: Could not restart PostgreSQL. Consider using --no_restart mode.")
-        print("   Manual restart commands:")
-        print("   - Linux: sudo systemctl restart postgresql")
-        print("   - macOS: brew services restart postgresql")
+        result = subprocess.run(["service", "postgresql", "restart"], capture_output=True, text=True)
+        # check if the command was executed successfully
+        if result.returncode == 0:
+            print("PostgreSQL service restarted successfully.")
+            # wait a few seconds to ensure PostgreSQL service is fully up
+            time.sleep(3)  # wait for 3 seconds
+        else:
+            print(f"Failed to restart PostgreSQL service. Error: {result.stderr}")
 
     def execute_query(self, conn, cursor, query, timeout,return_flag=False):
         try:
@@ -165,7 +189,8 @@ class Evaluation():
                     pass
                 print(f"Query execution exceeded {timeout} seconds and was terminated.")
                 # self.restart_postgresql()
-                return -2, -2
+                # Respect return_flag so non-init iterations get a scalar, not a tuple
+                return (-2, -2) if return_flag else -2
             else:
                 try:
                     conn.rollback()
@@ -173,7 +198,7 @@ class Evaluation():
                     pass
                 print(f"Error exe cuting query: {e}")
                 # self.restart_postgresql()
-                return None
+                return (-1, None) if return_flag else -1
         
         except psycopg2.Error as e:
             try:
@@ -181,10 +206,7 @@ class Evaluation():
             except:
                 pass
             print(f"Error executing query: {e}")
-            if return_flag == False:
-                return -1  
-            else:
-                return None
+            return (-1, None) if return_flag else -1
             
         except Exception as e:
             try:
@@ -201,42 +223,14 @@ class Evaluation():
 
 
 
-    def _calculate_average_time(self, times_list):
-        """
-        Calculate average execution time.
-        
-        In no_restart mode: Remove highest and lowest, average remaining.
-        In normal mode: Average all times.
-        """
-        if not times_list:
-            return 0.0
-            
-        if self.no_restart and len(times_list) >= 3:
-            # Remove highest and lowest, average remaining
-            sorted_times = sorted(times_list)
-            trimmed_times = sorted_times[1:-1]  # Remove first (min) and last (max)
-            avg_time = sum(trimmed_times) / len(trimmed_times)
-            print(f"   📊 No-restart mode: Removed min({sorted_times[0]:.4f}s) and max({sorted_times[-1]:.4f}s)")
-            print(f"   📊 Averaged {len(trimmed_times)} runs: {avg_time:.4f}s")
-            return avg_time
-        else:
-            # Normal average
-            return sum(times_list) / len(times_list)
-
-    def compare_rewritten(self, original_query, rewritten_query, iteration=None):
-        # Use instance iteration count if not specified
-        if iteration is None:
-            iteration = self.iteration_count
-            
+    def compare_rewritten(self,original_query,rewritten_query,iteration=3):
         conn = self.connect_to_database()
         cursor = conn.cursor()
         timeout = self.timeout
-        original_times = []
-        rewritten_times = []
+        total_original_time = 0.0
+        total_rewrite_time = 0.0
         original_result = None
         rewritten_result = None
-        
-        print(f"📊 Running {iteration} iterations" + (" (no-restart mode)" if self.no_restart else ""))
         
         # execute original query
         for i in range(iteration + 1):
@@ -246,7 +240,7 @@ class Evaluation():
             
             if i == 0:
                 print("start init hot database execution")
-                original_time, original_result = self.execute_query(conn, cursor, original_query, timeout, return_flag=True)
+                original_time,original_result = self.execute_query(conn, cursor, original_query,timeout, return_flag = True)
                 print(f"this is the init: original query excute time: {original_time}")
                 if original_time == -2:
                     ORIGINAL_TIME_OUT = True
@@ -256,16 +250,22 @@ class Evaluation():
                 else:
                     continue
 
-            original_time = self.execute_query(conn, cursor, original_query, timeout)
+            original_time= self.execute_query(conn, cursor, original_query,timeout)
             print(f"the {i}-th/{iteration} iteration original query excute time: {original_time}")
-            if original_time and original_time > 0:
-                original_times.append(original_time)
+            if original_time == -2:
+                ORIGINAL_TIME_OUT = True
+                break
+            if original_time == -1:
+                print("Original Query Execution Failed")
+                return None, None, None, None, None, None
+            total_original_time += original_time
         
-        if ORIGINAL_TIME_OUT:
-            total_original_time = timeout
-        elif original_times:
-            total_original_time = self._calculate_average_time(original_times)
+        if ORIGINAL_TIME_OUT == False:
+            total_original_time = total_original_time / iteration 
         else:
+            total_original_time = timeout
+
+        if total_original_time == -1:
             print("Original Query Execution Failed")
             return None, None, None, None, None, None 
         
@@ -290,7 +290,7 @@ class Evaluation():
                 if i == 0:
                     print("start init hot database execution")
                     try:
-                        rewritten_time, rewritten_result = self.execute_query(conn, cursor, rewritten_query, timeout, return_flag=True)
+                        rewritten_time,rewritten_result = self.execute_query(conn, cursor, rewritten_query,timeout, return_flag = True)
                     except Exception as e:
                         if "connection" in str(e).lower() or "cursor" in str(e).lower():
                             print(f"Connection error, retrying after restart: {e}")
@@ -304,7 +304,7 @@ class Evaluation():
                             if conn is None:
                                 return None, None, None, None, None, None
                             cursor = conn.cursor()
-                            rewritten_time, rewritten_result = self.execute_query(conn, cursor, rewritten_query, timeout, return_flag=True)
+                            rewritten_time,rewritten_result = self.execute_query(conn, cursor, rewritten_query,timeout, return_flag = True)
                         else:
                             raise e
                     print(f"this is the init: rewrite query excute time: {rewritten_time}")
@@ -315,29 +315,39 @@ class Evaluation():
                         break
                     else:
                         continue
-                rewritten_time = self.execute_query(conn, cursor, rewritten_query, timeout)
+                rewritten_time = self.execute_query(conn, cursor, rewritten_query,timeout)
                 print(f"the {i}-th/{iteration} iteration rewrite query excute time: {rewritten_time}")
-                if rewritten_time and rewritten_time > 0:
-                    rewritten_times.append(rewritten_time)
+                if rewritten_time == -2:
+                    REWRITTEN_TIME_OUT = True
+                    break
+                if rewritten_time == -1:
+                    print("Rewritten Query Execution Failed, using original query time instead")
+                    return total_original_time, total_original_time, 0.0, 1.0, original_result, original_result
+                total_rewrite_time += rewritten_time
 
-            if REWRITTEN_TIME_OUT:
-                total_rewrite_time = timeout
-            elif rewritten_times:
-                total_rewrite_time = self._calculate_average_time(rewritten_times)
-            else:
-                print("Rewritten Query Execution Failed")
-                return total_original_time, None, None, None, original_result, None
+            if total_rewrite_time == -1:
+                print("Rewritten Query Execution Failed, using original query time instead")
+                return total_original_time, total_original_time, 0.0, 1.0, original_result, original_result
             
-            if total_rewrite_time is not None:
+            if REWRITTEN_TIME_OUT == False:
+                total_rewrite_time = total_rewrite_time / iteration
+            if REWRITTEN_TIME_OUT == True and total_rewrite_time == -1:
+                print("Rewritten Query Timeout with error, using original query time instead")
+                return total_original_time, total_original_time, 0.0, 1.0, original_result, original_result
+            
+            if REWRITTEN_TIME_OUT == True and total_rewrite_time != -1:
+                total_rewrite_time = timeout
                 print(f"Rewritten Query Execution Time: {total_rewrite_time:.6f} seconds")
 
 
         except psycopg2.errors.SyntaxError as e:
             print(f"Rewritten query execution failed due to syntax error: {e}")
-            return total_original_time, None, None, None, original_result, None
+            print("Using original query time instead")
+            return total_original_time, total_original_time, 0.0, 1.0, original_result, original_result
         except Exception as e:
             print(f"Rewritten query execution failed due to unexpected error: {e}")
-            return total_original_time, None, None, None, original_result, None
+            print("Using original query time instead")
+            return total_original_time, total_original_time, 0.0, 1.0, original_result, original_result
 
         
         if total_original_time is not None and total_rewrite_time is not None:
@@ -347,7 +357,7 @@ class Evaluation():
             print(f"times up: {times_up}x")
         
 
-        return total_original_time, total_rewrite_time, speed_up, times_up, original_result, rewritten_result
+        return total_original_time,total_rewrite_time,speed_up,times_up,original_result,rewritten_result
             
 
     def evaluate(self):
@@ -379,9 +389,7 @@ class Evaluation():
                     original_query, rewritten_query, iteration=3
                 )
                 if original_result != None and rewritten_result != None and original_execution_time != self.timeout and rewrite_execution_time != self.timeout:
-                    original_counts = collections.Counter(original_result)
-                    rewritten_counts = collections.Counter(rewritten_result)
-                    equivalance = (original_counts == rewritten_counts)
+                    equivalance = self.check_equivalence(original_query, original_result, rewritten_result)
                 else:
                     equivalance = False
                 result_data = {
@@ -412,9 +420,16 @@ class Evaluation():
         with open(self.result_storage_path, "r") as file:
             data = json.load(file)
             for info in data:
+                if not isinstance(info, dict):
+                    continue  # skip metric headers when re-processing filtered files
                 if(info['original_execution_time'] != -1 and info['original_execution_time'] != None and info['rewrite_execution_time'] != -1 and info['rewrite_execution_time'] != None):
                     original_execution_times.append(info['original_execution_time'])
-                    rewritten_execution_times.append(info['rewrite_execution_time'])
+                    # Evaluation protocol (paper Sec. VII-A): a non-equivalent rewrite is never
+                    # adopted, so its effective execution time is that of the original query.
+                    if info.get('equivalence'):
+                        rewritten_execution_times.append(info['rewrite_execution_time'])
+                    else:
+                        rewritten_execution_times.append(info['original_execution_time'])
                     insert_data = {
                         "id": info["id"],
                         "equivalence": info["equivalence"],
@@ -479,33 +494,11 @@ def ensure_file_exists(path):
             json.dump([], f)  # Create an empty JSON array if the file does not exist
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(
-        description="QUITE Evaluation Script - Evaluate query rewrite performance",
-        formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-            Examples:
-            # Normal mode (with database restart between queries)
-            python evaluation.py -q queries.json -s results.json -f filtered.json -t 300
-
-            # No-restart mode (for environments without restart permission)
-            python evaluation.py -q queries.json -s results.json -f filtered.json -t 300 --no_restart
-
-            Note:
-            The --no_restart flag is useful when you don't have permission to restart PostgreSQL.
-            In this mode, queries are run 5 times, and the average is calculated after removing
-            the highest and lowest times to mitigate cold-start effects.
-        """
-    )
-    parser.add_argument("-q", "--queries_path", type=str, required=True, 
-                        help="Path to the queries SQL file (JSON format)")
-    parser.add_argument("-s", "--storage_path", type=str, required=True, 
-                        help="Path to the storage SQL file (JSON format)")
-    parser.add_argument("-f", "--filtered_path", type=str, required=True, 
-                        help="Path to the filtered SQL file (JSON format)")
-    parser.add_argument("-t", "--time_out", type=int, required=True, 
-                        help="Query timeout in seconds")
-    parser.add_argument("--no_restart", action="store_true", default=False,
-                        help="Disable database restart between queries (runs 5 times, removes min/max)")
+    parser = argparse.ArgumentParser(description="filter Script")
+    parser.add_argument("-q", "--queries_path", type=str, required=True, help="Path to the queries SQL file (JSON format)")
+    parser.add_argument("-s", "--storage_path", type=str, required=True, help="Path to the storage SQL file (JSON format)")
+    parser.add_argument("-f", "--filtered_path", type=str, required=True, help="Path to the filtered SQL file (JSON format)")
+    parser.add_argument("-t", "--time_out", type=int, required=True, help="timeout")
     return parser.parse_args()     
 
 if __name__ == "__main__":
@@ -514,20 +507,11 @@ if __name__ == "__main__":
     storage_path = args.storage_path
     filtered_path = args.filtered_path
     time_out = args.time_out
-    no_restart = args.no_restart
-    
-    if no_restart:
-        print("=" * 60)
-        print("⚠️  NO-RESTART MODE ENABLED")
-        print("=" * 60)
-        print("Database will NOT be restarted between query executions.")
-        print("Running 5 iterations per query, removing min/max for average.")
-        print("=" * 60)
 
     ensure_file_exists(storage_path)
     ensure_file_exists(filtered_path)
     # test part
-    model = Evaluation(queries_path, storage_path, filtered_path, time_out, no_restart=no_restart)
+    model = Evaluation(queries_path,storage_path,filtered_path,time_out)
     # model.evaluate()
 
 
@@ -556,9 +540,7 @@ if __name__ == "__main__":
             sucess_run_number += 1
         
         if original_result != None and rewritten_result != None and original_result != -1 and rewritten_result != -1 and total_original_time != time_out and total_rewrite_time != time_out:
-            original_counts = collections.Counter(original_result)
-            rewritten_counts = collections.Counter(rewritten_result)
-            equivalance = (original_counts == rewritten_counts)
+            equivalance = model.check_equivalence(original_query, original_result, rewritten_result)
 
         if equivalance:
             equiv_number += 1

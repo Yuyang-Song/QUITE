@@ -288,10 +288,16 @@ async def Equivalence_Check_Tool(sql1_query, sql2_query, schema_file_path, timeo
 
     jar_path = PROJECT_ROOT / "src" / "Rewrite_Middleware" / "Hybrid_SQL_Corrector" / "sqlsolver-v1.1.0.jar"
     
+    # Double quotes carry semantics in SQL (case-sensitive identifiers / quoted names).
+    # Stripping them would make SQLSolver verify a different query than the one executed,
+    # so queries containing double quotes are conservatively routed to LLM-based verification.
+    if '"' in sql1_query or '"' in sql2_query:
+        if verbose:
+            print("Query contains double-quoted identifiers; skipping SQLSolver and falling back to LLM verification.")
+        return "UNKNOWN_QUOTED_IDENTIFIER"
+
     sql1_query = sql1_query.replace('\n', ' ')
-    sql1_query = sql1_query.replace('\"', '')
     sql2_query = sql2_query.replace('\n', ' ')
-    sql2_query = sql2_query.replace('\"', '')
 
     # print(f"This is the original query: {sql1_query}")
     # print(f"This is the rewritten query: {sql2_query}")

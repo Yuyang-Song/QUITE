@@ -1,4 +1,5 @@
 import asyncio
+import re
 import sys
 import threading
 
@@ -338,7 +339,10 @@ class QueryRewriter:
                 self.initial_sql, enhanced_sql, self.schema_file, timeout=10
             )
             
-            if result is not None and "EQ" in result:
+            # Strict verdict parsing: accept only a standalone "EQ" token.
+            # A substring test ("EQ" in result) would wrongly match "NEQ"/"UNEQ"/"UNKNOWN_*".
+            solver_tokens = re.findall(r'[A-Z_]+', (result or "").upper())
+            if result is not None and "EQ" in solver_tokens:
                 print(f"-- Worker {worker_id}: ✓ Through the optimizer verification, the optimized SQL is equivalent to the original SQL.--")
                 MAX_EQUIV_FLAG = True
             else:
