@@ -390,7 +390,7 @@ We compare QUITE with state-of-the-art methods:
 
 
 ### Performance Results
-We compare QUITE with state-of-the-art methods on different benchmarks (TPC-H, DSB and Calcite) and metrics (query execution latency, rewritten equivalence rate and rewritten improvement rate). We present the core results in this repository. For more details, please refer to our paper.
+We compare QUITE with state-of-the-art methods on four benchmarks (TPC-H, DSB, Calcite and SQLStorm) and metrics (query execution latency, rewritten equivalence rate and rewritten improvement rate). We present the core results in this repository. For more details, please refer to our paper.
 <p align="center">
     <img src="figures/query_latency.png" width="1000px">
 </p>
