@@ -1,828 +1,190 @@
-## Q3：Original Query
+## Q3: Original Query
 
-> **Execution Time：** 7.57s
+> **Execution Time:** >300s (timeout)
+
+> All execution times on this page are taken verbatim from the released per-query results in `experiments_results/dsb/`. Because the per-method result files do not share a common id ordering, records are matched by the literal constants of the original query.
 
 ```sql
-SELECT    
-    cd_gender,
-    cd_marital_status,
-    cd_education_status,
-    COUNT(*) AS cnt1,
-    cd_purchase_estimate,
-    COUNT(*) AS cnt2,
-    cd_credit_rating,
-    COUNT(*) AS cnt3
-FROM   
-    customer c,
-    customer_address ca,
-    customer_demographics
-WHERE   
-    c.c_current_addr_sk = ca.ca_address_sk
-    AND ca_state IN ('MD', 'MO', 'OK')
-    AND cd_demo_sk = c.c_current_cdemo_sk
-    AND cd_marital_status IN ('W', 'U', 'W')
-    AND cd_education_status IN ('Primary', 'Primary')
-    AND EXISTS (
-        SELECT * 
-        FROM store_sales, date_dim
-        WHERE c.c_customer_sk = ss_customer_sk
-          AND ss_sold_date_sk = d_date_sk
-          AND d_year = 2002
-          AND d_moy BETWEEN 5 AND 5 + 2
-          AND ss_list_price BETWEEN 132 AND 221
-    )
-    AND NOT EXISTS (
-        SELECT * 
-        FROM web_sales, date_dim
-        WHERE c.c_customer_sk = ws_bill_customer_sk
-          AND ws_sold_date_sk = d_date_sk
-          AND d_year = 2002
-          AND d_moy BETWEEN 5 AND 5 + 2
-          AND ws_list_price BETWEEN 132 AND 221
-    )
-    AND NOT EXISTS (
-        SELECT * 
-        FROM catalog_sales, date_dim
-        WHERE c.c_customer_sk = cs_ship_customer_sk
-          AND cs_sold_date_sk = d_date_sk
-          AND d_year = 2002
-          AND d_moy BETWEEN 5 AND 5 + 2
-          AND cs_list_price BETWEEN 132 AND 221
-    )
-GROUP BY 
-    cd_gender,
-    cd_marital_status,
-    cd_education_status,
-    cd_purchase_estimate,
-    cd_credit_rating
-ORDER BY 
-    cd_gender,
-    cd_marital_status,
-    cd_education_status,
-    cd_purchase_estimate,
-    cd_credit_rating
-LIMIT 100;
-
-````
-
-
+with customer_total_return as  (select cr_returning_customer_sk as ctr_customer_sk         ,ca_state as ctr_state,   	sum(cr_return_amt_inc_tax) as ctr_total_return  from catalog_returns      ,date_dim      ,customer_address  where cr_returned_date_sk = d_date_sk     and d_year =1998    and cr_returning_addr_sk = ca_address_sk   group by cr_returning_customer_sk          ,ca_state )   select  c_customer_id,c_salutation,c_first_name,c_last_name,ca_street_number,ca_street_name                    ,ca_street_type,ca_suite_number,ca_city,ca_county,ca_state,ca_zip,ca_country,ca_gmt_offset                   ,ca_location_type,ctr_total_return  from customer_total_return ctr1      ,customer_address      ,customer  where ctr1.ctr_total_return > (select avg(ctr_total_return)*1.2  			  from customer_total_return ctr2                    	  where ctr1.ctr_state = ctr2.ctr_state)        and ca_address_sk = c_current_addr_sk        and ca_state = 'IL'        and ctr1.ctr_customer_sk = c_customer_sk  order by c_customer_id,c_salutation,c_first_name,c_last_name,ca_street_number,ca_street_name                    ,ca_street_type,ca_suite_number,ca_city,ca_county,ca_state,ca_zip,ca_country,ca_gmt_offset                   ,ca_location_type,ctr_total_return  limit 100;
+```
 
 ## 1. Rewrite Results
 
 ### 1.1. LearnedRewrite
 
-> **Execution Time：** 7.90s
+> **Execution Time:** 12.24s
 
 ```sql
-SELECT 
-  t45.cd_gender,
-  t45.cd_marital_status,
-  t45.cd_education_status,
-  COUNT(*) AS cnt1,
-  t45.cd_purchase_estimate,
-  COUNT(*) AS cnt2,
-  t45.cd_credit_rating,
-  COUNT(*) AS cnt3
-FROM (
-  SELECT 
-    t40.c_customer_sk,
-    t40.c_current_hdemo_sk,
-    t40.c_current_addr_sk,
-    t40.c_first_shipto_date_sk,
-    t40.c_first_sales_date_sk,
-    t40.c_birth_day,
-    t40.c_birth_month,
-    t40.c_birth_year,
-    t40.c_last_review_date_sk,
-    t40.c_current_cdemo_sk,
-    t40.c_customer_id,
-    t40.c_last_name,
-    t40.c_preferred_cust_flag,
-    t40.c_birth_country,
-    t40.c_login,
-    t40.c_email_address,
-    t40.c_salutation,
-    t40.c_first_name,
-    t40.ca_gmt_offset,
-    t40.ca_address_sk,
-    t40.ca_street_number,
-    t40.ca_street_name,
-    t40.ca_street_type,
-    t40.ca_suite_number,
-    t40.ca_city,
-    t40.ca_county,
-    t40.ca_state,
-    t40.ca_zip,
-    t40.ca_country,
-    t40.ca_location_type,
-    t40.ca_address_id,
-    t40.cd_dep_college_count,
-    t40.cd_purchase_estimate,
-    t40.cd_dep_count,
-    t40.cd_dep_employed_count,
-    t40.cd_demo_sk,
-    t40.cd_gender,
-    t40.cd_marital_status,
-    t40.cd_education_status,
-    t40.cd_credit_rating,
-    t40.f0,
-    t43.f0 AS f041
-  FROM (
-    SELECT 
-      customer1.c_customer_sk,
-      customer1.c_current_hdemo_sk,
-      customer1.c_current_addr_sk,
-      customer1.c_first_shipto_date_sk,
-      customer1.c_first_sales_date_sk,
-      customer1.c_birth_day,
-      customer1.c_birth_month,
-      customer1.c_birth_year,
-      customer1.c_last_review_date_sk,
-      customer1.c_current_cdemo_sk,
-      customer1.c_customer_id,
-      customer1.c_last_name,
-      customer1.c_preferred_cust_flag,
-      customer1.c_birth_country,
-      customer1.c_login,
-      customer1.c_email_address,
-      customer1.c_salutation,
-      customer1.c_first_name,
-      customer_address1.ca_gmt_offset,
-      customer_address1.ca_address_sk,
-      customer_address1.ca_street_number,
-      customer_address1.ca_street_name,
-      customer_address1.ca_street_type,
-      customer_address1.ca_suite_number,
-      customer_address1.ca_city,
-      customer_address1.ca_county,
-      customer_address1.ca_state,
-      customer_address1.ca_zip,
-      customer_address1.ca_country,
-      customer_address1.ca_location_type,
-      customer_address1.ca_address_id,
-      customer_demographics1.cd_dep_college_count,
-      customer_demographics1.cd_purchase_estimate,
-      customer_demographics1.cd_dep_count,
-      customer_demographics1.cd_dep_employed_count,
-      customer_demographics1.cd_demo_sk,
-      customer_demographics1.cd_gender,
-      customer_demographics1.cd_marital_status,
-      customer_demographics1.cd_education_status,
-      customer_demographics1.cd_credit_rating,
-      t39.f0
-    FROM 
-      customer AS customer1
-    CROSS JOIN 
-      customer_address AS customer_address1
-    CROSS JOIN 
-      customer_demographics AS customer_demographics1
-    LEFT JOIN (
-      SELECT 
-        t37.ss_customer_sk, 
-        TRUE AS f0
-      FROM (
-        SELECT * 
-        FROM store_sales 
-        WHERE ss_list_price BETWEEN 132 AND 221
-      ) AS t37
-      INNER JOIN (
-        SELECT * 
-        FROM date_dim 
-        WHERE d_year = 2002 AND d_moy BETWEEN 5 AND 7
-      ) AS t38
-      ON t37.ss_sold_date_sk = t38.d_date_sk
-    ) AS t39
-    ON customer1.c_customer_sk = t39.ss_customer_sk
-  ) AS t40
-  LEFT JOIN (
-    SELECT 
-      t41.ws_bill_customer_sk, 
-      TRUE AS f0
-    FROM (
-      SELECT * 
-      FROM web_sales 
-      WHERE ws_list_price BETWEEN 132 AND 221
-    ) AS t41
-    INNER JOIN (
-      SELECT * 
-      FROM date_dim 
-      WHERE d_year = 2002 AND d_moy BETWEEN 5 AND 7
-    ) AS t42
-    ON t41.ws_sold_date_sk = t42.d_date_sk
-  ) AS t43
-  ON t40.c_customer_sk = t43.ws_bill_customer_sk
-  WHERE 
-    t40.c_current_addr_sk = t40.ca_address_sk
-    AND t40.ca_state IN ('MD', 'MO', 'OK')
-    AND t40.cd_demo_sk = t40.c_current_cdemo_sk
-    AND t40.cd_marital_status IN ('U', 'W')
-    AND t40.cd_education_status = 'Primary'
-    AND t43.f0 IS NULL
-    AND t40.f0 IS NOT NULL
-) AS t45
-LEFT JOIN (
-  SELECT 
-    t46.cs_ship_customer_sk, 
-    TRUE AS f0
-  FROM (
-    SELECT * 
-    FROM catalog_sales 
-    WHERE cs_list_price BETWEEN 132 AND 221
-  ) AS t46
-  INNER JOIN (
-    SELECT * 
-    FROM date_dim 
-    WHERE d_year = 2002 AND d_moy BETWEEN 5 AND 7
-  ) AS t47
-  ON t46.cs_sold_date_sk = t47.d_date_sk
-) AS t48
-ON t45.c_customer_sk = t48.cs_ship_customer_sk
-WHERE 
-  t48.f0 IS NULL
-GROUP BY 
-  t45.cd_gender,
-  t45.cd_marital_status,
-  t45.cd_education_status,
-  t45.cd_purchase_estimate,
-  t45.cd_credit_rating
-ORDER BY 
-  t45.cd_gender,
-  t45.cd_marital_status,
-  t45.cd_education_status,
-  t45.cd_purchase_estimate,
-  t45.cd_credit_rating
-FETCH NEXT 100 ROWS ONLY;
-
+SELECT customer103.c_customer_id, customer103.c_salutation, customer103.c_first_name, customer103.c_last_name, t2317.ca_street_number, t2317.ca_street_name, t2317.ca_street_type, t2317.ca_suite_number, t2317.ca_city, t2317.ca_county, t2317.ca_state, t2317.ca_zip, t2317.ca_country, t2317.ca_gmt_offset, t2317.ca_location_type, t2316.ctr_total_return FROM (SELECT t2313.cr_returning_customer_sk, t2314.ca_state, SUM(t2313.ctr_total_return * t2314.f2) AS ctr_total_return FROM (SELECT t2309.cr_returning_customer_sk, t2309.cr_returning_addr_sk, SUM(t2309.ctr_total_return * t2311.f1) AS ctr_total_return FROM (SELECT cr_returned_date_sk, cr_returning_customer_sk, cr_returning_addr_sk, SUM(cr_return_amt_inc_tax) AS ctr_total_return FROM catalog_returns GROUP BY cr_returned_date_sk, cr_returning_customer_sk, cr_returning_addr_sk) AS t2309 INNER JOIN (SELECT d_date_sk, COUNT(*) AS f1 FROM date_dim WHERE d_year = 1998 GROUP BY d_date_sk) AS t2311 ON t2309.cr_returned_date_sk = t2311.d_date_sk GROUP BY t2309.cr_returning_customer_sk, t2309.cr_returning_addr_sk) AS t2313 INNER JOIN (SELECT ca_address_sk, ca_state, COUNT(*) AS f2 FROM customer_address GROUP BY ca_address_sk, ca_state) AS t2314 ON t2313.cr_returning_addr_sk = t2314.ca_address_sk GROUP BY t2313.cr_returning_customer_sk, t2314.ca_state) AS t2316 CROSS JOIN (SELECT * FROM customer_address WHERE ca_state = 'IL') AS t2317 INNER JOIN customer AS customer103 ON t2317.ca_address_sk = customer103.c_current_addr_sk AND t2316.cr_returning_customer_sk = customer103.c_customer_sk INNER JOIN (SELECT t2325.ca_state, AVG(t2325.ctr_total_return) AS f1 FROM (SELECT t2322.cr_returning_customer_sk, t2323.ca_state, SUM(t2322.ctr_total_return * t2323.f2) AS ctr_total_return FROM (SELECT t2318.cr_returning_customer_sk, t2318.cr_returning_addr_sk, SUM(t2318.ctr_total_return * t2320.f1) AS ctr_total_return FROM (SELECT cr_returned_date_sk, cr_returning_customer_sk, cr_returning_addr_sk, SUM(cr_return_amt_inc_tax) AS ctr_total_return FROM catalog_returns GROUP BY cr_returned_date_sk, cr_returning_customer_sk, cr_returning_addr_sk) AS t2318 INNER JOIN (SELECT d_date_sk, COUNT(*) AS f1 FROM date_dim WHERE d_year = 1998 GROUP BY d_date_sk) AS t2320 ON t2318.cr_returned_date_sk = t2320.d_date_sk GROUP BY t2318.cr_returning_customer_sk, t2318.cr_returning_addr_sk) AS t2322 INNER JOIN (SELECT ca_address_sk, ca_state, COUNT(*) AS f2 FROM customer_address GROUP BY ca_address_sk, ca_state) AS t2323 ON t2322.cr_returning_addr_sk = t2323.ca_address_sk GROUP BY t2322.cr_returning_customer_sk, t2323.ca_state) AS t2325 GROUP BY t2325.ca_state) AS t2326 ON t2316.ca_state = t2326.ca_state AND t2316.ctr_total_return > t2326.f1 * 1.2 ORDER BY customer103.c_customer_id, customer103.c_salutation, customer103.c_first_name, customer103.c_last_name, t2317.ca_street_number, t2317.ca_street_name, t2317.ca_street_type, t2317.ca_suite_number, t2317.ca_city, t2317.ca_county, t2317.ca_state, t2317.ca_zip, t2317.ca_country, t2317.ca_gmt_offset, t2317.ca_location_type, t2316.ctr_total_return FETCH NEXT 100 ROWS ONLY
 ```
 
+### 1.2. LLM-R2 (GPT-4o, best of three models)
 
-
-### 1.2. LLM-R2
-
-> **Execution Time：** 7.89s
->
-> ```sql
-> SELECT 
->   t7.cd_gender, 
->   t7.cd_marital_status, 
->   t7.cd_education_status, 
->   COUNT(*) AS cnt1, 
->   t7.cd_purchase_estimate, 
->   COUNT(*) AS cnt2, 
->   t7.cd_credit_rating, 
->   COUNT(*) AS cnt3
-> FROM (
->   SELECT * FROM (
->     SELECT 
->       t2.c_customer_sk,
->       t2.c_current_hdemo_sk,
->       t2.c_current_addr_sk,
->       t2.c_first_shipto_date_sk,
->       t2.c_first_sales_date_sk,
->       t2.c_birth_day,
->       t2.c_birth_month,
->       t2.c_birth_year,
->       t2.c_last_review_date_sk,
->       t2.c_current_cdemo_sk,
->       t2.c_customer_id,
->       t2.c_last_name,
->       t2.c_preferred_cust_flag,
->       t2.c_birth_country,
->       t2.c_login,
->       t2.c_email_address,
->       t2.c_salutation,
->       t2.c_first_name,
->       t2.ca_gmt_offset,
->       t2.ca_address_sk,
->       t2.ca_street_number,
->       t2.ca_street_name,
->       t2.ca_street_type,
->       t2.ca_suite_number,
->       t2.ca_city,
->       t2.ca_county,
->       t2.ca_state,
->       t2.ca_zip,
->       t2.ca_country,
->       t2.ca_location_type,
->       t2.ca_address_id,
->       t2.cd_dep_college_count,
->       t2.cd_purchase_estimate,
->       t2.cd_dep_count,
->       t2.cd_dep_employed_count,
->       t2.cd_demo_sk,
->       t2.cd_gender,
->       t2.cd_marital_status,
->       t2.cd_education_status,
->       t2.cd_credit_rating,
->       t2.f0,
->       t5.f0 AS f041
->     FROM (
->       SELECT 
->         customer.c_customer_sk,
->         customer.c_current_hdemo_sk,
->         customer.c_current_addr_sk,
->         customer.c_first_shipto_date_sk,
->         customer.c_first_sales_date_sk,
->         customer.c_birth_day,
->         customer.c_birth_month,
->         customer.c_birth_year,
->         customer.c_last_review_date_sk,
->         customer.c_current_cdemo_sk,
->         customer.c_customer_id,
->         customer.c_last_name,
->         customer.c_preferred_cust_flag,
->         customer.c_birth_country,
->         customer.c_login,
->         customer.c_email_address,
->         customer.c_salutation,
->         customer.c_first_name,
->         customer_address.ca_gmt_offset,
->         customer_address.ca_address_sk,
->         customer_address.ca_street_number,
->         customer_address.ca_street_name,
->         customer_address.ca_street_type,
->         customer_address.ca_suite_number,
->         customer_address.ca_city,
->         customer_address.ca_county,
->         customer_address.ca_state,
->         customer_address.ca_zip,
->         customer_address.ca_country,
->         customer_address.ca_location_type,
->         customer_address.ca_address_id,
->         customer_demographics.cd_dep_college_count,
->         customer_demographics.cd_purchase_estimate,
->         customer_demographics.cd_dep_count,
->         customer_demographics.cd_dep_employed_count,
->         customer_demographics.cd_demo_sk,
->         customer_demographics.cd_gender,
->         customer_demographics.cd_marital_status,
->         customer_demographics.cd_education_status,
->         customer_demographics.cd_credit_rating,
->         t1.f0
->       FROM 
->         customer 
->         CROSS JOIN customer_address 
->         CROSS JOIN customer_demographics 
->         LEFT JOIN (
->           SELECT 
->             t.ss_customer_sk, 
->             TRUE AS f0 
->           FROM (
->             SELECT * 
->             FROM store_sales 
->             WHERE ss_list_price BETWEEN 132 AND 221
->           ) AS t
->           INNER JOIN (
->             SELECT * 
->             FROM date_dim 
->             WHERE d_year = 2002 AND d_moy BETWEEN 5 AND 7
->           ) AS t0 
->           ON t.ss_sold_date_sk = t0.d_date_sk
->         ) AS t1 
->         ON customer.c_customer_sk = t1.ss_customer_sk
->     ) AS t2 
->     LEFT JOIN (
->       SELECT 
->         t3.ws_bill_customer_sk, 
->         TRUE AS f0 
->       FROM (
->         SELECT * 
->         FROM web_sales 
->         WHERE ws_list_price BETWEEN 132 AND 221
->       ) AS t3
->       INNER JOIN (
->         SELECT * 
->         FROM date_dim 
->         WHERE d_year = 2002 AND d_moy BETWEEN 5 AND 7
->       ) AS t4 
->       ON t3.ws_sold_date_sk = t4.d_date_sk
->     ) AS t5 
->     ON t2.c_customer_sk = t5.ws_bill_customer_sk
->   ) AS t6
->   WHERE 
->     t6.c_current_addr_sk = t6.ca_address_sk 
->     AND t6.ca_state IN ('MD', 'MO', 'OK') 
->     AND t6.cd_demo_sk = t6.c_current_cdemo_sk
->     AND t6.cd_marital_status IN ('U', 'W') 
->     AND t6.cd_education_status = 'Primary' 
->     AND t6.f041 IS NULL 
->     AND t6.f0 IS NOT NULL
-> ) AS t7
-> LEFT JOIN (
->   SELECT 
->     t8.cs_ship_customer_sk, 
->     TRUE AS f0 
->   FROM (
->     SELECT * 
->     FROM catalog_sales 
->     WHERE cs_list_price BETWEEN 132 AND 221
->   ) AS t8
->   INNER JOIN (
->     SELECT * 
->     FROM date_dim 
->     WHERE d_year = 2002 AND d_moy BETWEEN 5 AND 7
->   ) AS t9 
->   ON t8.cs_sold_date_sk = t9.d_date_sk
-> ) AS t10 
-> ON t7.c_customer_sk = t10.cs_ship_customer_sk
-> WHERE t10.f0 IS NULL
-> GROUP BY 
->   t7.cd_gender, 
->   t7.cd_marital_status, 
->   t7.cd_education_status, 
->   t7.cd_purchase_estimate, 
->   t7.cd_credit_rating
-> ORDER BY 
->   t7.cd_gender, 
->   t7.cd_marital_status, 
->   t7.cd_education_status, 
->   t7.cd_purchase_estimate, 
->   t7.cd_credit_rating
-> LIMIT 100;
-> 
-> ```
->
-> 
-
----
-
-### 1.3. R-Bot 
-
-> **Execution Time：** 8.53s
+> **Execution Time:** 1.76s
 
 ```sql
-SELECT 
-  t9.cd_gender, 
-  t9.cd_marital_status, 
-  t9.cd_education_status, 
-  COUNT(*) AS cnt3, 
-  t9.cd_purchase_estimate, 
-  COUNT(*) AS cnt30, 
-  t9.cd_credit_rating, 
-  COUNT(*) AS cnt31
-FROM (
-  SELECT *
-  FROM customer
-    INNER JOIN (
-      SELECT * 
-      FROM customer_address 
-      WHERE CAST(ca_state AS CHAR(2)) IN ('MD', 'MO', 'OK')
-    ) AS t 
-      ON customer.c_current_addr_sk = t.ca_address_sk
-    INNER JOIN (
-      SELECT * 
-      FROM customer_demographics 
-      WHERE CAST(cd_marital_status AS CHAR(1)) IN ('U', 'W')
-        AND cd_education_status = 'Primary'
-    ) AS t0 
-      ON customer.c_current_cdemo_sk = t0.cd_demo_sk
-    INNER JOIN (
-      SELECT t1.ss_customer_sk, TRUE AS "$f1"
-      FROM (
-        SELECT * 
-        FROM store_sales 
-        WHERE ss_list_price BETWEEN 132 AND 221
-          AND ss_customer_sk IS NOT NULL
-      ) AS t1
-      INNER JOIN (
-        SELECT * 
-        FROM date_dim 
-        WHERE d_year = 2002 AND d_moy BETWEEN 5 AND 5 + 2
-      ) AS t2 
-        ON t1.ss_sold_date_sk = t2.d_date_sk
-      GROUP BY t1.ss_customer_sk
-    ) AS t4 
-      ON customer.c_customer_sk = t4.ss_customer_sk
-    LEFT JOIN (
-      SELECT t5.ws_bill_customer_sk, TRUE AS "$f1"
-      FROM (
-        SELECT * 
-        FROM web_sales 
-        WHERE ws_list_price BETWEEN 132 AND 221
-          AND ws_bill_customer_sk IS NOT NULL
-      ) AS t5
-      INNER JOIN (
-        SELECT * 
-        FROM date_dim AS date_dim0 (
-          d_date_sk0, d_date_id0, d_date0, d_month_seq0, d_week_seq0, 
-          d_quarter_seq0, d_year0, d_dow0, d_moy0, d_dom0, d_qoy0, 
-          d_fy_year0, d_fy_quarter_seq0, d_fy_week_seq0, d_day_name0, 
-          d_quarter_name0, d_holiday0, d_weekend0, d_following_holiday0, 
-          d_first_dom0, d_last_dom0, d_same_day_ly0, d_same_day_lq0, 
-          d_current_day0, d_current_week0, d_current_month0, 
-          d_current_quarter0, d_current_year0
-        ) 
-        WHERE d_year0 = 2002 AND d_moy0 BETWEEN 5 AND 5 + 2
-      ) AS t6 
-        ON t5.ws_sold_date_sk = t6.d_date_sk0
-      GROUP BY t5.ws_bill_customer_sk
-    ) AS t8 
-      ON customer.c_customer_sk = t8.ws_bill_customer_sk
-  WHERE t8."$f1" IS NULL
-) AS t9
-LEFT JOIN (
-  SELECT t10.cs_ship_customer_sk, TRUE AS "$f10"
-  FROM (
-    SELECT * 
-    FROM catalog_sales 
-    WHERE cs_list_price BETWEEN 132 AND 221
-      AND cs_ship_customer_sk IS NOT NULL
-  ) AS t10
-  INNER JOIN (
-    SELECT * 
-    FROM date_dim AS date_dim1 (
-      d_date_sk1, d_date_id1, d_date1, d_month_seq1, d_week_seq1, 
-      d_quarter_seq1, d_year1, d_dow1, d_moy1, d_dom1, d_qoy1, 
-      d_fy_year1, d_fy_quarter_seq1, d_fy_week_seq1, d_day_name1, 
-      d_quarter_name1, d_holiday1, d_weekend1, d_following_holiday1, 
-      d_first_dom1, d_last_dom1, d_same_day_ly1, d_same_day_lq1, 
-      d_current_day1, d_current_week1, d_current_month1, 
-      d_current_quarter1, d_current_year1
-    ) 
-    WHERE d_year1 = 2002 AND d_moy1 BETWEEN 5 AND 5 + 2
-  ) AS t11 
-    ON t10.cs_sold_date_sk = t11.d_date_sk1
-  GROUP BY t10.cs_ship_customer_sk
-) AS t13 
-  ON t9.c_customer_sk = t13.cs_ship_customer_sk
-WHERE t13."$f10" IS NULL
-GROUP BY 
-  t9.cd_gender, 
-  t9.cd_marital_status, 
-  t9.cd_education_status, 
-  t9.cd_purchase_estimate, 
-  t9.cd_credit_rating
-ORDER BY 
-  t9.cd_gender, 
-  t9.cd_marital_status, 
-  t9.cd_education_status, 
-  t9.cd_purchase_estimate, 
-  t9.cd_credit_rating
-FETCH NEXT 100 ROWS ONLY;
-
+SELECT customer.c_customer_id, customer.c_salutation, customer.c_first_name, customer.c_last_name, t1.ca_street_number, t1.ca_street_name, t1.ca_street_type, t1.ca_suite_number, t1.ca_city, t1.ca_county, t1.ca_state, t1.ca_zip, t1.ca_country, t1.ca_gmt_offset, t1.ca_location_type, t0.ctr_total_return FROM (SELECT catalog_returns.cr_returning_customer_sk, customer_address.ca_state, SUM(catalog_returns.cr_return_amt_inc_tax) AS ctr_total_return FROM catalog_returns INNER JOIN (SELECT * FROM date_dim WHERE d_year = 1998) AS t ON catalog_returns.cr_returned_date_sk = t.d_date_sk INNER JOIN customer_address ON catalog_returns.cr_returning_addr_sk = customer_address.ca_address_sk GROUP BY catalog_returns.cr_returning_customer_sk, customer_address.ca_state) AS t0 CROSS JOIN (SELECT * FROM customer_address WHERE ca_state = 'IL') AS t1 INNER JOIN customer ON t1.ca_address_sk = customer.c_current_addr_sk AND t0.cr_returning_customer_sk = customer.c_customer_sk INNER JOIN (SELECT t3.ca_state, AVG(t3.ctr_total_return) AS f1 FROM (SELECT catalog_returns0.cr_returning_customer_sk, customer_address1.ca_state, SUM(catalog_returns0.cr_return_amt_inc_tax) AS ctr_total_return FROM catalog_returns AS catalog_returns0 INNER JOIN (SELECT * FROM date_dim WHERE d_year = 1998) AS t2 ON catalog_returns0.cr_returned_date_sk = t2.d_date_sk INNER JOIN customer_address AS customer_address1 ON catalog_returns0.cr_returning_addr_sk = customer_address1.ca_address_sk GROUP BY catalog_returns0.cr_returning_customer_sk, customer_address1.ca_state) AS t3 GROUP BY t3.ca_state) AS t4 ON t0.ca_state = t4.ca_state AND t0.ctr_total_return > t4.f1 * 1.2 ORDER BY customer.c_customer_id, customer.c_salutation, customer.c_first_name, customer.c_last_name, t1.ca_street_number, t1.ca_street_name, t1.ca_street_type, t1.ca_suite_number, t1.ca_city, t1.ca_county, t1.ca_state, t1.ca_zip, t1.ca_country, t1.ca_gmt_offset, t1.ca_location_type, t0.ctr_total_return LIMIT 100
 ```
 
+### 1.3. R-Bot (GPT-4o, best of three models)
 
-
-### 1.4. QUITE 
-
-> **Execution Time：** 1.84s
+> **Execution Time:** 1.80s
 
 ```sql
-WITH date_range AS (
-    SELECT d_date_sk
-    FROM date_dim
-    WHERE d_year = 2002
-      AND d_moy BETWEEN 5 AND 7
-),
-eligible_customers AS (
-    SELECT DISTINCT c.c_customer_sk
-    FROM customer c
-    JOIN customer_address ca 
-        ON c.c_current_addr_sk = ca.ca_address_sk
-    JOIN customer_demographics cd 
-        ON cd.cd_demo_sk = c.c_current_cdemo_sk
-    JOIN store_sales ss 
-        ON c.c_customer_sk = ss.ss_customer_sk
-    JOIN date_range 
-        ON ss.ss_sold_date_sk = date_range.d_date_sk
-    WHERE ca.ca_state IN ('MD', 'MO', 'OK')
-      AND cd.cd_marital_status IN ('W', 'U')
-      AND cd.cd_education_status = 'Primary'
-      AND ss.ss_list_price BETWEEN 132 AND 221
-      AND NOT EXISTS (
-          SELECT 1
-          FROM web_sales ws
-          JOIN date_range 
-              ON ws.ws_sold_date_sk = date_range.d_date_sk
-          WHERE c.c_customer_sk = ws.ws_bill_customer_sk
-            AND ws.ws_list_price BETWEEN 132 AND 221
-          
-          UNION ALL
-          
-          SELECT 1
-          FROM catalog_sales cs
-          JOIN date_range 
-              ON cs.cs_sold_date_sk = date_range.d_date_sk
-          WHERE c.c_customer_sk = cs.cs_ship_customer_sk
-            AND cs.cs_list_price BETWEEN 132 AND 221
-      )
+SELECT "customer"."c_customer_id", "customer"."c_salutation", "customer"."c_first_name", "customer"."c_last_name", "t1"."ca_street_number0", "t1"."ca_street_name0", "t1"."ca_street_type0", "t1"."ca_suite_number0", "t1"."ca_city0", "t1"."ca_county0", "t1"."ca_state0", "t1"."ca_zip0", "t1"."ca_country0", "t1"."ca_gmt_offset0", "t1"."ca_location_type0", "t0"."ctr_total_return" FROM (SELECT "catalog_returns"."cr_returning_customer_sk", "customer_address"."ca_state", SUM("catalog_returns"."cr_return_amt_inc_tax") AS "ctr_total_return"         FROM "catalog_returns"             INNER JOIN (SELECT *                 FROM "date_dim"                 WHERE "d_year" = 1998) AS "t" ON "catalog_returns"."cr_returned_date_sk" = "t"."d_date_sk"             INNER JOIN "customer_address" ON "catalog_returns"."cr_returning_addr_sk" = "customer_address"."ca_address_sk"         GROUP BY "catalog_returns"."cr_returning_customer_sk", "customer_address"."ca_state") AS "t0"     CROSS JOIN (SELECT *         FROM "customer_address" AS "customer_address0" ("ca_address_sk0", "ca_address_id0", "ca_street_number0", "ca_street_name0", "ca_street_type0", "ca_suite_number0", "ca_city0", "ca_county0", "ca_state0", "ca_zip0", "ca_country0", "ca_gmt_offset0", "ca_location_type0")         WHERE "ca_state0" = 'IL') AS "t1"     INNER JOIN "customer" ON "t1"."ca_address_sk0" = "customer"."c_current_addr_sk" AND "t0"."cr_returning_customer_sk" = "customer"."c_customer_sk"     INNER JOIN (SELECT "t4"."ca_state1", AVG("t4"."ctr_total_return") AS "$f1"         FROM (SELECT "catalog_returns00"."cr_returning_customer_sk0", "customer_address10"."ca_state1", SUM("catalog_returns00"."cr_return_amt_inc_tax0") AS "ctr_total_return"                 FROM "catalog_returns" AS "catalog_returns00" ("cr_returned_date_sk0", "cr_returned_time_sk0", "cr_item_sk0", "cr_refunded_customer_sk0", "cr_refunded_cdemo_sk0", "cr_refunded_hdemo_sk0", "cr_refunded_addr_sk0", "cr_returning_customer_sk0", "cr_returning_cdemo_sk0", "cr_returning_hdemo_sk0", "cr_returning_addr_sk0", "cr_call_center_sk0", "cr_catalog_page_sk0", "cr_ship_mode_sk0", "cr_warehouse_sk0", "cr_reason_sk0", "cr_order_number0", "cr_return_quantity0", "cr_return_amount0", "cr_return_tax0", "cr_return_amt_inc_tax0", "cr_fee0", "cr_return_ship_cost0", "cr_refunded_cash0", "cr_reversed_charge0", "cr_store_credit0", "cr_net_loss0")                     INNER JOIN (SELECT *                         FROM "date_dim" AS "date_dim0" ("d_date_sk0", "d_date_id0", "d_date0", "d_month_seq0", "d_week_seq0", "d_quarter_seq0", "d_year0", "d_dow0", "d_moy0", "d_dom0", "d_qoy0", "d_fy_year0", "d_fy_quarter_seq0", "d_fy_week_seq0", "d_day_name0", "d_quarter_name0", "d_holiday0", "d_weekend0", "d_following_holiday0", "d_first_dom0", "d_last_dom0", "d_same_day_ly0", "d_same_day_lq0", "d_current_day0", "d_current_week0", "d_current_month0", "d_current_quarter0", "d_current_year0")                         WHERE "d_year0" = 1998) AS "t2" ON "catalog_returns00"."cr_returned_date_sk0" = "t2"."d_date_sk0"                     INNER JOIN "customer_address" AS "customer_address10" ("ca_address_sk1", "ca_address_id1", "ca_street_number1", "ca_street_name1", "ca_street_type1", "ca_suite_number1", "ca_city1", "ca_county1", "ca_state1", "ca_zip1", "ca_country1", "ca_gmt_offset1", "ca_location_type1") ON "catalog_returns00"."cr_returning_addr_sk0" = "customer_address10"."ca_address_sk1"                 GROUP BY "catalog_returns00"."cr_returning_customer_sk0", "customer_address10"."ca_state1"                 HAVING "customer_address10"."ca_state1" IS NOT NULL) AS "t4"         GROUP BY "t4"."ca_state1") AS "t5" ON "t0"."ca_state" = "t5"."ca_state1" AND "t0"."ctr_total_return" > "t5"."$f1" * 1.2 ORDER BY "customer"."c_customer_id", "customer"."c_salutation", "customer"."c_first_name", "customer"."c_last_name", "t1"."ca_street_number0", "t1"."ca_street_name0", "t1"."ca_street_type0", "t1"."ca_suite_number0", "t1"."ca_city0", "t1"."ca_county0", "t1"."ca_state0", "t1"."ca_zip0", "t1"."ca_country0", "t1"."ca_gmt_offset0", "t1"."ca_location_type0", "t0"."ctr_total_return" FETCH NEXT 100 ROWS ONLY;
+```
+
+### 1.4. LLM Agent (Claude-3.7)
+
+> **Execution Time:** 1.17s  *(non-equivalent: rejected by our validation protocol)*  -- fastest raw rewrite, but its result set differs from the original
+
+```sql
+WITH customer_total_return AS (
+ SELECT 
+ cr_returning_customer_sk as ctr_customer_sk,
+ ca_state as ctr_state,
+ sum(cr_return_amt_inc_tax) as ctr_total_return,
+ avg(sum(cr_return_amt_inc_tax)) OVER (PARTITION BY ca_state) * 1.2 as state_avg
+ FROM catalog_returns
+ JOIN date_dim ON cr_returned_date_sk = d_date_sk
+ JOIN customer_address ON cr_returning_addr_sk = ca_address_sk
+ WHERE d_year = 1998
+ GROUP BY cr_returning_customer_sk, ca_state
 )
 SELECT 
-    cd.cd_gender,
-    cd.cd_marital_status,
-    cd.cd_education_status,
-    COUNT(*) AS cnt1,
-    cd.cd_purchase_estimate,
-    COUNT(*) AS cnt2,
-    cd.cd_credit_rating,
-    COUNT(*) AS cnt3
-FROM customer c
-JOIN customer_address ca 
-    ON c.c_current_addr_sk = ca.ca_address_sk
-JOIN customer_demographics cd 
-    ON cd.cd_demo_sk = c.c_current_cdemo_sk
-WHERE ca.ca_state IN ('MD', 'MO', 'OK')
-  AND cd.cd_marital_status IN ('W', 'U')
-  AND cd.cd_education_status = 'Primary'
-  AND c.c_customer_sk IN (
-      SELECT c_customer_sk 
-      FROM eligible_customers
-  )
-GROUP BY 
-    cd.cd_gender,
-    cd.cd_marital_status,
-    cd.cd_education_status,
-    cd.cd_purchase_estimate,
-    cd.cd_credit_rating
-ORDER BY 
-    cd.cd_gender,
-    cd.cd_marital_status,
-    cd.cd_education_status,
-    cd.cd_purchase_estimate,
-    cd.cd_credit_rating
-LIMIT 100;
-
+ c_customer_id,
+ c_salutation,
+ c_first_name,
+ c_last_name,
+ ca_street_number,
+ ca_street_name,
+ ca_street_type,
+ ca_suite_number,
+ ca_city,
+ ca_county,
+ ca_state,
+ ca_zip,
+ ca_country,
+ ca_gmt_offset,
+ ca_location_type,
+ ctr.ctr_total_return
+FROM customer_total_return ctr
+JOIN customer c ON ctr.ctr_customer_sk = c_customer_sk
+JOIN customer_address ca ON ca_address_sk = c_current_addr_sk
+WHERE ca_state = 'IL'
+AND ctr_total_return > state_avg
+ORDER BY 1,2,3,4,5,6,7,8,9,10,11,12,13,14,15,16
+LIMIT 100
 ```
 
+### 1.5. QUITE (rewrite only)
 
+> **Execution Time:** 1.51s
 
+```sql
+with customer_total_return as (
+    select 
+        cr_returning_customer_sk as ctr_customer_sk,
+        ca_state as ctr_state,
+        sum(cr_return_amt_inc_tax) as ctr_total_return
+    from catalog_returns
+    join date_dim on cr_returned_date_sk = d_date_sk
+    join customer_address on cr_returning_addr_sk = ca_address_sk
+    where d_year = 1998
+    group by cr_returning_customer_sk, ca_state
+),
+state_averages as (
+    select 
+        ctr_state,
+        avg(ctr_total_return) * 1.2 as avg_120_percent
+    from customer_total_return
+    group by ctr_state
+)
+select 
+    c_customer_id, c_salutation, c_first_name, c_last_name,
+    ca_street_number, ca_street_name, ca_street_type, ca_suite_number,
+    ca_city, ca_county, ca_state, ca_zip, ca_country, ca_gmt_offset,
+    ca_location_type, ctr_total_return
+from customer_total_return ctr1
+join customer on ctr1.ctr_customer_sk = c_customer_sk
+join customer_address on customer.c_current_addr_sk = customer_address.ca_address_sk
+join state_averages sa on ctr1.ctr_state = sa.ctr_state
+where customer_address.ca_state = 'IL'
+    and ctr1.ctr_total_return > sa.avg_120_percent
+order by 
+    c_customer_id, c_salutation, c_first_name, c_last_name,
+    ca_street_number, ca_street_name, ca_street_type, ca_suite_number,
+    ca_city, ca_county, ca_state, ca_zip, ca_country, ca_gmt_offset,
+    ca_location_type, ctr_total_return
+limit 100;
+```
 
+### 1.6. QUITE (with hint injection)
 
-### **2. Deep Analysis**
+> **Execution Time:** 1.04s
 
-#### **2.1 Query Context and Baseline Metrics**
+```sql
+with customer_total_return AS ( /*+ HashJoin(catalog_returns customer_address) */
+    select 
+        cr_returning_customer_sk as ctr_customer_sk,
+        ca_state as ctr_state,
+        sum(cr_return_amt_inc_tax) as ctr_total_return
+    from catalog_returns
+    join date_dim on cr_returned_date_sk = d_date_sk
+    join customer_address on cr_returning_addr_sk = ca_address_sk
+    where d_year = 1998
+    group by cr_returning_customer_sk, ca_state
+),
+state_averages as (
+    select 
+        ctr_state,
+        avg(ctr_total_return) * 1.2 as avg_120_percent
+    from customer_total_return
+    group by ctr_state
+)
+select 
+    c_customer_id, c_salutation, c_first_name, c_last_name,
+    ca_street_number, ca_street_name, ca_street_type, ca_suite_number,
+    ca_city, ca_county, ca_state, ca_zip, ca_country, ca_gmt_offset,
+    ca_location_type, ctr_total_return
+from customer_total_return ctr1
+join customer on ctr1.ctr_customer_sk = c_customer_sk
+join customer_address on customer.c_current_addr_sk = customer_address.ca_address_sk
+join state_averages sa on ctr1.ctr_state = sa.ctr_state
+where customer_address.ca_state = 'IL'
+    and ctr1.ctr_total_return > sa.avg_120_percent
+order by 
+    c_customer_id, c_salutation, c_first_name, c_last_name,
+    ca_street_number, ca_street_name, ca_street_type, ca_suite_number,
+    ca_city, ca_county, ca_state, ca_zip, ca_country, ca_gmt_offset,
+    ca_location_type, ctr_total_return
+limit 100;
+```
 
-This query identifies customers in three specific states (`MD`, `MO`, `OK`) with certain demographic attributes (`marital_status='W' or 'U'`, `education_status='Primary'`), who made in‐store purchases in May–July 2002 at list prices between 132 and 221, **and** who did **not** make any web or catalog purchases in that same window. It then groups these qualifying customers by five demographic columns and counts three separate measures (the three `COUNT(*)` expressions are logically identical but appear in the SELECT list as `cnt1`, `cnt2`, `cnt3`).
+## 2. Deep Analysis
 
-The chief difficulty lies in efficiently enforcing the three EXISTS/NOT EXISTS subqueries over large sales tables (`store_sales`, `web_sales`, `catalog_sales`) joined to `date_dim`, while simultaneously filtering on `customer_address`and `customer_demographics`. Naively evaluating each EXISTS/NOT EXISTS can result in repeated scans over the sales tables.
+### 2.1 Query Context and Full Metrics
 
-| **Rewrite Method**  | **Execution Time (s)** |
-| ------------------- | ---------------------- |
-| Original            | 7.57                   |
-| LearnedRewrite (LR) | 7.90                   |
-| LLM-R2              | 7.89                   |
-| R-Bot               | 8.53                   |
-| **QUITE**           | **1.84**               |
+| Method | Execution Time (s) | Equivalent |
+|---|---|---|
+| LearnedRewrite | 12.24 | ✓ |
+| LLM-R² (Claude-3.7) | 1.79 | ✓ |
+| LLM-R² (DS-R1) | 1.79 | ✓ |
+| LLM-R² (GPT-4o) | 1.76 | ✓ |
+| R-Bot (Claude-3.7) | 3.07 | ✓ |
+| R-Bot (DS-R1) | >300 | ✓ |
+| R-Bot (GPT-4o) | 1.80 | ✓ |
+| LLM Agent (Claude-3.7) | 1.17 | ✗ (non-equivalent) |
+| LLM Agent (DS-R1) | 1.23 | ✓ |
+| LLM Agent (DS-V3) | >300 | ✓ |
+| LLM Agent (GPT-4o) | >300 | ✓ |
+| QUITE | 1.51 | ✓ |
+| QUITE + hints | 1.04 | ✓ |
 
-Even though the original and most rewrites finish in under 9 seconds, QUITE completes in **1.84s**, representing roughly a **4×** speedup compared to the next-best (Original 7.57s → QUITE 1.84s). This improvement highlights the value of early reduction and eliminating repeated subqueries.
+The original query never finishes: for every customer it re-evaluates `AVG(ctr_total_return) * 1.2` over the `customer_total_return` CTE, restricted to the customer's state. Decorrelation fixes it, and several methods manage that here. QUITE produces the fastest verified result (1.04s with hints, at least 288x over the original), ahead of LLM Agent DS-R1 (1.23s) and LLM-R2 (1.76s).
 
-------
+### 2.2 What Distinguishes the Methods
 
-#### **2.2 Quantifying the Runtime Gap**
-
-- **Original vs. QUITE**
-  The original query evaluates three separate EXISTS/NOT EXISTS subqueries, each scanning a large sales table (`store_sales`, `web_sales`, or `catalog_sales`) joined to `date_dim` for the same 3-month criteria. As a result, `date_dim` and each fact table are scanned multiple times for each customer in the base `FROM`. QUITE collapses all date windows into one CTE (`date_range`) and pushes eligibility checks into a single CTE (`eligible_customers`), eliminating redundant scans. This yields a **4.1×** speedup (7.57s → 1.84s).
-- **LearnedRewrite vs. QUITE**
-  LearnedRewrite essentially inlines all columns from `customer`, `customer_address`, and `customer_demographics`, then performs a LEFT JOIN for the store_sales check, another LEFT JOIN for the web_sales check, and a final LEFT JOIN for catalog_sales, each joined to `date_dim`. It filters out disqualifying rows at the end (`WHERE t43.f0 IS NULL AND t40.f0 IS NOT NULL AND t48.f0 IS NULL`). All three subqueries run independently, causing repeated date_dim evaluations and large intermediate joins. QUITE’s single‐pass CTE replacement reduces intermediate row counts greatly, running in **1.84s** vs. 7.90s (≈ 4.3× faster).
-- **LLM-R2 vs. QUITE**
-  LLM-R2 also nests multiple SELECT * blocks and LEFT JOINs, one for store_sales, one for web_sales, one for catalog_sales, each joined to `date_dim`. Although logically equivalent to LR, it wraps each filter in an extra subquery layer, preventing early pruning. It finishes in 7.89s—still ≈ 4.3× slower than QUITE.
-- **R-Bot vs. QUITE**
-  R-Bot applies filters on `customer_address` and `customer_demographics` using inline JOINs, then performs a grouped EXISTS check for store_sales, a left join for web_sales, and a left join for catalog_sales. It groups the store_sales subquery by `ss_customer_sk` to produce a boolean indicator (`"$f1"`). Despite these improvements, it still scans each dimension of date separately and carries extra grouping overhead, finishing in 8.53s—**4.6×** slower than QUITE.
-
-------
-
-#### **2.3 Core Reasons for QUITE’s Superior Efficiency**
-
-##### **2.3.1 Consolidated Date Filtering via a Single CTE**
-
-- **Original / LR / LLM-R2 / R-Bot:**
-  Each of these evaluates three distinct subqueries on `date_dim`, one per sales channel. Concretely:
-
-  1. In the EXISTS clause:
-
-     ```sql
-     SELECT * 
-       FROM store_sales ss
-       JOIN date_dim d 
-         ON ss.ss_sold_date_sk = d.d_date_sk
-       WHERE d.d_year = 2002 
-         AND d.d_moy BETWEEN 5 AND 7 
-         AND ss.ss_list_price BETWEEN 132 AND 221 
-         AND c.c_customer_sk = ss.ss_customer_sk
-     ```
-
-     (and analogously for web_sales and catalog_sales).
-
-  2. This repeats the `date_dim` scan three times (once per subquery), adding I/O cost.
-
-- **QUITE’s Approach:**
-
-  ```sql
-  WITH date_range AS (
-      SELECT d_date_sk
-      FROM date_dim
-      WHERE d_year = 2002
-        AND d_moy BETWEEN 5 AND 7
-  )
-  ```
-
-  This single CTE produces a small set (all `d_date_sk` for May–July 2002). All three sales‐table checks then **join to `date_range` rather than scanning `date_dim` separately**. This early consolidation means:
-
-  - Only **one** scan of `date_dim` occurs.
-  - Each sales‐table join uses a small filtered set of date keys.
-  - The optimizer can treat `date_range` as a tiny in-memory table, enabling hash‐join or semi-join optimizations against each sales fact.
-
-##### **2.3.2 Early “Eligible Customers” Extraction**
-
-- **Original / LR / LLM-R2 / R-Bot:**
-  They all begin with `customer c JOIN customer_address ca JOIN customer_demographics cd` in the top level, then attach three separate EXISTS/LEFT JOIN filters. Since the EXISTS checks are correlated with `c.c_customer_sk`, each candidate customer row triggers independent scans (or semi-joins) against the sales tables.
-
-- **QUITE’s CTE `eligible_customers`**:
-
-  ```sql
-  eligible_customers AS (
-      SELECT DISTINCT c.c_customer_sk
-      FROM customer c
-      JOIN customer_address ca 
-        ON c.c_current_addr_sk = ca.ca_address_sk
-      JOIN customer_demographics cd 
-        ON cd.cd_demo_sk = c.c_current_cdemo_sk
-      JOIN store_sales ss 
-        ON c.c_customer_sk = ss.ss_customer_sk
-      JOIN date_range 
-        ON ss.ss_sold_date_sk = date_range.d_date_sk
-      WHERE ca.ca_state IN ('MD','MO','OK')
-        AND cd.cd_marital_status IN ('W','U')
-        AND cd.cd_education_status = 'Primary'
-        AND ss.ss_list_price BETWEEN 132 AND 221
-        AND NOT EXISTS (
-          SELECT 1 
-            FROM web_sales ws
-            JOIN date_range 
-              ON ws.ws_sold_date_sk = date_range.d_date_sk
-          WHERE c.c_customer_sk = ws.ws_bill_customer_sk
-            AND ws.ws_list_price BETWEEN 132 AND 221
-        )
-        AND NOT EXISTS (
-          SELECT 1
-            FROM catalog_sales cs
-            JOIN date_range 
-              ON cs.cs_sold_date_sk = date_range.d_date_sk
-          WHERE c.c_customer_sk = cs.cs_ship_customer_sk
-            AND cs.cs_list_price BETWEEN 132 AND 221
-        )
-  )
-  ```
-
-  - All filtering logic—customer address, demographics, in‐store sales, absence of web/catalog sales—is **combined into a single pass**.
-  - The sales tables are scanned **once each** (store_sales, web_sales, catalog_sales) joined to the small `date_range`, rather than multiple correlated subqueries.
-  - The `DISTINCT c_customer_sk` yields a small set of “eligible” keys without repeating checks per customer row.
-
-##### **2.3.3 Final Aggregation on a Reduced Set**
-
-- **Original / LR / LLM-R2 / R-Bot:**
-  After filtering via EXISTS/NOT EXISTS, they group by five demographic columns and compute three `COUNT(*)`s. But because the filtering phase did not reduce the customer set until after evaluation of all subqueries, the grouping still sees nearly the full customer set (minus disqualified ones). The grouping thus processes tens of thousands (or more) rows.
-
-- **QUITE:**
-  The outer query simply does:
-
-  ```sql
-  SELECT
-    cd.cd_gender,
-    cd.cd_marital_status,
-    cd.cd_education_status,
-    COUNT(*) AS cnt1,
-    cd.cd_purchase_estimate,
-    COUNT(*) AS cnt2,
-    cd.cd_credit_rating,
-    COUNT(*) AS cnt3
-  FROM customer c
-  JOIN customer_address ca ON c.c_current_addr_sk = ca.ca_address_sk
-  JOIN customer_demographics cd ON cd.cd_demo_sk = c.c_current_cdemo_sk
-  WHERE ca.ca_state IN ('MD','MO','OK')
-    AND cd.cd_marital_status IN ('W','U')
-    AND cd.cd_education_status = 'Primary'
-    AND c.c_customer_sk IN (SELECT c_customer_sk FROM eligible_customers)
-  GROUP BY
-    cd.cd_gender,
-    cd.cd_marital_status,
-    cd.cd_education_status,
-    cd.cd_purchase_estimate,
-    cd.cd_credit_rating
-  ```
-
-  - The `IN (SELECT c_customer_sk FROM eligible_customers)` clause references a **small list** of customer SKs.
-  - After this filter, only those customers who meet all criteria enter the grouping phase. Thus, the `GROUP BY` is executed over a drastically smaller set—often only a few thousand rows—versus tens or hundreds of thousands in the alternative rewrites.
-
-##### **2.3.4 Guiding the Optimizer with a Flat, Two-Stage Plan**
-
-- **Nested EXISTS/LEFT JOIN** patterns in the other rewrites force the optimizer to “guess” a join order among customer → sales → date_dim three times, with limited visibility into cardinalities early on.
-- **QUITE’s two-stage split** (build `eligible_customers` then group) shows a clear data‐flow:
-  1. Build a small “eligible” set by hooking `customer`, `address`, `demographics`, `store_sales`, `web_sales`, and `catalog_sales` all to `date_range`.
-  2. Join that tiny result back to `customer`+`address`+`demographics` for final aggregation.
-
-Because each stage works on as few rows as possible, the optimizer can allocate memory for hash tables more accurately, avoid spilling to disk, and pick efficient join orders (e.g., hash‐join `date_range`→`store_sales` first, then anti-join to `web_sales`, etc.). In contrast, other rewrites keep bulky intermediate sets.
-
-------
-
-#### **2.4 Illustrative Runtime Breakdown**
-
-| **Rewrite Method**  | **Key Traits**                                               | **Runtime (s)** | **Speedup vs. QUITE** |
-| ------------------- | ------------------------------------------------------------ | --------------- | --------------------- |
-| Original            | Three separate EXISTS/NOT EXISTS subqueries → three `date_dim` scans + three large sales-table scans (per customer). | 7.57            | ~4.1× slower          |
-| LearnedRewrite (LR) | Inline all columns; LEFT JOIN store_sales/date_dim, LEFT JOIN web_sales/date_dim, LEFT JOIN catalog_sales/date_dim + final WHERE filters. | 7.90            | ~4.3× slower          |
-| LLM-R2              | Multiple nested `SELECT *` blocks wrapping each filter; three independent date_dim scans; extra grouping overhead. | 7.89            | ~4.3× slower          |
-| R-Bot               | ANSI JOINs with grouped store_sales result, left joins for web/catalog; still three date_dim scans and group-by per channel. | 8.53            | ~4.6× slower          |
-| **QUITE**           | **CTE `date_range` (single date_dim scan) + CTE `eligible_customers` (one pass over store, web, catalog sales joined to date_range) → small final GROUP.** | **1.84**        | **Baseline**          |
-
+1. **Decorrelation.** QUITE adds a `state_averages` CTE that computes the per-state threshold once and joins it back on `ctr_state`, replacing the per-row re-aggregation.
+2. **Validation matters.** The fastest raw rewrite (LLM Agent, Claude-3.7, 1.17s) is non-equivalent; our validation protocol rejects exactly this kind of output. QUITE's 1.04s result is the fastest among rewrites that return the original answer.
+3. **Hint synergy.** On top of the rewrite, injected plan hints reduce the time from 1.51s to 1.04s by steering the join order of the decorrelated plan.

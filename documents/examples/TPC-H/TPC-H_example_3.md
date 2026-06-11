@@ -183,7 +183,7 @@ FETCH NEXT 100 ROWS ONLY;
 
 ### 1.4. QUITE 
 
-> **Execution Time：** 3.96s
+> **Execution Time：** 86.50s
 
 ```sql
 WITH filtered_orders AS (

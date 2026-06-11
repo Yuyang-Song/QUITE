@@ -1,169 +1,87 @@
-## Q2：Original Query
+## Q2: Original Query
 
-> **Execution Time：** >300s
+> **Execution Time:** 34.91s
+
+> All execution times on this page are taken verbatim from the released per-query results in `experiments_results/calcite/`. Because the per-method result files do not share a common id ordering, records are matched by the literal constants of the original query.
 
 ```sql
-SELECT 
-  e.mgr, 
-  d.mgr 
-FROM 
-  emp AS e 
-  FULL OUTER JOIN emp AS d 
-    ON e.mgr = d.mgr 
-GROUP BY 
-  d.mgr, 
-  e.mgr;
-````
-
-
+SELECT t4.NAME FROM (SELECT NAME, DEPTNO, DEPTNO - 10 AS DEPTNOMINUS FROM DEPT) AS t4 INNER JOIN (SELECT DEPTNO, SAL + 1 AS f9 FROM EMP GROUP BY DEPTNO, SAL + 1) AS t6 ON t4.DEPTNOMINUS = t6.f9 AND t4.DEPTNO = t6.DEPTNO
+```
 
 ## 1. Rewrite Results
 
 ### 1.1. LearnedRewrite
 
-> **State：Fails to rewrite**
-
-### 1.2. LLM-R2
-
-> **Execution Time：** >300s
->
-> ```sql
-> SELECT 
->   EMP.MGR AS mgr, 
->   EMP0.MGR AS mgr0
-> FROM 
->   EMP
->   FULL JOIN EMP AS EMP0 
->     ON EMP.MGR = EMP0.MGR;
-> ```
-
----
-
-### 1.3. R-Bot 
-
-> **Execution Time：** >300s
+> **Execution Time:** 50.67s
 
 ```sql
-SELECT 
-  emp.mgr, 
-  emp00.mgr0
-FROM 
-  emp
-  FULL JOIN emp AS emp00 (
-    empno0, ename0, job0, mgr0, hiredate0, sal0, comm0, deptno0, slacker0
-  ) 
-    ON emp.mgr = emp00.mgr0
-GROUP BY 
-  emp.mgr, 
-  emp00.mgr0;
+SELECT t4.NAME FROM (SELECT NAME, DEPTNO, DEPTNO - 10 AS DEPTNOMINUS FROM DEPT)  AS t4 INNER JOIN (SELECT DEPTNO, SAL + 1 AS f9 FROM EMP GROUP BY DEPTNO, SAL + 1) AS t6 ON t4.DEPTNOMINUS = t6.f9 AND t4.DEPTNO = t6.DEPTNO
+```
+
+### 1.2. LLM-R2 (DS-R1, best equivalent model)
+
+> **Execution Time:** 3.78s
+
+```sql
+SELECT DEPT.NAME FROM DEPT INNER JOIN EMP ON DEPT.DEPTNO - 10 = EMP.SAL + 1 AND DEPT.DEPTNO = EMP.DEPTNO
+```
+
+### 1.3. R-Bot (GPT-4o, fastest of three models)
+
+> **Execution Time:** 35.76s  *(non-equivalent: rejected by our validation protocol)*
+
+```sql
+SELECT NAME FROM (SELECT name AS NAME, deptno AS DEPTNO, deptno - 10 AS DEPTNOMINUS         FROM dept         WHERE EXISTS (SELECT 1                 FROM (SELECT deptno0, sal + 1 AS f9                         FROM emp AS emp (empno, ename, job, mgr, hiredate, sal, comm, deptno0, slacker)) AS t0                 WHERE DEPTNOMINUS = t0.f9 AND DEPTNO = t0.deptno0)) AS t;
+```
+
+### 1.4. LLM Agent (DS-R1, best of four models)
+
+> **Execution Time:** 41.35s
+
+```sql
+SELECT "DEPT"."NAME" FROM "DEPT" INNER JOIN (SELECT DISTINCT "DEPTNO", "SAL" + 1 AS "f9" FROM "EMP") AS "t6" ON "DEPT"."DEPTNO" = "t6"."DEPTNO" AND ("DEPT"."DEPTNO" - 10) = "t6"."f9"
+```
+
+### 1.5. QUITE
+
+> **Execution Time:** 0.74s
+
+```sql
+SELECT d.NAME
+FROM DEPT d
+INNER JOIN (
+    SELECT DISTINCT DEPTNO
+    FROM EMP
+    WHERE SAL = DEPTNO - 11
+) e ON d.DEPTNO = e.DEPTNO
 ```
 
 
+## 2. Deep Analysis
 
-### 1.4. QUITE 
+### 2.1 Query Context and Full Metrics
 
-> **Execution Time：** 10.74s
+| Method | Execution Time (s) | Equivalent |
+|---|---|---|
+| LearnedRewrite | 50.67 | ✓ |
+| LLM-R² (Claude-3.7) | 3.59 | ✗ (non-equivalent) |
+| LLM-R² (DS-R1) | 3.78 | ✓ |
+| LLM-R² (GPT-4o) | 3.64 | ✓ |
+| R-Bot (Claude-3.7) | 36.20 | ✗ (non-equivalent) |
+| R-Bot (DS-R1) | 36.01 | ✗ (non-equivalent) |
+| R-Bot (GPT-4o) | 35.76 | ✗ (non-equivalent) |
+| LLM Agent (Claude-3.7) | 52.95 | ✓ |
+| LLM Agent (DS-R1) | 41.35 | ✓ |
+| LLM Agent (DS-V3) | 52.12 | ✓ |
+| LLM Agent (GPT-4o) | 50.14 | ✓ |
+| QUITE | 0.74 | ✓ |
 
-```sql
-SELECT DISTINCT 
-  mgr, 
-  mgr
-FROM 
-  emp;
-```
+QUITE runs in 0.74s, a 47x speedup over the original and 4.9x ahead of the best equivalent baseline (LLM-R2 DS-R1, 3.78s). All three R-Bot variants and LLM-R2 Claude-3.7 are non-equivalent. LearnedRewrite and all four LLM Agent variants are slower than the original (41s--53s).
 
+### 2.2 Why the Rewrite Is Fast
 
+1. **Algebraic predicate propagation.** The join condition equates `DEPTNO - 10` (from the `DEPT` side) with `SAL + 1` (from the `EMP` side). QUITE rewrites this as a direct filter on `EMP`: `SAL = DEPTNO - 11`. The grouped derived table over `EMP` disappears entirely.
+2. **Aggregation-to-DISTINCT collapse.** The original `GROUP BY DEPTNO, SAL + 1` exists only to deduplicate join keys; the rewrite replaces it with `SELECT DISTINCT DEPTNO`, removing the expression evaluation per row.
+3. **Projection pruning.** Only `NAME` survives to the output, so the computed columns (`DEPTNOMINUS`, `f9`) vanish.
 
-
-
-### **2. Deep Analysis**
-
-#### **2.1 Query Context and Baseline Metrics**
-
-This query performs a `FULL OUTER JOIN` of the `EMP` table with itself on the `mgr` column, then groups by both `e.mgr` and `d.mgr`. Since both sides of the join reference the same table and same column (`mgr`), the result set effectively lists every distinct `mgr` value that appears in `EMP`, once for each side of the join—but because it’s a full outer join on equality, it collapses to the set of all distinct `mgr` values in `EMP`. However, a naïve execution attempts to pair every “manager” value on the left with every “manager” value on the right, resulting in a very large intermediate result.
-
-| **Rewrite Method**  | **Execution Time (s)** |
-| ------------------- | ---------------------- |
-| Original            | > 300                  |
-| LearnedRewrite (LR) | Fails to rewrite       |
-| LLM-R2              | > 300                  |
-| R-Bot               | > 300                  |
-| **QUITE**           | **10.74**              |
-
-QUITE’s version runs in **10.74s**, while all other approaches either time out (>300s) or fail entirely. This enormous gap underscores how eliminating the `FULL OUTER JOIN` and group-by over massively expanded intermediate rows radically improves performance.
-
-------
-
-#### **2.2 Quantifying the Runtime Gap**
-
-- **Original vs. QUITE**
-  The original executes a self-join of `EMP` against itself on `mgr` with full outer semantics. If `EMP` contains N rows, even if only M distinct `mgr` values exist, the engine must consider O(N + M) rows on each side and keep track of matches, non-matches, and unmatched rows. Grouping on both `e.mgr` and `d.mgr` further forces sorting or hashing on potentially millions of intermediate pairs. QUITE simplifies to a single scan of `EMP` plus a `DISTINCT` operator on `mgr`, collapsing the join entirely. This change reduces runtime from **>300s → 10.74s**, a speedup of at least **28×**(assuming 300s/10.74s).
-- **LLM-R2 / R-Bot vs. QUITE**
-  Both LLM-R2 and R-Bot produce logically equivalent (or nearly equivalent) full-join formulations, which still require a massive self-join before grouping. Each times out (>300s). By contrast, QUITE never forms that large join; instead, it reads `EMP` once and outputs each distinct `mgr`. This yields at least a **28×** (300/10.74) improvement.
-- **LearnedRewrite vs. QUITE**
-  LearnedRewrite fails to produce any rewrite. QUITE is the only successful rewrite and completes in **10.74s**, so its improvement over LR is effectively unbounded in practice.
-
-------
-
-#### **2.3 Core Reasons for QUITE’s Superior Efficiency**
-
-##### **2.3.1 Eliminate the Costly Full‐Outer Self‐Join**
-
-- **Original / LLM-R2 / R-Bot:**
-  Performing a `FULL OUTER JOIN EMP AS e ON EMP AS d` on `mgr` forces the engine to match each row in `EMP` to every other row with the same `mgr`, plus preserve unmatched rows on both sides. Even if the `mgr` column has low cardinality, the engine must build hash tables or sort‐merge structures for both sides, handle NULLs, and then emit one combined row per match or unmatched key. In a table with hundreds of thousands of employees, this can explode to millions of intermediate row combinations before grouping.
-
-- **QUITE:**
-  Recognizes that in a full-outer self-join on the same column, each result row will always have identical `mgr`values on both sides (i.e., `e.mgr = d.mgr` or one side NULL if unmatched). But because the join is on equality, every `mgr` value appearing in `EMP` will appear at least once on one side of that join. Therefore, the entire `FULL OUTER JOIN … GROUP BY e.mgr, d.mgr` collapses to merely “list every distinct `mgr` in `EMP`.” Consequently, QUITE replaces the join with:
-
-  ```sql
-  SELECT DISTINCT mgr, mgr
-  FROM emp;
-  ```
-
-  This requires only a single scan of `EMP` plus a deduplication step.
-
-##### **2.3.2 Single Table Scan + Deduplication vs. Two‐Phase Join**
-
-- **Original / LLM-R2 / R-Bot Plans:**
-
-  1. Scan `EMP` as “left” (alias e).
-  2. Scan `EMP` as “right” (alias d).
-  3. Build hash tables or sort‐merge structures on both sides keyed by `mgr`.
-  4. Produce all matching rows (e.mgr = d.mgr).
-  5. Produce unmatched rows in e (where d is NULL) and unmatched rows in d (where e is NULL).
-  6. Pass that large union to a GROUP BY on `(e.mgr, d.mgr)`.
-
-  The combination of “two full scans” plus “hash‐join with outer semantics” plus “group‐by on two columns” causes enormous I/O, memory, and CPU cost.
-
-- **QUITE Plan:**
-
-  1. Scan `EMP` once.
-  2. Build a distinct set of `mgr` values (e.g., via a hash‐aggregate or sort‐aggregate on `mgr`).
-  3. Output each `mgr` twice as `(mgr, mgr)`.
-
-  By completely eliminating the second scan and the join step, QUITE cuts the work by more than an order of magnitude.
-
-##### **2.3.3 Dramatically Reduced Intermediate Row Volume**
-
-- **Original / LLM-R2 / R-Bot:**
-  Even if `mgr` has only M distinct values, the engine must temporarily hold all matches and unmatched rows before grouping. In worst case, if every employee has a distinct manager ID, that means O(N) matches and O(N) unmatched rows, so O(2N) intermediate rows, then grouping reduces it to M result rows.
-- **QUITE:**
-  Directly produces M result rows by scanning and deduplicating the single column. No intermediate “matching” rows are generated at all. Intermediate row count goes from O(N) to O(M), where M ≪ N.
-
-##### **2.3.4 Exposing a Flat, Optimizer‐Friendly Plan**
-
-- **Nested Join + Group‐By vs. Single `DISTINCT`:**
-  The original plan’s complexity prevents the optimizer from pushing predicates (there are none) or reordering operations meaningfully—every step is mandatory.
-  QUITE’s one‐pass through `EMP` plus a distinct‐aggregate is the simplest possible relational plan for “list distinct values of `mgr`.” The optimizer can parallelize the aggregation or use a streaming distinct algorithm without building large hash tables for a join.
-
-------
-
-#### **2.4 Illustrative Runtime Breakdown**
-
-| **Rewrite Method** | **Key Traits**                                               | **Runtime (s)** | **Speedup vs. QUITE**   |
-| ------------------ | ------------------------------------------------------------ | --------------- | ----------------------- |
-| Original           | FULL OUTER SELF‐JOIN on `mgr` → two `EMP` scans + hash‐join with outer semantics + GROUP BY | > 300           | ~28× slower (300/10.74) |
-| LLM-R2             | Semantically identical to Original, with different alias names → same full‐join overhead | > 300           | ~28× slower             |
-| R-Bot              | Same full outer join with nested aliases → unchanged plan complexity | > 300           | ~28× slower             |
-| **QUITE**          | **Single `EMP` scan + `SELECT DISTINCT mgr` (emitting `(mgr, mgr)` for output)** | **10.74**       | **Baseline**            |
-
+Deriving `SAL = DEPTNO - 11` requires solving the join equation across two derived tables, which is arithmetic reasoning rather than rule matching. This is the kind of rewrite that separates reasoning-based systems from pattern-based ones.
