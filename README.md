@@ -398,6 +398,13 @@ We compare QUITE with state-of-the-art methods on four benchmarks (TPC-H, DSB, C
     <img src="figures/rewritten_rate.png" width="1000px">
 </p>
 
+### Equivalence Definition and a Known Limitation
+We verify the equivalence between an original query and its rewrite by **execution-result equivalence on the benchmark database** (a rewrite is accepted if it returns the same result set as the original query when executed against the benchmark instance). This is the practical criterion behind every `equivalence` flag in [`experiments_results/`](experiments_results), since deciding strict semantic (provable) equivalence for arbitrary SQL is undecidable in general.
+
+A consequence is that the two notions can disagree on rare inputs: limited by the model that produces the rewrite, there exist cases where a rewrite is judged equivalent because it happens to return identical results **on this particular benchmark instance**, even though it is **not strictly semantically equivalent** and could diverge on a different database state. We found one such case (TPC-H Q2, `tpch` `id = 4`), set its `equivalence` flag to `false`, and document the full analysis together with the strictly-equivalent fix in [`documents/equivalence_definition_and_known_cases.md`](documents/equivalence_definition_and_known_cases.md).
+
+Despite this, our method still attains over **90%** equivalence with non-frontier LLMs; we expect even higher equivalence as stronger models become available.
+
 
 ## Rewrite Beyond Rules Discussion
 We have collected and analyzed a set of high-impact rewrite examples and integrated them into our [TPC-H examples](./documents/examples/TPC-H), [DSB examples](./documents/examples/DSB) and [Calcite examples](./documents/examples/Calcite)
