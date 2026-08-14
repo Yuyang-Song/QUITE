@@ -10,6 +10,7 @@ import os
 import sys
 import unittest
 import asyncio
+import json
 from pathlib import Path
 
 # Setup project paths first
@@ -22,7 +23,7 @@ from src.utils.path_config import PROJECT_ROOT, setup_python_path, load_project_
 setup_python_path()
 load_project_env()
 
-from src.Rewrite_Middleware.middleware import Knowledge_Base_Tool, DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Equivalence_Check_Tool, DBMS
+from src.Rewrite_Middleware.middleware import Knowledge_Base_Tool, DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Equivalence_Check_Tool, parse_sqlsolver_verdict, DBMS
 from src.utils.data_distribution import get_statistics_list, get_available_databases
 from src.utils.get_data_statistics import get_data_statistics
 from src.utils.llm_client import GPT
@@ -253,6 +254,25 @@ class TestRewriteMiddleware(unittest.TestCase):
         except Exception as e:
             self.fail(f"❌ Test FAILED: {str(e)}")
 
+    def test_sqlsolver_verdict_parser(self):
+        """验证 verdict 解析不会把 NEQ/UNEQ/UNKNOWN 误判为 EQ。"""
+        cases = {
+            "EQ": "EQ",
+            "Result: EQ\n": "EQ",
+            "NEQ": "NEQ",
+            "UNEQ": None,
+            "UNKNOWN": "UNKNOWN",
+            "TIMEOUT": "TIMEOUT",
+            "UNKNOWN_TIMEOUT": "UNKNOWN_TIMEOUT",
+            "UNKNOWN_QUOTED_IDENTIFIER": "UNKNOWN_QUOTED_IDENTIFIER",
+            None: None,
+        }
+
+        for raw_result, expected in cases.items():
+            with self.subTest(raw_result=raw_result):
+                self.assertEqual(parse_sqlsolver_verdict(raw_result), expected)
+
+
     def test_equivalence_check_tool(self): 
         """
         ############################################################
@@ -265,37 +285,45 @@ class TestRewriteMiddleware(unittest.TestCase):
 
         os.environ['LD_LIBRARY_PATH'] = str(PROJECT_ROOT / "src" / "Rewrite_Middleware" / "Hybrid_SQL_Corrector" )
 
-        SCHEMA_PATH = PROJECT_ROOT / "dataset" / "schemas" / "calcite_schemas.sql"
-        with open(SCHEMA_PATH, 'r') as f:
+        CALCITE_SCHEMA_PATH = PROJECT_ROOT / "dataset" / "schemas" / "calcite_schemas.sql"
+        with open(CALCITE_SCHEMA_PATH, 'r') as f:
             schema_content = f.read()
             if not schema_content.strip():
-                raise ValueError(f"Schema file {SCHEMA_PATH} is empty or not found.")
-            print(f"Schema content loaded from {SCHEMA_PATH}")
+                raise ValueError(f"Schema file {CALCITE_SCHEMA_PATH} is empty or not found.")
+            print(f"Schema content loaded from {CALCITE_SCHEMA_PATH}")
 
         try:
             # Example SQL pairs for equivalence check
             # EQ case
             original_sql = "SELECT * FROM (VALUES (1,2)) WHERE FALSE"
             rewritten_sql = "SELECT * FROM (SELECT NULL AS EXPR$0, NULL AS EXPR$1) AS t WHERE 1 = 0"
-            result = []
-            result.append(asyncio.run(Equivalence_Check_Tool(original_sql, rewritten_sql, SCHEMA_PATH)))  
-            # Basic assertions
-            self.assertIsNotNone(result)
+            eq_result = asyncio.run(Equivalence_Check_Tool(original_sql, rewritten_sql, CALCITE_SCHEMA_PATH))
+            self.assertEqual(parse_sqlsolver_verdict(eq_result), "EQ", eq_result)
+
             # NEQ case
             original_sql = "SELECT * FROM (VALUES (1,2)) WHERE FALSE"
             rewritten_sql = "SELECT * FROM (VALUES (1,2)) WHERE TRUE"
-            result.append(asyncio.run(Equivalence_Check_Tool(original_sql, rewritten_sql, SCHEMA_PATH)))  
-            # Basic assertions
-            self.assertIsNotNone(result)
-            # Unknown case
-            original_sql = "SELECT 2, EMP.DEPTNO, EMP.JOB FROM EMP AS EMP UNION ALL SELECT 1, EMP0.DEPTNO, EMP0.JOB FROM EMP AS EMP0"
-            rewritten_sql = "SELECT 2, EMP1.DEPTNO, EMP1.JOB FROM EMP AS EMP1 UNION ALL SELECT 1, EMP2.DEPTNO, EMP2.JOB FROM EMP AS EMP2"
-            result.append(asyncio.run(Equivalence_Check_Tool(original_sql, rewritten_sql, SCHEMA_PATH)))  
-            # Basic assertions
-            self.assertIsNotNone(result)
+            neq_result = asyncio.run(Equivalence_Check_Tool(original_sql, rewritten_sql, CALCITE_SCHEMA_PATH))
+            self.assertEqual(parse_sqlsolver_verdict(neq_result), "NEQ", neq_result)
+
+            # UNKNOWN case：实验结果中的真实 TPC-H query 4 pair
+            tpch_result_path = PROJECT_ROOT / "experiments_results" / "tpch" / "QUITE_tpch_63queries.json"
+            with open(tpch_result_path, 'r', encoding='utf-8') as f:
+                tpch_results = json.load(f)
+            unknown_case = next(
+                record for record in tpch_results
+                if isinstance(record, dict) and str(record.get("id")) == "4"
+            )
+            tpch_schema_path = PROJECT_ROOT / "dataset" / "schemas" / "tpch_schemas.sql"
+            unknown_result = asyncio.run(Equivalence_Check_Tool(
+                unknown_case["original_query"],
+                unknown_case["rewritten_query"],
+                tpch_schema_path,
+            ))
+            self.assertEqual(parse_sqlsolver_verdict(unknown_result), "UNKNOWN", unknown_result)
             
             print("✅ Test PASSED!")
-            print(f"📋 Equivalence results: {result}")
+            print(f"📋 Equivalence results: {[eq_result, neq_result, unknown_result]}")
             
         except Exception as e:
             self.fail(f"❌ Test FAILED: {str(e)}")

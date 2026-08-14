@@ -1,6 +1,7 @@
 import psycopg2
 import concurrent.futures
 import os
+import re
 import json
 import time
 import subprocess
@@ -266,6 +267,28 @@ async def DBMS_Syntax_Tool(dbms: DBMS, test_sql: str) -> Dict[str, Any]:
     print("DBMS_syntax_Tool ends...")
     return result
 
+
+
+SQLSOLVER_VERDICTS = {
+    "EQ",
+    "NEQ",
+    "UNKNOWN",
+    "TIMEOUT",
+    "UNKNOWN_TIMEOUT",
+    "UNKNOWN_QUOTED_IDENTIFIER",
+}
+
+
+def parse_sqlsolver_verdict(result: Optional[str]) -> Optional[str]:
+    """从 SQLSolver 输出中解析唯一、独立的 verdict token。"""
+    if result is None:
+        return None
+
+    tokens = re.findall(r"[A-Z_]+", str(result).upper())
+    verdicts = {token for token in tokens if token in SQLSOLVER_VERDICTS}
+    if len(verdicts) != 1:
+        return None
+    return verdicts.pop()
 
 
 ## tool_5

@@ -1,5 +1,4 @@
 import asyncio
-import re
 import sys
 import threading
 
@@ -7,7 +6,7 @@ import threading
 from src.utils.path_config import setup_python_path
 setup_python_path()
 
-from src.Rewrite_Middleware.middleware import DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Knowledge_Base_Tool, Equivalence_Check_Tool, DBMS
+from src.Rewrite_Middleware.middleware import DBMS_EXPLAIN_Tool, DBMS_Syntax_Tool, Knowledge_Base_Tool, Equivalence_Check_Tool, parse_sqlsolver_verdict, DBMS
 from src.Rewrite_Middleware.Agent_Memory_Buffer.memory_buffer import AgentMemoryBuffer, OutputCollector, create_memory_buffer
 from src.Query_Rewriter.agent_definition import ReasoningAgent, AssistantAgent, DecisionAgent
 from src.utils.agent_template import MessageContent, Message, MemoryWindow, MessageQueue
@@ -339,10 +338,8 @@ class QueryRewriter:
                 self.initial_sql, enhanced_sql, self.schema_file, timeout=10
             )
             
-            # Strict verdict parsing: accept only a standalone "EQ" token.
-            # A substring test ("EQ" in result) would wrongly match "NEQ"/"UNEQ"/"UNKNOWN_*".
-            solver_tokens = re.findall(r'[A-Z_]+', (result or "").upper())
-            if result is not None and "EQ" in solver_tokens:
+            solver_verdict = parse_sqlsolver_verdict(result)
+            if solver_verdict == "EQ":
                 print(f"-- Worker {worker_id}: ✓ Through the optimizer verification, the optimized SQL is equivalent to the original SQL.--")
                 MAX_EQUIV_FLAG = True
             else:
