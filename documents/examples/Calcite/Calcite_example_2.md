@@ -84,4 +84,4 @@ QUITE runs in 0.74s, a 47x speedup over the original and 4.9x ahead of the best 
 2. **Aggregation-to-DISTINCT collapse.** The original `GROUP BY DEPTNO, SAL + 1` exists only to deduplicate join keys; the rewrite replaces it with `SELECT DISTINCT DEPTNO`, removing the expression evaluation per row.
 3. **Projection pruning.** Only `NAME` survives to the output, so the computed columns (`DEPTNOMINUS`, `f9`) vanish.
 
-Deriving `SAL = DEPTNO - 11` requires solving the join equation across two derived tables, which is arithmetic reasoning rather than rule matching. This is the kind of rewrite that separates reasoning-based systems from pattern-based ones.
+The evaluated fixed inventories did not compose these three transformations for this query. A bespoke rule could be written after the fact, so this case demonstrates broader empirical coverage rather than a theoretical limit on rule-language expressiveness.

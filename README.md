@@ -407,7 +407,9 @@ Despite this, our method still attains over **90%** equivalence with non-frontie
 
 
 ## Rewrite Beyond Rules Discussion
-We have collected and analyzed a set of high-impact rewrite examples and integrated them into our [TPC-H examples](./documents/examples/TPC-H), [DSB examples](./documents/examples/DSB) and [Calcite examples](./documents/examples/Calcite)
+We summarize two representative comparisons with the evaluated fixed rule inventories in [Concrete Rewrite Examples](./documents/concrete_rewrite_examples.md). The page links to the complete [Calcite](./documents/examples/Calcite/Calcite_example_2.md) and [SQLStorm](./documents/examples/SQLStorm/SQLStorm_example_4.md) queries, baseline outputs, and released measurements.
+
+Additional examples are available for [TPC-H](./documents/examples/TPC-H), [DSB](./documents/examples/DSB), [Calcite](./documents/examples/Calcite), and [SQLStorm](./documents/examples/SQLStorm).
 
 In the course of rewriting with QUITE, we discovered a range of strategies previously unmodeled by our rule set. These newly identified techniques can be found in our more detailed [Appendix](./documents/QUITE_Appendix.pdf).
 
@@ -425,12 +427,14 @@ In the course of rewriting with QUITE, we discovered a range of strategies previ
 #### 📁 Documents & Examples
 - **`documents/`**: Documentation and analysis materials
   - `QUITE_Appendix.pdf`: Detailed MDP-based Reasoning Agent construction and rewritten examples beyond rule expressions
+  - `concrete_rewrite_examples.md`: Two concrete comparisons with evaluated fixed rule inventories
   - `rewrite_types.md`: Classification and description of SQL rewrite types
   - `effective_rewrite_types/`: JSON files categorizing effective rewrite strategies (CTE, Constant, Join, Predicate, Others)
   - `examples/`: Analysis of rewritten queries for representative examples
     - `TPC-H/`: TPC-H benchmark query examples
     - `DSB/`: DSB benchmark query examples  
     - `Calcite/`: Calcite benchmark query examples
+    - `SQLStorm/`: SQLStorm benchmark query examples
 
 #### 📋 Automation Scripts
 - **`scripts/`**: Execution scripts for different scenarios
