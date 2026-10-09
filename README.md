@@ -544,14 +544,4 @@ pipeline
 ├── requirements.txt                # Python dependencies
 └── README.md                       # Project documentation
 ``` -->
-<!-- ## Citation
-If you use this codebase, or otherwise found our work valuable, please cite:
-```
-@article{song2025quite,
-  title={QUITE: A Query Rewrite System Beyond Rules with LLM Agents},
-  author={Song, Yuyang and Yan, Hanxu and Lao, Jiale and Wang, Yibo and Li, Yufei and Zhou, Yuanchun and Wang, Jianguo and Tang, Mingjie},
-  journal={arXiv preprint arXiv:2506.07675},
-  year={2025}
-}
-``` -->
 
